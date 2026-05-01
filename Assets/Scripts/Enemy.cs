@@ -88,12 +88,6 @@ public class Enemy : MonoBehaviour
         currentHP = maxHP;
     }
 
-    private void Start()
-    {
-        // Find the hero in the scene. For a tiny game this is fine; for bigger games cache it via a singleton or spawner.
-        player = FindObjectOfType<Hero>();
-    }
-
     private void Update()
     {
         if (meleeTimer > 0f) meleeTimer -= Time.deltaTime;
@@ -102,6 +96,9 @@ public class Enemy : MonoBehaviour
 
     private void FixedUpdate()
     {
+        // Lazy lookup: works whether the hero was placed in the scene or spawned by ArenaGenerator after this enemy.
+        if (player == null) player = Hero.Instance;
+
         if (IsDead || player == null || player.IsDead) { rb.velocity = Vector3.zero; return; }
 
         Vector3 toPlayer = player.transform.position - transform.position;
