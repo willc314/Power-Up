@@ -64,6 +64,7 @@ public class Hero : MonoBehaviour
     private Rigidbody rb;
     private Camera cam;
     private Vector3 moveInput;
+    private DamageFlash damageFlash;
 
     private void Awake()
     {
@@ -75,6 +76,7 @@ public class Hero : MonoBehaviour
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
 
         if (animator == null) animator = GetComponentInChildren<Animator>();
+        damageFlash = GetComponent<DamageFlash>();
 
         cam = Camera.main;
         currentHP = maxHP;
@@ -147,6 +149,7 @@ public class Hero : MonoBehaviour
     {
         if (IsDead) return;
         currentHP = Mathf.Max(0f, currentHP - amount);
+        if (damageFlash != null) damageFlash.Flash();
         if (currentHP <= 0f) Die();
     }
 

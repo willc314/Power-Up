@@ -68,6 +68,7 @@ public class Enemy : MonoBehaviour
     private float shootTimer;
     private Rigidbody rb;
     private Hero player;
+    private DamageFlash damageFlash;
 
     // Charger state machine
     private enum ChargerPhase { Approach, Telegraph, Dash, Recover }
@@ -85,6 +86,7 @@ public class Enemy : MonoBehaviour
         rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
 
+        damageFlash = GetComponent<DamageFlash>();
         currentHP = maxHP;
     }
 
@@ -259,6 +261,7 @@ public class Enemy : MonoBehaviour
     {
         if (IsDead) return;
         currentHP = Mathf.Max(0f, currentHP - amount);
+        if (damageFlash != null) damageFlash.Flash();
         if (currentHP <= 0f) Die();
     }
 

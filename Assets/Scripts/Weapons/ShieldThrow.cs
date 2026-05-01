@@ -21,8 +21,8 @@ public class ShieldThrow : MonoBehaviour
     public float catchDistance = 0.8f;
 
     [Header("Visual")]
-    [Tooltip("Initial rotation applied to the model so it sits flat (parallel to the ground). For an upright shield prefab, (90,0,0) usually lays it flat like a frisbee.")]
-    public Vector3 modelRotationOffset = new Vector3(90f, 0f, 0f);
+    [Tooltip("Initial rotation applied to the model so it sits flat (parallel to the ground). Try (90,0,0), (-90,0,0), or (90,0,180) until it looks right side up.")]
+    public Vector3 modelRotationOffset = new Vector3(-90f, 0f, 0f);
     [Tooltip("Spin speed while flying, in degrees/sec. Pure visual flair.")]
     public float spinSpeed = 720f;
     [Tooltip("World axis the shield spins around. (0,1,0) = horizontal frisbee spin, (1,0,0) = end-over-end.")]

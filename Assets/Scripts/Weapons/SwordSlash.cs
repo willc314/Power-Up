@@ -20,8 +20,18 @@ public class SwordSlash : MonoBehaviour
     public float verticalOffset = 1.0f;
 
     [Header("Hit Detection")]
-    [Tooltip("Radius of the hit-test sphere that travels along the blade each frame.")]
-    public float hitRadius = 0.7f;
+    [Tooltip("Length of the hit capsule along the blade. Match it to the visible blade length so big swords actually feel big.")]
+    public float bladeLength = 2.5f;
+    [Tooltip("Thickness of the hit capsule (how wide the blade's hit area is).")]
+    public float bladeRadius = 0.35f;
+    [Tooltip("Which local axis the blade extends along. The OHS03Polyart sword's blade points along local +Y, so leave at Y unless you swap models.")]
+    public BladeAxis bladeAxis = BladeAxis.Y;
+    [Tooltip("Local-space offset from the model pivot to the CENTER of the hit capsule. Increase along the blade axis if the pivot is at the hilt and the blade extends further out.")]
+    public Vector3 bladeCenterOffset = new Vector3(0f, 1.25f, 0f);
+    [Tooltip("Draws the hit capsule as a red line in the Scene view during play so you can see the hitbox.")]
+    public bool debugDrawHitbox = true;
+
+    public enum BladeAxis { X = 0, Y = 1, Z = 2 }
 
     [Header("Visual Tweaks")]
     [Tooltip("X rotation on the model. 90 typically lays an upright sword flat (parallel to ground).")]
@@ -76,20 +86,48 @@ public class SwordSlash : MonoBehaviour
         float effectiveYaw = rightToLeft ? -modelYaw : modelYaw;
         transform.rotation = radial * Quaternion.Euler(modelPitch, effectiveYaw, modelRoll);
 
-        // Hit detection at the sword's current position.
-        int n = Physics.OverlapSphereNonAlloc(transform.position, hitRadius, hitBuffer, enemyLayers, QueryTriggerInteraction.Collide);
+        // Hit detection: capsule along the blade.
+        ComputeCapsuleEndpoints(out Vector3 p1, out Vector3 p2);
+        int n = Physics.OverlapCapsuleNonAlloc(p1, p2, bladeRadius, hitBuffer, enemyLayers, QueryTriggerInteraction.Collide);
         for (int i = 0; i < n; i++)
         {
             Enemy e = hitBuffer[i].GetComponentInParent<Enemy>();
             if (e != null && alreadyHit.Add(e)) e.TakeDamage(damage);
         }
 
+        if (debugDrawHitbox) Debug.DrawLine(p1, p2, Color.red);
+
         if (t >= 1f) Destroy(gameObject);
+    }
+
+    private void ComputeCapsuleEndpoints(out Vector3 p1, out Vector3 p2)
+    {
+        Vector3 axisLocal = AxisVector(bladeAxis);
+        Vector3 axisWorld = transform.TransformDirection(axisLocal);
+        Vector3 center = transform.TransformPoint(bladeCenterOffset);
+        // OverlapCapsule wants the two interior points of the capsule (where the spheres center).
+        float halfLen = Mathf.Max(0f, bladeLength * 0.5f - bladeRadius);
+        p1 = center - axisWorld * halfLen;
+        p2 = center + axisWorld * halfLen;
+    }
+
+    private static Vector3 AxisVector(BladeAxis a)
+    {
+        switch (a)
+        {
+            case BladeAxis.X: return Vector3.right;
+            case BladeAxis.Y: return Vector3.up;
+            case BladeAxis.Z: return Vector3.forward;
+        }
+        return Vector3.up;
     }
 
     private void OnDrawGizmosSelected()
     {
-        Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.6f);
-        Gizmos.DrawWireSphere(transform.position, hitRadius);
+        ComputeCapsuleEndpoints(out Vector3 p1, out Vector3 p2);
+        Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.7f);
+        Gizmos.DrawWireSphere(p1, bladeRadius);
+        Gizmos.DrawWireSphere(p2, bladeRadius);
+        Gizmos.DrawLine(p1, p2);
     }
 }
