@@ -48,6 +48,13 @@ public class Hero : MonoBehaviour
     public float MaxHP => maxHP;
     public bool IsDead { get; private set; }
 
+    /// <summary>
+    /// Global reference to the active Hero. Other scripts (enemies, camera,
+    /// HUD) can use Hero.Instance instead of FindObjectOfType. Set in Awake,
+    /// cleared in OnDestroy.
+    /// </summary>
+    public static Hero Instance { get; private set; }
+
     // --- internals ---
     private Rigidbody rb;
     private Camera cam;
@@ -56,6 +63,8 @@ public class Hero : MonoBehaviour
 
     private void Awake()
     {
+        Instance = this;
+
         rb = GetComponent<Rigidbody>();
         rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
@@ -63,6 +72,11 @@ public class Hero : MonoBehaviour
 
         cam = Camera.main;
         currentHP = maxHP;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
     }
 
     private void Update()
