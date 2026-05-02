@@ -390,9 +390,12 @@ MonoBehaviour:
   target: {fileID: 0}
   autoFindHero: 1
   offset: {x: 0, y: 15, z: -7}
-  smoothTime: 0.15
+  smoothTime: 0.2
   maxSpeed: -1
   lookAtTarget: 0
+  cursorLookAhead: 0.13
+  maxLookAheadDistance: 4
+  aimPlaneY: 0
   snapOnStart: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
