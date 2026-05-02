@@ -2775,14 +2775,14 @@ MonoBehaviour:
   fullChargeTime: 1.5
   slowdownWhileCharging: 0.4
   minReleaseTime: 0.1
-  arrowPrefab: {fileID: 4093347662047577129, guid: 328739536d0ead6479ec0b1d111290f5, type: 3}
+  arrowPrefab: {fileID: 4620594600889568894, guid: 14c125fb9e5d3c04db5be83d0ab292d9, type: 3}
   arrowSpeed: 45
   arrowMinDamage: 10
   arrowMaxDamage: 70
   arrowMinScale: 1
   arrowMaxScale: 2.5
   overchargeTime: 5
-  deathBeamPrefab: {fileID: 0}
+  deathBeamPrefab: {fileID: 4926047971536815124, guid: 5b65ab245209fd5468ad11d4e38a7460, type: 3}
   overchargeColor: {r: 1, g: 0.95, b: 0.7, a: 1}
   overchargeVfxPrefab: {fileID: 0}
 --- !u!114 &3670884374136682343
@@ -2838,6 +2838,11 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   stabPrefab: {fileID: 3891962484159435510, guid: 41913b50274a244418607f629adfd3c6, type: 3}
   stabStartDistance: 0.4
+  stabSpawnHeight: 1
+  fallbackStabRange: 1.8
+  fallbackStabRadius: 0.45
+  fallbackStabHeight: 1.5
+  debugFallbackHitbox: 1
   thrownDaggerPrefab: {fileID: 0}
   thrownDamage: 20
   throwEveryNStabs: 4

@@ -3,23 +3,17 @@ using UnityEngine.UI;
 using TMPro;
 
 /// <summary>
-/// Two-button powerup choice UI.
-/// Opens when the Hero collects a PowerUp and pauses the game.
+/// Powerup choice UI.
+/// Opens when the Hero collects a PowerUp.
 ///
 /// Two choices:
 ///   1. Upgrade current matching weapon.
-///      If the matching weapon is already maxed, this gives a Hero stat boost instead.
-///      If the Hero does not have the matching weapon, this gives a Hero stat boost.
+///      If that weapon is already maxed, the Hero gets a stat boost instead.
 ///
-///   2. Replace weapon with this powerup's weapon.
-///      Current behavior replaces the secondary weapon slot by default.
-///      If the weapon component does not exist on the Hero, this gives a Hero stat boost instead.
-///
-/// Setup:
-///   * Put this script on an always-enabled PowerUpUI GameObject.
-///   * Drag ChoicePanel into Panel Root.
-///   * Keep PowerUpUI enabled, but disable ChoicePanel at game start.
-///   * Drag the two Button components and their TMP text components into the fields.
+///   2. Replace weapon.
+///      If the powerup is already for one of the Hero's active weapons, this
+///      button changes to the same upgrade/stat-boost text so the player is
+///      not asked to replace a weapon with the same weapon they already have.
 /// </summary>
 public class PowerUpChoiceUI : MonoBehaviour
 {
@@ -50,17 +44,13 @@ public class PowerUpChoiceUI : MonoBehaviour
         Hide();
     }
 
-    private void OnDestroy()
-    {
-        if (Instance == this) Instance = null;
-    }
-
     public void Show(Hero hero, eWeaponType type)
     {
         this.hero = hero;
         pendingType = type;
 
         Time.timeScale = 0f;
+
         panelRoot.SetActive(true);
 
         SetupText();
@@ -82,19 +72,19 @@ public class PowerUpChoiceUI : MonoBehaviour
         {
             descriptionText.text =
                 "You do not currently have " + weaponName + ".\n" +
-                "Choose whether to replace your secondary weapon with it or take a Hero stat boost.";
+                "Choose whether to replace a weapon with it or take a Hero stat boost.";
         }
         else if (matchingWeapon.IsDamageMaxed)
         {
             descriptionText.text =
                 matchingWeapon.weaponName + " is already maxed.\n" +
-                "Choosing upgrade will increase a Hero stat instead.";
+                "Choosing either option will increase a Hero stat instead.";
         }
         else
         {
             descriptionText.text =
-                "Choose whether to upgrade your current " + matchingWeapon.weaponName +
-                " or replace your secondary weapon slot.";
+                "You already have " + matchingWeapon.weaponName + ".\n" +
+                "Choose either option to upgrade it.";
         }
     }
 
@@ -102,42 +92,60 @@ public class PowerUpChoiceUI : MonoBehaviour
     {
         Weapon matchingWeapon = hero.GetWeaponOfType(pendingType);
 
+        string upgradeLabel = GetUpgradeLabel(matchingWeapon);
+
         if (upgradeButtonText != null)
-        {
-            if (matchingWeapon == null)
-                upgradeButtonText.text = "Take Hero Stat Boost";
-            else if (matchingWeapon.IsDamageMaxed)
-                upgradeButtonText.text = "Weapon Maxed: Boost Hero Stat";
-            else
-                upgradeButtonText.text = "Upgrade " + matchingWeapon.weaponName;
-        }
+            upgradeButtonText.text = upgradeLabel;
 
         if (replaceButtonText != null)
-            replaceButtonText.text = "Replace Weapon With " + GetWeaponName(pendingType);
-
-        if (upgradeButton != null)
         {
-            upgradeButton.onClick.RemoveAllListeners();
-            upgradeButton.onClick.AddListener(() =>
-            {
-                if (matchingWeapon != null && !matchingWeapon.IsDamageMaxed)
-                    hero.UpgradeWeaponDamage(matchingWeapon);
-                else
-                    hero.ApplyHeroStatBoost();
-
-                Close();
-            });
+            if (matchingWeapon != null)
+                replaceButtonText.text = upgradeLabel;
+            else
+                replaceButtonText.text = "Replace Weapon With " + GetWeaponName(pendingType);
         }
 
-        if (replaceButton != null)
+        upgradeButton.onClick.RemoveAllListeners();
+        replaceButton.onClick.RemoveAllListeners();
+
+        upgradeButton.onClick.AddListener(() =>
         {
-            replaceButton.onClick.RemoveAllListeners();
-            replaceButton.onClick.AddListener(() =>
+            ApplyUpgradeOrStatBoost(matchingWeapon);
+            Close();
+        });
+
+        replaceButton.onClick.AddListener(() =>
+        {
+            if (matchingWeapon != null)
+            {
+                ApplyUpgradeOrStatBoost(matchingWeapon);
+            }
+            else
             {
                 hero.BeginReplaceWeaponChoice(pendingType);
-                Close();
-            });
-        }
+            }
+
+            Close();
+        });
+    }
+
+    private string GetUpgradeLabel(Weapon matchingWeapon)
+    {
+        if (matchingWeapon == null)
+            return "Take Hero Stat Boost";
+
+        if (matchingWeapon.IsDamageMaxed)
+            return "Weapon Maxed: Boost Hero Stat";
+
+        return "Upgrade " + matchingWeapon.weaponName;
+    }
+
+    private void ApplyUpgradeOrStatBoost(Weapon matchingWeapon)
+    {
+        if (matchingWeapon != null && !matchingWeapon.IsDamageMaxed)
+            hero.UpgradeWeaponDamage(matchingWeapon);
+        else
+            hero.ApplyHeroStatBoost();
     }
 
     private void Close()
@@ -156,13 +164,26 @@ public class PowerUpChoiceUI : MonoBehaviour
     {
         switch (type)
         {
-            case eWeaponType.sword: return "Sword";
-            case eWeaponType.shield: return "Shield";
-            case eWeaponType.bow: return "Bow";
-            case eWeaponType.dagger: return "Dagger";
-            case eWeaponType.crossbow: return "Crossbow";
-            case eWeaponType.grenade: return "Grenade";
-            default: return "Unknown";
+            case eWeaponType.sword:
+                return "Sword";
+
+            case eWeaponType.shield:
+                return "Shield";
+
+            case eWeaponType.bow:
+                return "Bow";
+
+            case eWeaponType.dagger:
+                return "Dagger";
+
+            case eWeaponType.crossbow:
+                return "Crossbow";
+
+            case eWeaponType.grenade:
+                return "Grenade";
+
+            default:
+                return "Unknown";
         }
     }
 }

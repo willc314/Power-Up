@@ -120,7 +120,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   speed: 20
   lifetime: 4
-  pierceCount: 0
+  pierceCount: 5
   hitRadius: 0.3
   hitHeight: 2
   spinSpeed: 0
