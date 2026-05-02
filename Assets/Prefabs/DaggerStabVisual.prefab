@@ -99,9 +99,9 @@ MonoBehaviour:
   thrustDistance: 0.6
   duration: 0.15
   verticalOffset: 1
-  bladeLength: 0.8
-  bladeRadius: 0.2
-  bladeAxis: 1
-  bladeCenterOffset: {x: 0, y: 0.4, z: 0}
-  modelRotationOffset: {x: 90, y: 0, z: 0}
+  hitRange: 1.8
+  hitRadius: 0.45
+  hitHeight: 1
+  hitVerticalSize: 1.3
   debugDrawHitbox: 0
+  modelRotationOffset: {x: 90, y: 0, z: 0}
