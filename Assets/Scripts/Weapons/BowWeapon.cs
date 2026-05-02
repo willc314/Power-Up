@@ -142,6 +142,11 @@ public class BowWeapon : Weapon
         return false;
     }
 
+    public override void OnInterrupted(Hero owner)
+    {
+        if (charging) EndCharge(owner);
+    }
+
     public override bool OnFireUp(Hero owner)
     {
         if (!charging) return false;

@@ -45,6 +45,13 @@ public abstract class Weapon : MonoBehaviour
     public virtual bool OnFireUp(Hero owner) { return false; }
 
     /// <summary>
+    /// Called when the hero takes some action that should cancel this weapon's
+    /// in-progress state (e.g. dashing while charging the bow). Default: no-op.
+    /// Charging weapons should override and reset their state here.
+    /// </summary>
+    public virtual void OnInterrupted(Hero owner) { }
+
+    /// <summary>
     /// Try to fire the weapon. Returns true if it actually went off so the caller
     /// (e.g. Hero) can play an attack animation.
     /// </summary>

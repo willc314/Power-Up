@@ -37,6 +37,36 @@ public class Hero : MonoBehaviour
     [Tooltip("Fired on right click. Drag a Weapon component (e.g. ShieldWeapon) here.")]
     public Weapon secondaryWeapon;
 
+    [Header("Dash")]
+    [Tooltip("Key that triggers a dash. Default Space.")]
+    public KeyCode dashKey = KeyCode.Space;
+    [Tooltip("Speed during the dash, in units/sec.")]
+    public float dashSpeed = 22f;
+    [Tooltip("How long the dash lasts. Multiply by dashSpeed for total dash distance.")]
+    public float dashDuration = 0.18f;
+    [Tooltip("Cooldown between dashes, in seconds.")]
+    public float dashCooldown = 1.0f;
+    [Tooltip("If true, dashing cancels in-progress weapon state (bow charge, etc.). Recommended.")]
+    public bool dashInterruptsWeapons = true;
+
+    [Header("Dash Particles")]
+    [Tooltip("Spawn dust particles flying behind the hero during the dash.")]
+    public bool dashParticles = true;
+    [Tooltip("How many dust particles per second during the dash. 0 = none.")]
+    public float dashParticlesPerSecond = 80f;
+    [Tooltip("Color of the dust particles. Light brown reads as dirt; grey as stone.")]
+    public Color dashParticleColor = new Color(0.65f, 0.55f, 0.42f);
+    [Tooltip("Initial speed of each dust particle.")]
+    public float dashParticleSpeed = 4f;
+    [Tooltip("Edge length of each particle.")]
+    public float dashParticleSize = 0.12f;
+    [Tooltip("Seconds before each particle self-destroys.")]
+    public float dashParticleLifetime = 0.4f;
+    [Tooltip("Cone spread angle in degrees for the dust spray.")]
+    public float dashParticleSpread = 35f;
+    [Tooltip("Height above ground where particles spawn (keeps them at the hero's feet).")]
+    public float dashParticleHeight = 0.1f;
+
     [Header("Aim")]
     [Tooltip("Y-height of the imaginary ground plane the mouse aim is projected onto. Match the hero's feet/ground height.")]
     public float aimPlaneY = 0f;
@@ -72,6 +102,13 @@ public class Hero : MonoBehaviour
     private Vector3 moveInput;
     private DamageFlash damageFlash;
 
+    // Dash state
+    private float dashTimer;
+    private float dashCooldownTimer;
+    private Vector3 dashDirection;
+    private float dashParticleAccumulator;
+    public bool IsDashing => dashTimer > 0f;
+
     private void Awake()
     {
         Instance = this;
@@ -105,6 +142,10 @@ public class Hero : MonoBehaviour
         // --- Aim ---
         FaceMouse();
 
+        // --- Dash ---
+        if (dashCooldownTimer > 0f) dashCooldownTimer -= Time.deltaTime;
+        if (Input.GetKeyDown(dashKey) && dashCooldownTimer <= 0f && !IsDashing) StartDash();
+
         // --- Attack: dispatch press/hold/release to the weapons. Auto-repeat
         // weapons (sword, dagger, crossbow, ...) only use OnFireHeld; the Bow
         // uses all three to implement charging.
@@ -123,8 +164,55 @@ public class Hero : MonoBehaviour
     {
         if (IsDead) return;
 
-        Vector3 target = rb.position + moveInput * moveSpeed * speedMultiplier * Time.fixedDeltaTime;
-        rb.MovePosition(target);
+        if (IsDashing)
+        {
+            dashTimer -= Time.fixedDeltaTime;
+            Vector3 step = dashDirection * dashSpeed * Time.fixedDeltaTime;
+            rb.MovePosition(rb.position + step);
+            EmitDashParticles();
+        }
+        else
+        {
+            Vector3 target = rb.position + moveInput * moveSpeed * speedMultiplier * Time.fixedDeltaTime;
+            rb.MovePosition(target);
+        }
+    }
+
+    private void EmitDashParticles()
+    {
+        if (!dashParticles || dashParticlesPerSecond <= 0f) return;
+        dashParticleAccumulator += dashParticlesPerSecond * Time.fixedDeltaTime;
+        Vector3 origin = transform.position + Vector3.up * dashParticleHeight;
+        Vector3 backward = -dashDirection;
+        while (dashParticleAccumulator >= 1f)
+        {
+            HitParticles.EmitBurst(origin, backward,
+                count: 1,
+                speed: dashParticleSpeed,
+                lifetime: dashParticleLifetime,
+                size: dashParticleSize,
+                color: dashParticleColor,
+                spreadAngle: dashParticleSpread,
+                useGravity: true);
+            dashParticleAccumulator -= 1f;
+        }
+    }
+
+    private void StartDash()
+    {
+        // Direction: WASD if held, otherwise the hero's current facing.
+        Vector3 dir = moveInput.sqrMagnitude > 0.01f ? moveInput : transform.forward;
+        dir.y = 0f;
+        dashDirection = dir.sqrMagnitude > 0.0001f ? dir.normalized : transform.forward;
+        dashTimer = dashDuration;
+        dashCooldownTimer = dashCooldown;
+        dashParticleAccumulator = 0f;
+
+        if (dashInterruptsWeapons)
+        {
+            if (primaryWeapon != null)   primaryWeapon.OnInterrupted(this);
+            if (secondaryWeapon != null) secondaryWeapon.OnInterrupted(this);
+        }
     }
 
     private void DispatchWeaponInput(int button, Weapon w)
