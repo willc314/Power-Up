@@ -98,6 +98,6 @@ Material:
     - _CameraFadeParams: {r: 0, g: Infinity, b: 0, a: 0}
     - _Color: {r: 16, g: 16, b: 16, a: 1}
     - _ColorAddSubDiff: {r: 0, g: 0, b: 0, a: 0}
-    - _EmissionColor: {r: 64, g: 64, b: 64, a: 1}
+    - _EmissionColor: {r: 1.4980395, g: 1.4980395, b: 1.4980395, a: 1}
     - _SoftParticleFadeParams: {r: 0, g: 0, b: 0, a: 0}
   m_BuildTextureStacks: []
