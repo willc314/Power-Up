@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 7843833260754783782}
   - component: {fileID: 3792423015077546666}
   - component: {fileID: 2337880175398151284}
-  - component: {fileID: 4157698122962641452}
+  - component: {fileID: 2526017728917958653}
   m_Layer: 0
   m_Name: BigSwordSlash
   m_TagString: Untagged
@@ -84,7 +84,7 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &4157698122962641452
+--- !u!114 &2526017728917958653
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -93,18 +93,18 @@ MonoBehaviour:
   m_GameObject: {fileID: 5545342688175208653}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 84ba0b0aebd155649817c2766ef3e654, type: 3}
+  m_Script: {fileID: 11500000, guid: 35f2ead1d544be54d8e6bfa9a611ef4d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  arcDegrees: 160
-  duration: 0.2
-  radius: 1
+  arcDegrees: 140
+  duration: 0.25
+  radius: 2
   verticalOffset: 1
-  bladeLength: 4
-  bladeRadius: 0.6
+  bladeLength: 2
+  bladeRadius: 1
   bladeAxis: 1
-  bladeCenterOffset: {x: 0, y: 0.5, z: 0}
+  bladeCenterOffset: {x: 0, y: 1.25, z: 0}
   debugDrawHitbox: 1
   modelPitch: 90
-  modelYaw: 20
+  modelYaw: 0
   modelRoll: 0

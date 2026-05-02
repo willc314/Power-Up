@@ -9,7 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 7208931925086524228}
-  - component: {fileID: -8435590880832280935}
+  - component: {fileID: 3692999452118632841}
   m_Layer: 0
   m_Name: GrenadeExplosion
   m_TagString: Untagged
@@ -32,7 +32,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &-8435590880832280935
+--- !u!114 &3692999452118632841
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -41,7 +41,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 5443250219044755459}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8e051506b9518c34ab18da333d372c33, type: 3}
+  m_Script: {fileID: 11500000, guid: 3cb5c75b512f76840b11edefbcfce672, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   radius: 6
@@ -49,7 +49,7 @@ MonoBehaviour:
   hitLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  hitsHero: 0
+  hitsHero: 1
   vfxPrefab: {fileID: 0}
   vfxLifetime: 2
   useDebrisBurst: 1
@@ -60,6 +60,6 @@ MonoBehaviour:
   debrisLifetime: 2
   debrisSpread: 90
   debrisHeight: 0.3
-  shakeAmplitude: 0.2
-  shakeDuration: 0.2
+  shakeAmplitude: 0.4
+  shakeDuration: 0.25
   debugLog: 1

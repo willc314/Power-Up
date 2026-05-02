@@ -1,21 +1,28 @@
 using UnityEngine;
 
 /// <summary>
-/// Single enemy controller used by all 4 enemy prefabs.
+/// Single enemy controller used by all enemy prefabs.
 /// Tweak the stats in the Inspector to make each prefab feel different,
 /// and pick a Behavior to change how it moves and attacks.
 ///
-/// Suggested presets (just a starting point):
+/// Suggested presets:
 ///   * Chaser  — HP 30,  Damage 8,  Speed 3.5
 ///   * Charger — HP 25,  Damage 12, Speed 2.0  (dashes are fast)
 ///   * Tank    — HP 120, Damage 20, Speed 1.5
 ///   * Ranged  — HP 20,  Damage 6,  Speed 2.5  (assign Projectile Prefab)
 ///
+/// This version keeps your partner's hit-particle effects and adds the systems
+/// needed by your powerup/arena work:
+///   * simple obstacle avoidance around structures, rocks, and trees
+///   * powerup drops when enemies die
+///
 /// Setup checklist on the Enemy GameObject:
 ///   * Rigidbody  (Use Gravity = on; the script freezes X/Z rotation)
 ///   * Collider   (e.g. CapsuleCollider sized to the enemy)
 ///   * Tag        e.g. "Enemy"
-///   * Layer      "Enemy"  (so the hero's sword layer mask can find it)
+///   * Layer      "Enemy"  (so weapon layer masks can find it)
+///   * Power Up Prefab assigned if this enemy should drop powerups
+///   * Obstacle Mask set to your Obstacle/environment layer for avoidance
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class Enemy : MonoBehaviour
@@ -45,6 +52,43 @@ public class Enemy : MonoBehaviour
     public bool debugShowHealth = true;
     [Tooltip("How far above the enemy's pivot the HP label sits.")]
     public float debugLabelHeight = 2.5f;
+    [Header("Powerup Drop")]
+    [Tooltip("PowerUp prefab that can drop when this enemy dies.")]
+    public PowerUp powerUpPrefab;
+
+    [Tooltip("Chance from 0 to 1 that this enemy drops a powerup on death.")]
+    [Range(0f, 1f)] public float powerUpDropChance = 0.25f;
+
+    [Tooltip("Weapon powerup types this enemy can drop. If empty, sword/shield/bow/dagger are used.")]
+    public eWeaponType[] possiblePowerUpTypes = new eWeaponType[]
+    {
+        eWeaponType.sword,
+        eWeaponType.shield,
+        eWeaponType.bow,
+        eWeaponType.dagger
+    };
+
+    [Tooltip("How high above the enemy position the powerup spawns.")]
+    public float powerUpDropHeight = 0.6f;
+
+    [Header("Obstacle Avoidance")]
+    [Tooltip("If true, enemy tries to steer around obstacles instead of walking straight into them.")]
+    public bool useObstacleAvoidance = true;
+
+    [Tooltip("Layers considered obstacles. Usually set this to the Obstacle layer.")]
+    public LayerMask obstacleMask = ~0;
+
+    [Tooltip("How far ahead the enemy checks for obstacles.")]
+    public float obstacleCheckDistance = 2.5f;
+
+    [Tooltip("How far left/right the enemy checks when deciding which way to steer.")]
+    public float sideCheckDistance = 2.0f;
+
+    [Tooltip("Radius of the obstacle check sphere cast. Larger values make enemies avoid earlier.")]
+    public float obstacleCheckRadius = 0.45f;
+
+    [Tooltip("How strongly the enemy steers sideways when blocked.")]
+    public float avoidanceStrength = 1.25f;
 
     [Header("Hit Particles")]
     [Tooltip("Number of debris particles spawned when this enemy takes damage. Set to 0 to disable.")]
@@ -243,7 +287,7 @@ public class Enemy : MonoBehaviour
         // Lazy lookup: works whether the hero was placed in the scene or spawned by ArenaGenerator after this enemy.
         if (player == null) player = Hero.Instance;
 
-        if (IsDead || player == null || player.IsDead) { rb.velocity = Vector3.zero; return; }
+        if (IsDead || player == null || player.IsDead) { StopMoving(); return; }
 
         Vector3 toPlayer = player.transform.position - transform.position;
         toPlayer.y = 0f;
@@ -251,7 +295,7 @@ public class Enemy : MonoBehaviour
 
         if (aggroRange > 0f && dist > aggroRange)
         {
-            rb.velocity = Vector3.zero;
+            StopMoving();
             return;
         }
 
@@ -276,27 +320,21 @@ public class Enemy : MonoBehaviour
     private void TickChaser(Vector3 dir, float dist)
     {
         if (dist > attackRange)
-        {
-            MoveInDirection(dir, moveSpeed);
-        }
+            MoveInDirection(GetAvoidedDirection(dir), moveSpeed);
         else
         {
-            rb.velocity = Vector3.zero;
+            StopMoving();
             TryMelee();
         }
     }
 
-    // Same idea as Chaser, but Tanks are slow & hard-hitting. Kept as its own method
-    // so you can give it unique flavor later (e.g., a slam attack with windup).
     private void TickTank(Vector3 dir, float dist)
     {
         if (dist > attackRange)
-        {
-            MoveInDirection(dir, moveSpeed);
-        }
+            MoveInDirection(GetAvoidedDirection(dir), moveSpeed);
         else
         {
-            rb.velocity = Vector3.zero;
+            StopMoving();
             TryMelee();
         }
     }
@@ -308,21 +346,21 @@ public class Enemy : MonoBehaviour
         switch (chargerPhase)
         {
             case ChargerPhase.Approach:
-                MoveInDirection(dir, moveSpeed);
+                MoveInDirection(GetAvoidedDirection(dir), moveSpeed);
                 // Once we're roughly in line of sight, telegraph a dash.
                 if (dist < preferredRange || dist < attackRange + 3f)
                 {
                     chargerPhase = ChargerPhase.Telegraph;
                     chargerPhaseTimer = dashTelegraphTime;
-                    rb.velocity = Vector3.zero;
+                    StopMoving();
                 }
                 break;
 
             case ChargerPhase.Telegraph:
-                rb.velocity = Vector3.zero;
+                StopMoving();
                 if (chargerPhaseTimer <= 0f)
                 {
-                    dashDirection = dir;
+                    dashDirection = GetAvoidedDirection(dir);
                     chargerPhase = ChargerPhase.Dash;
                     chargerPhaseTimer = dashDuration;
                 }
@@ -335,12 +373,12 @@ public class Enemy : MonoBehaviour
                 {
                     chargerPhase = ChargerPhase.Recover;
                     chargerPhaseTimer = dashRecovery;
-                    rb.velocity = Vector3.zero;
+                    StopMoving();
                 }
                 break;
 
             case ChargerPhase.Recover:
-                rb.velocity = Vector3.zero;
+                StopMoving();
                 if (chargerPhaseTimer <= 0f)
                 {
                     chargerPhase = ChargerPhase.Approach;
@@ -353,17 +391,11 @@ public class Enemy : MonoBehaviour
     {
         // Kite: keep around `preferredRange`. Back away if too close.
         if (dist < retreatRange)
-        {
-            MoveInDirection(-dir, moveSpeed);
-        }
+            MoveInDirection(GetAvoidedDirection(-dir), moveSpeed);
         else if (dist > preferredRange)
-        {
-            MoveInDirection(dir, moveSpeed);
-        }
+            MoveInDirection(GetAvoidedDirection(dir), moveSpeed);
         else
-        {
-            rb.velocity = Vector3.zero;
-        }
+            StopMoving();
 
         if (shootTimer <= 0f && projectilePrefab != null)
         {
@@ -628,12 +660,78 @@ public class Enemy : MonoBehaviour
 
     // ---------- Helpers ----------
 
+    private Vector3 GetAvoidedDirection(Vector3 desiredDirection)
+    {
+        desiredDirection.y = 0f;
+
+        if (!useObstacleAvoidance)
+            return desiredDirection.normalized;
+
+        if (desiredDirection.sqrMagnitude < 0.001f)
+            return Vector3.zero;
+
+        desiredDirection.Normalize();
+
+        Vector3 origin = transform.position + Vector3.up * 0.7f;
+
+        bool forwardBlocked = Physics.SphereCast(
+            origin,
+            obstacleCheckRadius,
+            desiredDirection,
+            out RaycastHit forwardHit,
+            obstacleCheckDistance,
+            obstacleMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        if (!forwardBlocked)
+            return desiredDirection;
+
+        Vector3 right = Vector3.Cross(Vector3.up, desiredDirection).normalized;
+        Vector3 left = -right;
+
+        bool rightBlocked = Physics.SphereCast(origin, obstacleCheckRadius, right, out RaycastHit rightHit, sideCheckDistance, obstacleMask, QueryTriggerInteraction.Ignore);
+        bool leftBlocked = Physics.SphereCast(origin, obstacleCheckRadius, left, out RaycastHit leftHit, sideCheckDistance, obstacleMask, QueryTriggerInteraction.Ignore);
+
+        Vector3 chosenSide;
+
+        if (!rightBlocked && leftBlocked)
+            chosenSide = right;
+        else if (rightBlocked && !leftBlocked)
+            chosenSide = left;
+        else if (!rightBlocked && !leftBlocked)
+        {
+            float rightScore = player != null ? Vector3.Distance(transform.position + right, player.transform.position) : 0f;
+            float leftScore = player != null ? Vector3.Distance(transform.position + left, player.transform.position) : 0f;
+            chosenSide = rightScore < leftScore ? right : left;
+        }
+        else
+            chosenSide = -desiredDirection;
+
+        Vector3 avoided = desiredDirection + chosenSide * avoidanceStrength;
+        avoided.y = 0f;
+
+        if (avoided.sqrMagnitude < 0.001f)
+            return chosenSide.normalized;
+
+        return avoided.normalized;
+    }
+
     private void MoveInDirection(Vector3 dir, float speed)
     {
         // Preserve gravity on Y; only drive XZ velocity.
+        dir.y = 0f;
+        if (dir.sqrMagnitude > 0.001f) dir.Normalize();
+
         Vector3 v = dir * speed;
         v.y = rb.velocity.y;
         rb.velocity = v;
+    }
+
+    private void StopMoving()
+    {
+        if (rb == null) return;
+        rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
     }
 
     private void TryMelee()
@@ -706,7 +804,7 @@ public class Enemy : MonoBehaviour
     private void Die()
     {
         IsDead = true;
-        rb.velocity = Vector3.zero;
+        StopMoving();
         if (telegraphLine != null) telegraphLine.enabled = false;
 
         // Notify the score / kill tracker. Safe if there is no GameManager in scene.
@@ -724,14 +822,61 @@ public class Enemy : MonoBehaviour
             }
         }
 
+        TryDropPowerUp();
         // TODO: play death animation, drop XP/loot, etc.
         Destroy(gameObject);
+    }
+
+    private void TryDropPowerUp()
+    {
+        if (powerUpPrefab == null) return;
+        if (Random.value > powerUpDropChance) return;
+
+        eWeaponType dropType = PickRandomPowerUpType();
+        if (dropType == eWeaponType.none) return;
+
+        Vector3 spawnPos = transform.position + Vector3.up * powerUpDropHeight;
+        PowerUp powerUp = Instantiate(powerUpPrefab, spawnPos, Quaternion.identity);
+        powerUp.SetType(dropType);
+    }
+
+    private eWeaponType PickRandomPowerUpType()
+    {
+        eWeaponType[] pool = possiblePowerUpTypes;
+
+        if (pool == null || pool.Length == 0)
+        {
+            pool = new eWeaponType[]
+            {
+                eWeaponType.sword,
+                eWeaponType.shield,
+                eWeaponType.bow,
+                eWeaponType.dagger
+            };
+        }
+
+        for (int i = 0; i < 20; i++)
+        {
+            eWeaponType picked = pool[Random.Range(0, pool.Length)];
+            if (picked != eWeaponType.none) return picked;
+        }
+
+        return eWeaponType.none;
     }
 
     private void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, attackRange);
+
+        if (useObstacleAvoidance)
+        {
+            Gizmos.color = Color.cyan;
+            Vector3 origin = transform.position + Vector3.up * 0.7f;
+            Gizmos.DrawWireSphere(origin + transform.forward * obstacleCheckDistance, obstacleCheckRadius);
+            Gizmos.DrawLine(origin, origin + transform.forward * obstacleCheckDistance);
+        }
+
         if (behavior == Behavior.Ranged)
         {
             Gizmos.color = new Color(0.2f, 0.6f, 1f, 0.6f);

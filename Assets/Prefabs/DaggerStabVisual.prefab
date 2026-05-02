@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 4589759069900300785}
   - component: {fileID: 8671392499291611603}
   - component: {fileID: 6021991909577461078}
-  - component: {fileID: 3310464804780213159}
+  - component: {fileID: 3891962484159435510}
   m_Layer: 0
   m_Name: DaggerStabVisual
   m_TagString: Untagged
@@ -84,7 +84,7 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &3310464804780213159
+--- !u!114 &3891962484159435510
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -93,15 +93,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 3740159220165885527}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 8c762b2175dd8a14e89d16991dd32867, type: 3}
+  m_Script: {fileID: 11500000, guid: 2c29160721a0f404a892a73ba6e48b92, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  thrustDistance: 3
-  duration: 0.2
+  thrustDistance: 0.6
+  duration: 0.15
   verticalOffset: 1
-  bladeLength: 1
-  bladeRadius: 1.2
-  bladeAxis: 1
-  bladeCenterOffset: {x: 0, y: 0.2, z: 0}
-  modelRotationOffset: {x: 0, y: 0, z: 0}
+  hitRange: 1.8
+  hitRadius: 0.45
+  hitHeight: 1
+  hitVerticalSize: 1.3
   debugDrawHitbox: 0
+  modelRotationOffset: {x: 90, y: 0, z: 0}
