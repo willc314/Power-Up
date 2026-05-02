@@ -39,11 +39,25 @@ public class CameraFollow : MonoBehaviour
     [Tooltip("If true, the camera continuously points at the target. If false, the camera keeps its Inspector rotation (best for true top-down).")]
     public bool lookAtTarget = false;
 
+    [Header("Cursor Lean")]
+    [Tooltip("How strongly the camera leans toward the mouse cursor. 0 = ignore cursor. 0.2-0.4 feels subtle and helpful.")]
+    [Range(0f, 1f)] public float cursorLookAhead = 0.25f;
+    [Tooltip("Maximum world-units the camera can lean toward the cursor, no matter how far the cursor is.")]
+    public float maxLookAheadDistance = 6f;
+    [Tooltip("Y-height of the imaginary ground plane the cursor is projected onto. Match the hero's feet/ground height (usually 0).")]
+    public float aimPlaneY = 0f;
+
     [Header("Init")]
     [Tooltip("If true, the camera snaps to the correct position on the first frame instead of easing in from wherever it started.")]
     public bool snapOnStart = true;
 
     private Vector3 currentVelocity; // used by SmoothDamp
+    private Camera cam;
+
+    private void Awake()
+    {
+        cam = GetComponent<Camera>();
+    }
 
     private void Start()
     {
@@ -62,7 +76,7 @@ public class CameraFollow : MonoBehaviour
             else return;
         }
 
-        Vector3 desired = target.position + offset;
+        Vector3 desired = target.position + offset + GetCursorLeanOffset();
 
         if (smoothTime <= 0f)
         {
@@ -75,6 +89,29 @@ public class CameraFollow : MonoBehaviour
         }
 
         if (lookAtTarget) transform.LookAt(target);
+    }
+
+    /// <summary>
+    /// Computes a small XZ offset that pulls the camera toward the mouse cursor.
+    /// Returns Vector3.zero if the lean is disabled or the cursor can't be projected.
+    /// </summary>
+    private Vector3 GetCursorLeanOffset()
+    {
+        if (cursorLookAhead <= 0f || cam == null || target == null) return Vector3.zero;
+
+        Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+        Plane ground = new Plane(Vector3.up, new Vector3(0f, aimPlaneY, 0f));
+        if (!ground.Raycast(ray, out float dist)) return Vector3.zero;
+
+        Vector3 cursorWorld = ray.GetPoint(dist);
+        Vector3 lean = cursorWorld - target.position;
+        lean.y = 0f;
+        lean *= cursorLookAhead;
+
+        if (lean.magnitude > maxLookAheadDistance)
+            lean = lean.normalized * maxLookAheadDistance;
+
+        return lean;
     }
 
     /// <summary>

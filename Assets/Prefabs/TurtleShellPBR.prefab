@@ -518,6 +518,7 @@ GameObject:
   - component: {fileID: 4540090183207546936}
   - component: {fileID: 3950626464830128407}
   - component: {fileID: 5793121806867121714}
+  - component: {fileID: 3202056682905901599}
   m_Layer: 0
   m_Name: TurtleShellPBR
   m_TagString: Untagged
@@ -641,6 +642,21 @@ MonoBehaviour:
   preferredRange: 8
   retreatRange: 5
   shootCooldown: 1.5
+--- !u!114 &3202056682905901599
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1524411113276028}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74b298b6182b86944ad929f518736a67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  flashColor: {r: 1, g: 0, b: 0, a: 1}
+  flashDuration: 0.12
+  renderers: []
 --- !u!1 &1532652994627396
 GameObject:
   m_ObjectHideFlags: 0

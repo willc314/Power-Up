@@ -2369,6 +2369,9 @@ GameObject:
   - component: {fileID: -3725392596487394181}
   - component: {fileID: 7421607936284633191}
   - component: {fileID: 3277126995207964025}
+  - component: {fileID: -4825117159744072496}
+  - component: {fileID: 2345042072564391534}
+  - component: {fileID: -2060698707042131796}
   m_Layer: 6
   m_Name: Hero
   m_TagString: Untagged
@@ -2406,10 +2409,10 @@ Animator:
   m_GameObject: {fileID: 8189980434977739222}
   m_Enabled: 1
   m_Avatar: {fileID: 9000000, guid: 0308cf4e83cf517488b60af58b290fe0, type: 3}
-  m_Controller: {fileID: 9100000, guid: 2be64f57d7d213648aa9b2e5e8e0a39b, type: 2}
+  m_Controller: {fileID: 9100000, guid: 32d0cabecb3bce142b899a27b8b9cc02, type: 2}
   m_CullingMode: 1
   m_UpdateMode: 0
-  m_ApplyRootMotion: 1
+  m_ApplyRootMotion: 0
   m_LinearVelocityBlending: 0
   m_StabilizeFeet: 0
   m_WarningMessage: 
@@ -2480,17 +2483,70 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   maxHP: 100
-  attackDamage: 25
   moveSpeed: 5
-  attackRange: 1.8
-  attackArcDegrees: 90
-  attackCooldown: 0.4
+  primaryWeapon: {fileID: -4825117159744072496}
+  secondaryWeapon: {fileID: 2345042072564391534}
+  aimPlaneY: 0
+  animator: {fileID: 0}
+  animSpeedDamping: 0.08
+  currentHP: 0
+--- !u!114 &-4825117159744072496
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8189980434977739222}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ae09b4b92f905374084d3339f6f52f87, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  weaponName: Weapon
+  damage: 25
+  cooldown: 0.5
   enemyLayers:
     serializedVersion: 2
-    m_Bits: 128
-  aimPlaneY: 0
-  currentHP: 0
-  attackTimer: 0
+    m_Bits: 4294967295
+  slashPrefab: {fileID: 4157698122962641452, guid: cbc65052b92d3a245a0e616c4b3de3a3, type: 3}
+  spawnDistance: 1
+  spawnHeight: 1
+--- !u!114 &2345042072564391534
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8189980434977739222}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 54d9224aa1d4b1246bc28ba1e9c18d52, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  weaponName: Weapon
+  damage: 25
+  cooldown: 0.5
+  enemyLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  shieldPrefab: {fileID: 8274515395915719521, guid: 28d318905bb3e5d46b0b92d326b2fc28, type: 3}
+  spawnDistance: 0.8
+  spawnHeight: 1
+--- !u!114 &-2060698707042131796
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8189980434977739222}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74b298b6182b86944ad929f518736a67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  flashColor: {r: 1, g: 0, b: 0, a: 1}
+  flashDuration: 0.12
+  renderers: []
 --- !u!1 &8206070634150816031
 GameObject:
   m_ObjectHideFlags: 0

@@ -427,6 +427,7 @@ GameObject:
   - component: {fileID: 1798890786327208802}
   - component: {fileID: -5752662089983788859}
   - component: {fileID: 7794574661211741655}
+  - component: {fileID: 341342204101478073}
   m_Layer: 0
   m_Name: SlimePBR
   m_TagString: Untagged
@@ -550,3 +551,18 @@ MonoBehaviour:
   preferredRange: 8
   retreatRange: 5
   shootCooldown: 1.5
+--- !u!114 &341342204101478073
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1931298151966786}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74b298b6182b86944ad929f518736a67, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  flashColor: {r: 1, g: 0, b: 0, a: 1}
+  flashDuration: 0.12
+  renderers: []

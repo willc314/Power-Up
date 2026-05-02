@@ -1,18 +1,20 @@
-using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
 /// Top-down hero controller for a Vampire Survivors-style roguelike.
-/// - WASD moves the hero on the XZ plane (world-space, camera-relative-ish).
+/// - WASD moves the hero on the XZ plane.
 /// - The hero faces the mouse cursor.
-/// - Left click swings the sword (melee arc hit).
-/// - Right click is reserved for a future secondary weapon.
+/// - Left click fires the Primary Weapon, right click fires the Secondary Weapon.
+///   Both trigger the same default Attack animation; the actual hit is whatever
+///   the equipped Weapon spawns (sword slash, shield throw, ...).
 ///
 /// Setup checklist on the Hero GameObject:
 ///   * Rigidbody  (Use Gravity = on, the script will freeze X/Z rotation)
 ///   * Collider   (e.g. CapsuleCollider sized to the hero)
 ///   * Tag        "Player" (optional, but enemies look for it)
 ///   * Layer      e.g. "Player"
+///   * Weapon components (e.g. SwordWeapon, ShieldWeapon) on this object or a child.
+///     Drag the ones you want into Primary Weapon and Secondary Weapon below.
 /// </summary>
 [RequireComponent(typeof(Rigidbody))]
 public class Hero : MonoBehaviour
@@ -20,29 +22,32 @@ public class Hero : MonoBehaviour
     [Header("Stats")]
     [Tooltip("Maximum hit points.")]
     public float maxHP = 100f;
-    [Tooltip("Damage dealt by a single sword swing.")]
-    public float attackDamage = 25f;
     [Tooltip("Movement speed in units per second.")]
     public float moveSpeed = 5f;
 
-    [Header("Attack")]
-    [Tooltip("Reach of the sword in units (radius in front of the hero).")]
-    public float attackRange = 1.8f;
-    [Tooltip("Half-angle of the swing arc in degrees. 90 = full 180-degree arc in front.")]
-    [Range(10f, 180f)]
-    public float attackArcDegrees = 90f;
-    [Tooltip("Seconds between sword swings.")]
-    public float attackCooldown = 0.4f;
-    [Tooltip("Layers that the sword can damage. Set this to your 'Enemy' layer in the Inspector.")]
-    public LayerMask enemyLayers = ~0;
+    [Header("Weapons")]
+    [Tooltip("Fired on left click. Drag a Weapon component (e.g. SwordWeapon) here.")]
+    public Weapon primaryWeapon;
+    [Tooltip("Fired on right click. Drag a Weapon component (e.g. ShieldWeapon) here.")]
+    public Weapon secondaryWeapon;
 
     [Header("Aim")]
     [Tooltip("Y-height of the imaginary ground plane the mouse aim is projected onto. Match the hero's feet/ground height.")]
     public float aimPlaneY = 0f;
 
+    [Header("Animation")]
+    [Tooltip("Optional. If empty, the script grabs the first Animator found in children. The Animator Controller should expose: float 'Speed', trigger 'Attack', trigger 'Die'.")]
+    public Animator animator;
+    [Tooltip("Smoothing time for the Speed parameter so the walk anim eases in/out instead of popping.")]
+    public float animSpeedDamping = 0.08f;
+
     [Header("Debug / Read-only")]
     [SerializeField] private float currentHP;
-    [SerializeField] private float attackTimer;
+
+    // Hashed Animator parameter names (faster than string lookup every frame).
+    private static readonly int kSpeed  = Animator.StringToHash("Speed");
+    private static readonly int kAttack = Animator.StringToHash("Attack");
+    private static readonly int kDie    = Animator.StringToHash("Die");
 
     public float CurrentHP => currentHP;
     public float MaxHP => maxHP;
@@ -59,7 +64,7 @@ public class Hero : MonoBehaviour
     private Rigidbody rb;
     private Camera cam;
     private Vector3 moveInput;
-    private readonly Collider[] hitBuffer = new Collider[32];
+    private DamageFlash damageFlash;
 
     private void Awake()
     {
@@ -69,6 +74,9 @@ public class Hero : MonoBehaviour
         rb.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         rb.interpolation = RigidbodyInterpolation.Interpolate;
         rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
+
+        if (animator == null) animator = GetComponentInChildren<Animator>();
+        damageFlash = GetComponent<DamageFlash>();
 
         cam = Camera.main;
         currentHP = maxHP;
@@ -91,17 +99,23 @@ public class Hero : MonoBehaviour
         // --- Aim ---
         FaceMouse();
 
-        // --- Attack ---
-        if (attackTimer > 0f) attackTimer -= Time.deltaTime;
-
-        if (Input.GetMouseButtonDown(0) && attackTimer <= 0f)
+        // --- Attack: dispatch to weapons every frame the button is held.
+        // Each weapon's own cooldown rate-limits how often it actually fires. ---
+        if (Input.GetMouseButton(0) && primaryWeapon != null)
         {
-            SwingSword();
-            attackTimer = attackCooldown;
+            if (primaryWeapon.TryFire(this) && animator != null) animator.SetTrigger(kAttack);
+        }
+        if (Input.GetMouseButton(1) && secondaryWeapon != null)
+        {
+            if (secondaryWeapon.TryFire(this) && animator != null) animator.SetTrigger(kAttack);
         }
 
-        // Right-click reserved for a secondary weapon. Hook a second attack here later.
-        // if (Input.GetMouseButtonDown(1)) { /* secondary weapon */ }
+        // Drive the walk/idle animation off how hard the player is pushing the stick/keys.
+        if (animator != null)
+        {
+            float speed01 = moveInput.magnitude; // 0 when idle, 1 when running
+            animator.SetFloat(kSpeed, speed01, animSpeedDamping, Time.deltaTime);
+        }
     }
 
     private void FixedUpdate()
@@ -131,39 +145,11 @@ public class Hero : MonoBehaviour
         }
     }
 
-    private void SwingSword()
-    {
-        // Find every collider within attack range, then keep only the ones inside the arc in front.
-        int count = Physics.OverlapSphereNonAlloc(transform.position, attackRange, hitBuffer, enemyLayers, QueryTriggerInteraction.Collide);
-        HashSet<Enemy> alreadyHit = new HashSet<Enemy>();
-
-        for (int i = 0; i < count; i++)
-        {
-            Collider c = hitBuffer[i];
-            if (c == null) continue;
-
-            Vector3 toTarget = c.transform.position - transform.position;
-            toTarget.y = 0f;
-            if (toTarget.sqrMagnitude < 0.0001f) continue;
-
-            float angle = Vector3.Angle(transform.forward, toTarget.normalized);
-            if (angle > attackArcDegrees) continue;
-
-            Enemy enemy = c.GetComponentInParent<Enemy>();
-            if (enemy != null && alreadyHit.Add(enemy))
-            {
-                enemy.TakeDamage(attackDamage);
-            }
-        }
-
-        // TODO: trigger an "Attack" animation here when you wire up the Animator.
-        // GetComponent<Animator>()?.SetTrigger("Attack");
-    }
-
     public void TakeDamage(float amount)
     {
         if (IsDead) return;
         currentHP = Mathf.Max(0f, currentHP - amount);
+        if (damageFlash != null) damageFlash.Flash();
         if (currentHP <= 0f) Die();
     }
 
@@ -177,21 +163,14 @@ public class Hero : MonoBehaviour
     {
         IsDead = true;
         moveInput = Vector3.zero;
-        // TODO: play death animation, show game-over UI, etc.
+        if (rb != null) rb.velocity = Vector3.zero;
+        if (animator != null)
+        {
+            animator.SetFloat(kSpeed, 0f);
+            animator.SetTrigger(kDie);
+        }
+        // TODO: show game-over UI, restart prompt, etc.
         Debug.Log("Hero died.");
     }
 
-    // Visualize the swing arc in the editor.
-    private void OnDrawGizmosSelected()
-    {
-        Gizmos.color = new Color(1f, 0.4f, 0.2f, 0.5f);
-        Gizmos.DrawWireSphere(transform.position, attackRange);
-
-        Gizmos.color = Color.red;
-        Vector3 fwd = Application.isPlaying ? transform.forward : transform.forward;
-        Quaternion left  = Quaternion.AngleAxis(-attackArcDegrees, Vector3.up);
-        Quaternion right = Quaternion.AngleAxis( attackArcDegrees, Vector3.up);
-        Gizmos.DrawRay(transform.position, left  * fwd * attackRange);
-        Gizmos.DrawRay(transform.position, right * fwd * attackRange);
-    }
 }
