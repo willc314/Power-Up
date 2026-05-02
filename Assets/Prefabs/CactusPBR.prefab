@@ -202,6 +202,18 @@ MonoBehaviour:
   attackRange: 1.4
   attackCooldown: 1
   aggroRange: 25
+  powerUpPrefab: {fileID: 5873131192069686212, guid: 2cb7ec1c1ebc3534bbc753a4c279d9b4, type: 3}
+  powerUpDropChance: 0.5
+  possiblePowerUpTypes: 01000000020000000300000004000000
+  powerUpDropHeight: 0.1
+  useObstacleAvoidance: 1
+  obstacleMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  obstacleCheckDistance: 2.5
+  sideCheckDistance: 2
+  obstacleCheckRadius: 0.45
+  avoidanceStrength: 1.25
   hitParticleCount: 8
   hitParticleColor: {r: 0.7, g: 0.1, b: 0.1, a: 1}
   hitParticleSpeed: 5

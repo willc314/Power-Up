@@ -3,42 +3,79 @@ using UnityEngine;
 
 /// <summary>
 /// One sword swing. Goes on the root of the swing prefab.
-/// The visual is the prefab itself (a sword model) — this script positions and
-/// rotates it along an arc in front of the owner over `duration` seconds, then destroys it.
+/// The visual is the prefab itself, usually a sword model.
+/// The script positions and rotates the visual along an arc in front of the owner,
+/// then destroys it after the swing duration.
+///
+/// Damage behavior:
+///   This uses a fan-shaped gameplay hit area in front of the Hero.
+///   The sword visual can now be adjusted freely without breaking the hitbox.
+///
 /// Each enemy is hit at most once per swing.
 /// </summary>
 public class SwordSlash : MonoBehaviour
 {
-    [Header("Swing")]
-    [Tooltip("Total angle the sword sweeps through, in degrees.")]
+    [Header("Swing Visual")]
+    [Tooltip("Total angle the sword visual sweeps through, in degrees.")]
     public float arcDegrees = 140f;
+
     [Tooltip("Time the swing takes to complete, in seconds.")]
     public float duration = 0.25f;
-    [Tooltip("Distance from the owner's center to the swing arc.")]
+
+    [Tooltip("Distance from the owner's center to the sword visual arc.")]
     public float radius = 1.4f;
-    [Tooltip("Vertical offset above the owner's pivot so the swing sits at chest/shoulder height.")]
+
+    [Tooltip("Vertical offset above the owner's pivot so the visual sits at chest/shoulder height.")]
     public float verticalOffset = 1.0f;
 
-    [Header("Hit Detection")]
-    [Tooltip("Length of the hit capsule along the blade. Match it to the visible blade length so big swords actually feel big.")]
-    public float bladeLength = 2.5f;
-    [Tooltip("Thickness of the hit capsule (how wide the blade's hit area is).")]
-    public float bladeRadius = 0.35f;
-    [Tooltip("Which local axis the blade extends along. The OHS03Polyart sword's blade points along local +Y, so leave at Y unless you swap models.")]
-    public BladeAxis bladeAxis = BladeAxis.Y;
-    [Tooltip("Local-space offset from the model pivot to the CENTER of the hit capsule. Increase along the blade axis if the pivot is at the hilt and the blade extends further out.")]
-    public Vector3 bladeCenterOffset = new Vector3(0f, 1.25f, 0f);
-    [Tooltip("Draws the hit capsule as a red line in the Scene view during play so you can see the hitbox.")]
+    [Header("Gameplay Hit Area")]
+    [Tooltip("How wide the damaging fan is in front of the owner. Usually same as Arc Degrees.")]
+    public float hitArcDegrees = 140f;
+
+    [Tooltip("Minimum distance from the owner that can be hit. Keep low so enemies close to the Hero still get hit.")]
+    public float hitInnerRadius = 0.3f;
+
+    [Tooltip("Maximum distance from the owner that can be hit. This should cover the whole sword swing, not just the tip.")]
+    public float hitOuterRadius = 2.6f;
+
+    [Tooltip("Vertical center of the damage check above the owner.")]
+    public float hitHeight = 1.0f;
+
+    [Tooltip("Vertical thickness of the hit check. Larger values catch short/tall enemy colliders more reliably.")]
+    public float hitVerticalTolerance = 1.5f;
+
+    [Tooltip("Extra radius used by the broad physics check before angle filtering.")]
+    public float broadCheckPadding = 0.4f;
+
+    [Tooltip("Draws the fan hit area in the Scene view during play.")]
     public bool debugDrawHitbox = true;
+
+    [Header("Legacy Blade Hitbox")]
+    [Tooltip("Kept for old prefabs. No longer used for damage unless Use Legacy Blade Capsule is checked.")]
+    public float bladeLength = 2.5f;
+
+    [Tooltip("Kept for old prefabs. No longer used for damage unless Use Legacy Blade Capsule is checked.")]
+    public float bladeRadius = 0.35f;
+
+    [Tooltip("Kept for old prefabs. No longer used for damage unless Use Legacy Blade Capsule is checked.")]
+    public BladeAxis bladeAxis = BladeAxis.Y;
+
+    [Tooltip("Kept for old prefabs. No longer used for damage unless Use Legacy Blade Capsule is checked.")]
+    public Vector3 bladeCenterOffset = new Vector3(0f, 1.25f, 0f);
+
+    [Tooltip("If true, uses the old blade capsule hitbox instead of the new full-swing fan hitbox.")]
+    public bool useLegacyBladeCapsule = false;
 
     public enum BladeAxis { X = 0, Y = 1, Z = 2 }
 
     [Header("Visual Tweaks")]
-    [Tooltip("X rotation on the model. 90 typically lays an upright sword flat (parallel to ground).")]
+    [Tooltip("X rotation on the model. 90 typically lays an upright sword flat.")]
     public float modelPitch = 90f;
-    [Tooltip("Y rotation on the model. 90/-90 aims the blade along the swing tangent. The sign flips automatically for opposite-direction swings.")]
+
+    [Tooltip("Y rotation on the model. Change to 90 or -90 if your sword model points sideways.")]
     public float modelYaw = 90f;
-    [Tooltip("Z rotation on the model. Use to flip the blade if it's upside down after pitching.")]
+
+    [Tooltip("Z rotation on the model. Use to flip the blade if needed.")]
     public float modelRoll = 0f;
 
     private Transform owner;
@@ -48,7 +85,7 @@ public class SwordSlash : MonoBehaviour
     private float timer;
 
     private readonly HashSet<Enemy> alreadyHit = new HashSet<Enemy>();
-    private readonly Collider[] hitBuffer = new Collider[16];
+    private readonly Collider[] hitBuffer = new Collider[64];
 
     public void Init(Transform owner, float damage, LayerMask enemyLayers, bool rightToLeft)
     {
@@ -56,48 +93,133 @@ public class SwordSlash : MonoBehaviour
         this.damage = damage;
         this.enemyLayers = enemyLayers;
         this.rightToLeft = rightToLeft;
+
         timer = 0f;
-        Destroy(gameObject, duration + 0.1f); // safety net
+
+        Destroy(gameObject, duration + 0.1f);
     }
 
     private void Update()
     {
-        if (owner == null) { Destroy(gameObject); return; }
+        if (owner == null)
+        {
+            Destroy(gameObject);
+            return;
+        }
 
         timer += Time.deltaTime;
         float t = Mathf.Clamp01(timer / duration);
 
-        // Ease-out: fast at the start of the swing, decelerating into the follow-through.
+        UpdateVisual(t);
+
+        if (useLegacyBladeCapsule)
+            DamageUsingLegacyBladeCapsule();
+        else
+            DamageUsingFanArea();
+
+        if (t >= 1f)
+            Destroy(gameObject);
+    }
+
+    private void UpdateVisual(float t)
+    {
         float eased = 1f - Mathf.Pow(1f - t, 2f);
 
         float startAngle = -arcDegrees * 0.5f;
-        float endAngle   =  arcDegrees * 0.5f;
-        if (rightToLeft) { float tmp = startAngle; startAngle = endAngle; endAngle = tmp; }
+        float endAngle = arcDegrees * 0.5f;
+
+        if (rightToLeft)
+        {
+            float tmp = startAngle;
+            startAngle = endAngle;
+            endAngle = tmp;
+        }
 
         float angle = Mathf.Lerp(startAngle, endAngle, eased);
 
-        // Position along the arc relative to the owner's facing.
         Quaternion radial = owner.rotation * Quaternion.Euler(0f, angle, 0f);
         Vector3 dir = radial * Vector3.forward;
+
         transform.position = owner.position + dir * radius + Vector3.up * verticalOffset;
 
-        // Orient the model: pitch/roll lay it flat, yaw aims the blade along the swing tangent.
-        // The yaw sign flips for opposite-direction swings so the blade always leads.
         float effectiveYaw = rightToLeft ? -modelYaw : modelYaw;
         transform.rotation = radial * Quaternion.Euler(modelPitch, effectiveYaw, modelRoll);
+    }
 
-        // Hit detection: capsule along the blade.
-        ComputeCapsuleEndpoints(out Vector3 p1, out Vector3 p2);
-        int n = Physics.OverlapCapsuleNonAlloc(p1, p2, bladeRadius, hitBuffer, enemyLayers, QueryTriggerInteraction.Collide);
+    private void DamageUsingFanArea()
+    {
+        Vector3 center = owner.position + Vector3.up * hitHeight;
+        float broadRadius = hitOuterRadius + broadCheckPadding;
+
+        int n = Physics.OverlapSphereNonAlloc(
+            center,
+            broadRadius,
+            hitBuffer,
+            enemyLayers,
+            QueryTriggerInteraction.Collide
+        );
+
         for (int i = 0; i < n; i++)
         {
-            Enemy e = hitBuffer[i].GetComponentInParent<Enemy>();
-            if (e != null && alreadyHit.Add(e)) e.TakeDamage(damage);
+            Collider col = hitBuffer[i];
+            if (col == null)
+                continue;
+
+            Enemy enemy = col.GetComponentInParent<Enemy>();
+            if (enemy == null || alreadyHit.Contains(enemy))
+                continue;
+
+            Vector3 closest = col.ClosestPoint(center);
+            Vector3 flatOffset = closest - owner.position;
+            flatOffset.y = 0f;
+
+            float flatDistance = flatOffset.magnitude;
+
+            if (flatDistance < hitInnerRadius || flatDistance > hitOuterRadius)
+                continue;
+
+            float verticalDifference = Mathf.Abs(closest.y - center.y);
+
+            if (verticalDifference > hitVerticalTolerance)
+                continue;
+
+            Vector3 flatDirection = flatOffset.normalized;
+            float angleFromForward = Vector3.Angle(owner.forward, flatDirection);
+
+            if (angleFromForward > hitArcDegrees * 0.5f)
+                continue;
+
+            alreadyHit.Add(enemy);
+            enemy.TakeDamage(damage);
         }
 
-        if (debugDrawHitbox) Debug.DrawLine(p1, p2, Color.red);
+        if (debugDrawHitbox)
+            DrawFanDebug();
+    }
 
-        if (t >= 1f) Destroy(gameObject);
+    private void DamageUsingLegacyBladeCapsule()
+    {
+        ComputeCapsuleEndpoints(out Vector3 p1, out Vector3 p2);
+
+        int n = Physics.OverlapCapsuleNonAlloc(
+            p1,
+            p2,
+            bladeRadius,
+            hitBuffer,
+            enemyLayers,
+            QueryTriggerInteraction.Collide
+        );
+
+        for (int i = 0; i < n; i++)
+        {
+            Enemy enemy = hitBuffer[i].GetComponentInParent<Enemy>();
+
+            if (enemy != null && alreadyHit.Add(enemy))
+                enemy.TakeDamage(damage);
+        }
+
+        if (debugDrawHitbox)
+            Debug.DrawLine(p1, p2, Color.red);
     }
 
     private void ComputeCapsuleEndpoints(out Vector3 p1, out Vector3 p2)
@@ -105,29 +227,51 @@ public class SwordSlash : MonoBehaviour
         Vector3 axisLocal = AxisVector(bladeAxis);
         Vector3 axisWorld = transform.TransformDirection(axisLocal);
         Vector3 center = transform.TransformPoint(bladeCenterOffset);
-        // OverlapCapsule wants the two interior points of the capsule (where the spheres center).
+
         float halfLen = Mathf.Max(0f, bladeLength * 0.5f - bladeRadius);
+
         p1 = center - axisWorld * halfLen;
         p2 = center + axisWorld * halfLen;
     }
 
-    private static Vector3 AxisVector(BladeAxis a)
+    private static Vector3 AxisVector(BladeAxis axis)
     {
-        switch (a)
+        switch (axis)
         {
-            case BladeAxis.X: return Vector3.right;
-            case BladeAxis.Y: return Vector3.up;
-            case BladeAxis.Z: return Vector3.forward;
+            case BladeAxis.X:
+                return Vector3.right;
+
+            case BladeAxis.Y:
+                return Vector3.up;
+
+            case BladeAxis.Z:
+                return Vector3.forward;
         }
+
         return Vector3.up;
+    }
+
+    private void DrawFanDebug()
+    {
+        Vector3 origin = owner.position + Vector3.up * hitHeight;
+
+        Vector3 leftDir = Quaternion.Euler(0f, -hitArcDegrees * 0.5f, 0f) * owner.forward;
+        Vector3 rightDir = Quaternion.Euler(0f, hitArcDegrees * 0.5f, 0f) * owner.forward;
+
+        Debug.DrawLine(origin, origin + leftDir * hitOuterRadius, Color.red);
+        Debug.DrawLine(origin, origin + rightDir * hitOuterRadius, Color.red);
+        Debug.DrawLine(origin + owner.forward * hitInnerRadius, origin + owner.forward * hitOuterRadius, Color.yellow);
     }
 
     private void OnDrawGizmosSelected()
     {
-        ComputeCapsuleEndpoints(out Vector3 p1, out Vector3 p2);
-        Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.7f);
-        Gizmos.DrawWireSphere(p1, bladeRadius);
-        Gizmos.DrawWireSphere(p2, bladeRadius);
-        Gizmos.DrawLine(p1, p2);
+        if (owner == null)
+            return;
+
+        Gizmos.color = new Color(1f, 0.2f, 0.2f, 0.25f);
+        Gizmos.DrawWireSphere(owner.position + Vector3.up * hitHeight, hitOuterRadius);
+
+        Gizmos.color = new Color(1f, 1f, 0.2f, 0.5f);
+        Gizmos.DrawWireSphere(owner.position + Vector3.up * hitHeight, hitInnerRadius);
     }
 }

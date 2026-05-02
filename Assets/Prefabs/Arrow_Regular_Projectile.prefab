@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 733767379748095057}
   - component: {fileID: 3253892263013091597}
   - component: {fileID: 502100003177580745}
-  - component: {fileID: 537439506375290464}
+  - component: {fileID: 4093347662047577129}
   m_Layer: 0
   m_Name: Arrow_Regular_Projectile
   m_TagString: Untagged
@@ -106,7 +106,7 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
---- !u!114 &537439506375290464
+--- !u!114 &4093347662047577129
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -115,12 +115,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 4913057307836949013}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fae26ae3dc4e0c747be9df40398f460c, type: 3}
+  m_Script: {fileID: 11500000, guid: 084f96a9093db3940b9b3f6ecf8787b5, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   speed: 20
   lifetime: 4
   pierceCount: 0
-  hitRadius: 0.25
+  hitRadius: 0.3
+  hitHeight: 2
   spinSpeed: 0
   modelRotationOffset: {x: 0, y: 0, z: 0}
