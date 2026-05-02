@@ -34,6 +34,10 @@ public abstract class Weapon : MonoBehaviour
     [Header("Common")]
     [Tooltip("Display name for HUD or debug.")]
     public string weaponName = "Weapon";
+    [Tooltip("Icon shown in the HUD weapon slot when this weapon is equipped. Optional — leave empty for a placeholder.")]
+    public Sprite hudIcon;
+    [Tooltip("Z-rotation applied to the HUD icon (degrees, clockwise). Use this when a rendered icon ends up sideways. Try 0, 90, 180, or -90 first.")]
+    public float hudIconRotation = 0f;
 
     [Tooltip("Weapon type used by powerups and replacement UI.")]
     public eWeaponType weaponType = eWeaponType.none;
@@ -98,6 +102,15 @@ public abstract class Weapon : MonoBehaviour
     }
 
     /// <summary>
+    /// Called when the hero takes some action that should cancel this weapon's
+    /// in-progress state (e.g. dashing while charging the bow). Default: no-op.
+    /// Charging weapons should override and reset their state here.
+    /// </summary>
+    public virtual void OnInterrupted(Hero owner) { }
+
+    /// <summary>
+    /// Try to fire the weapon. Returns true if it actually went off so the caller
+    /// (e.g. Hero) can play an attack animation.
     /// Try to fire the weapon. Returns true if it actually went off so the Hero
     /// can play an attack animation.
     /// </summary>

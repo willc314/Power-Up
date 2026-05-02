@@ -47,26 +47,56 @@ public class Hero : MonoBehaviour
     /// Bow and DeathBeam use this to slow or stop the hero while charging/firing.
     /// </summary>
     [System.NonSerialized] public float speedMultiplier = 1f;
-
+    
     [Header("Powerup Stat Boosts")]
     [Tooltip("Which Hero stat gets boosted when a weapon is already maxed.")]
     public HeroStatBoostMode maxedWeaponBoostMode = HeroStatBoostMode.Random;
-
     [Tooltip("How much max HP increases from a stat boost.")]
     public float maxHPBoostAmount = 10f;
-
     [Tooltip("How much movement speed increases from a stat boost.")]
     public float moveSpeedBoostAmount = 0.25f;
-
     [Tooltip("Optional movement speed cap so speed boosts do not get ridiculous.")]
     public float maxMoveSpeed = 10f;
 
     [Header("Active Weapons")]
-    [Tooltip("Fired on left click. Drag a Weapon component from this Hero here.")]
+    [Tooltip("Fired on left click. Drag a Weapon component (e.g. SwordWeapon) here. Overwritten on spawn if 'Randomize Weapons On Spawn' is on.")]
     public Weapon primaryWeapon;
-
-    [Tooltip("Fired on right click. Drag a Weapon component from this Hero here.")]
+    [Tooltip("Fired on right click. Drag a Weapon component (e.g. ShieldWeapon) here. Overwritten on spawn if 'Randomize Weapons On Spawn' is on.")]
     public Weapon secondaryWeapon;
+    [Tooltip("If true, on spawn the hero is given a single random weapon (primary only) drawn from the pool below — or, if that's empty, from every Weapon component on the hero. The secondary slot stays empty.")]
+    public bool randomizeWeaponsOnSpawn = true;
+    [Tooltip("Optional pool of weapons the random pick chooses from. Leave empty to use every Weapon component found on this hero (and its children).")]
+    public System.Collections.Generic.List<Weapon> randomWeaponPool = new System.Collections.Generic.List<Weapon>();
+
+    [Header("Dash")]
+    [Tooltip("Key that triggers a dash. Default Space.")]
+    public KeyCode dashKey = KeyCode.Space;
+    [Tooltip("Speed during the dash, in units/sec.")]
+    public float dashSpeed = 22f;
+    [Tooltip("How long the dash lasts. Multiply by dashSpeed for total dash distance.")]
+    public float dashDuration = 0.18f;
+    [Tooltip("Cooldown between dashes, in seconds.")]
+    public float dashCooldown = 1.0f;
+    [Tooltip("If true, dashing cancels in-progress weapon state (bow charge, etc.). Recommended.")]
+    public bool dashInterruptsWeapons = true;
+
+    [Header("Dash Particles")]
+    [Tooltip("Spawn dust particles flying behind the hero during the dash.")]
+    public bool dashParticles = true;
+    [Tooltip("How many dust particles per second during the dash. 0 = none.")]
+    public float dashParticlesPerSecond = 80f;
+    [Tooltip("Color of the dust particles. Light brown reads as dirt; grey as stone.")]
+    public Color dashParticleColor = new Color(0.65f, 0.55f, 0.42f);
+    [Tooltip("Initial speed of each dust particle.")]
+    public float dashParticleSpeed = 4f;
+    [Tooltip("Edge length of each particle.")]
+    public float dashParticleSize = 0.12f;
+    [Tooltip("Seconds before each particle self-destroys.")]
+    public float dashParticleLifetime = 0.4f;
+    [Tooltip("Cone spread angle in degrees for the dust spray.")]
+    public float dashParticleSpread = 35f;
+    [Tooltip("Height above ground where particles spawn (keeps them at the hero's feet).")]
+    public float dashParticleHeight = 0.1f;
 
     [Header("Weapon Components On Hero")]
     [Tooltip("SwordWeapon component attached to this Hero.")]
@@ -135,6 +165,13 @@ public class Hero : MonoBehaviour
     private Vector3 moveInput;
     private DamageFlash damageFlash;
 
+    // Dash state
+    private float dashTimer;
+    private float dashCooldownTimer;
+    private Vector3 dashDirection;
+    private float dashParticleAccumulator;
+    public bool IsDashing => dashTimer > 0f;
+
     private void Awake()
     {
         Instance = this;
@@ -154,8 +191,40 @@ public class Hero : MonoBehaviour
 
         cam = Camera.main;
         currentHP = maxHP;
+        
+        
+        if (randomizeWeaponsOnSpawn) PickRandomWeapons();
+        else RefreshWeaponVisuals();
+    }
 
-        RefreshWeaponVisuals();
+    /// <summary>
+    /// Replaces primaryWeapon with a random weapon drawn from randomWeaponPool
+    /// (or, if that's empty, from every Weapon component attached to this hero
+    /// or a child). The secondary slot is cleared so the hero spawns with a
+    /// single weapon.
+    /// </summary>
+    private void PickRandomWeapons()
+    {
+        // Build the candidate pool. Inspector-provided list wins so designers
+        // can blacklist weapons (e.g. exclude the bow if it isn't tuned yet).
+        var pool = new System.Collections.Generic.List<Weapon>();
+        if (randomWeaponPool != null && randomWeaponPool.Count > 0)
+        {
+            foreach (var w in randomWeaponPool) if (w != null) pool.Add(w);
+        }
+        else
+        {
+            pool.AddRange(GetComponentsInChildren<Weapon>(includeInactive: true));
+        }
+
+        if (pool.Count == 0)
+        {
+            Debug.LogWarning("[Hero] randomizeWeaponsOnSpawn is on but no Weapon components were found.");
+            return;
+        }
+
+        primaryWeapon   = pool[Random.Range(0, pool.Count)];
+        secondaryWeapon = null;
     }
 
     private void OnDestroy()
@@ -179,6 +248,13 @@ public class Hero : MonoBehaviour
 
         FaceMouse();
 
+        // --- Dash ---
+        if (dashCooldownTimer > 0f) dashCooldownTimer -= Time.deltaTime;
+        if (Input.GetKeyDown(dashKey) && dashCooldownTimer <= 0f && !IsDashing) StartDash();
+
+        // --- Attack: dispatch press/hold/release to the weapons. Auto-repeat
+        // weapons (sword, dagger, crossbow, ...) only use OnFireHeld; the Bow
+        // uses all three to implement charging.
         DispatchWeaponInput(0, primaryWeapon);
         DispatchWeaponInput(1, secondaryWeapon);
 
@@ -194,8 +270,55 @@ public class Hero : MonoBehaviour
         if (IsDead || Time.timeScale == 0f)
             return;
 
-        Vector3 target = rb.position + moveInput * moveSpeed * speedMultiplier * Time.fixedDeltaTime;
-        rb.MovePosition(target);
+        if (IsDashing)
+        {
+            dashTimer -= Time.fixedDeltaTime;
+            Vector3 step = dashDirection * dashSpeed * Time.fixedDeltaTime;
+            rb.MovePosition(rb.position + step);
+            EmitDashParticles();
+        }
+        else
+        {
+            Vector3 target = rb.position + moveInput * moveSpeed * speedMultiplier * Time.fixedDeltaTime;
+            rb.MovePosition(target);
+        }
+    }
+
+    private void EmitDashParticles()
+    {
+        if (!dashParticles || dashParticlesPerSecond <= 0f) return;
+        dashParticleAccumulator += dashParticlesPerSecond * Time.fixedDeltaTime;
+        Vector3 origin = transform.position + Vector3.up * dashParticleHeight;
+        Vector3 backward = -dashDirection;
+        while (dashParticleAccumulator >= 1f)
+        {
+            HitParticles.EmitBurst(origin, backward,
+                count: 1,
+                speed: dashParticleSpeed,
+                lifetime: dashParticleLifetime,
+                size: dashParticleSize,
+                color: dashParticleColor,
+                spreadAngle: dashParticleSpread,
+                useGravity: true);
+            dashParticleAccumulator -= 1f;
+        }
+    }
+
+    private void StartDash()
+    {
+        // Direction: WASD if held, otherwise the hero's current facing.
+        Vector3 dir = moveInput.sqrMagnitude > 0.01f ? moveInput : transform.forward;
+        dir.y = 0f;
+        dashDirection = dir.sqrMagnitude > 0.0001f ? dir.normalized : transform.forward;
+        dashTimer = dashDuration;
+        dashCooldownTimer = dashCooldown;
+        dashParticleAccumulator = 0f;
+
+        if (dashInterruptsWeapons)
+        {
+            if (primaryWeapon != null)   primaryWeapon.OnInterrupted(this);
+            if (secondaryWeapon != null) secondaryWeapon.OnInterrupted(this);
+        }
     }
 
     private void CacheWeaponComponents()

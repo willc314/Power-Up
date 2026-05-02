@@ -2654,12 +2654,27 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxHP: 100
   moveSpeed: 5
-  maxedWeaponBoostMode: 0
+maxedWeaponBoostMode: 0
   maxHPBoostAmount: 10
   moveSpeedBoostAmount: 0.25
   maxMoveSpeed: 10
   primaryWeapon: {fileID: 2667012709088315797}
   secondaryWeapon: {fileID: 8888070785139311172}
+  randomizeWeaponsOnSpawn: 1
+  randomWeaponPool: []
+  dashKey: 32
+  dashSpeed: 22
+  dashDuration: 0.18
+  dashCooldown: 1
+  dashInterruptsWeapons: 1
+  dashParticles: 1
+  dashParticlesPerSecond: 80
+  dashParticleColor: {r: 0.65, g: 0.55, b: 0.42, a: 1}
+  dashParticleSpeed: 4
+  dashParticleSize: 0.12
+  dashParticleLifetime: 0.4
+  dashParticleSpread: 35
+  dashParticleHeight: 0.1
   swordWeapon: {fileID: 2667012709088315797}
   shieldWeapon: {fileID: 8888070785139311172}
   bowWeapon: {fileID: 6495423849874514616}
@@ -2811,10 +2826,10 @@ MonoBehaviour:
   spawnDistance: 0.8
   spawnHeight: 1
   crossbowVisualPrefab: {fileID: 6721586060920507822, guid: 8e5012eaa9daab14aa5a36ff5fb52bad, type: 3}
-  visualSpawnDistance: 1
+  visualSpawnDistance: 0.8
   visualSpawnHeight: 1
-  visualRotationOffset: {x: 0, y: -90, z: 0}
---- !u!114 &7107583408462250173
+  visualRotationOffset: {x: -90, y: 90, z: 0}
+--- !u!114 &-3973025407638285087
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
