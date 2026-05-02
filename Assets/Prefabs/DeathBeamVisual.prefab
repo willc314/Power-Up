@@ -120,8 +120,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   duration: 2
   range: 50
-  radius: 0.8
-  damagePerSecond: 200
+  radius: 1
+  hitRadiusMultiplier: 3
+  damagePerSecond: 500
   heroSpeedDuringBeam: 0
   shakeAmplitude: 0.3
   vfxPrefab: {fileID: 0}

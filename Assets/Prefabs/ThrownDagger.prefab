@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 6021991909577461078}
   - component: {fileID: 2748083729983195067}
   m_Layer: 0
-  m_Name: DaggerThrownVisual
+  m_Name: ThrownDagger
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

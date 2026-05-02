@@ -18,8 +18,10 @@ public class DeathBeam : MonoBehaviour
     public float duration = 1.5f;
     [Tooltip("Length of the beam in world units.")]
     public float range = 30f;
-    [Tooltip("Thickness (radius) of the damage capsule. Scales the visual on X and Z.")]
+    [Tooltip("Visual radius of the beam — scales the visual cube on X and Z.")]
     public float radius = 0.6f;
+    [Tooltip("Multiplier on the visual radius for hit detection. >1 makes the beam damage enemies in the bloom halo around the visible beam, not just inside it. 2.5 is a good starting point for noticeable bloom.")]
+    public float hitRadiusMultiplier = 2.5f;
     [Tooltip("Damage dealt per second to each enemy in the beam.")]
     public float damagePerSecond = 200f;
 
@@ -95,9 +97,12 @@ public class DeathBeam : MonoBehaviour
         transform.rotation = owner.transform.rotation;
 
         // Damage tick — capsule from origin to origin + forward * range.
+        // Hit radius is independent from the visual radius so the beam can damage
+        // enemies inside the bloom halo, not just inside the visible cube.
+        float hitRadius = radius * Mathf.Max(0.1f, hitRadiusMultiplier);
         Vector3 p1 = origin + owner.transform.forward * radius;
         Vector3 p2 = origin + owner.transform.forward * (range - radius);
-        int n = Physics.OverlapCapsuleNonAlloc(p1, p2, radius, hitBuffer, enemyLayers, QueryTriggerInteraction.Collide);
+        int n = Physics.OverlapCapsuleNonAlloc(p1, p2, hitRadius, hitBuffer, enemyLayers, QueryTriggerInteraction.Collide);
         float dmg = damagePerSecond * Time.deltaTime;
         HashSet<Enemy> hitOnce = new HashSet<Enemy>();
         for (int i = 0; i < n; i++)
@@ -146,11 +151,19 @@ public class DeathBeam : MonoBehaviour
 
     private void OnDrawGizmosSelected()
     {
-        Gizmos.color = new Color(1f, 1f, 1f, 0.4f);
         Vector3 fwd = Application.isPlaying && owner != null ? owner.transform.forward : transform.forward;
         Vector3 origin = (Application.isPlaying && owner != null ? owner.transform.position : transform.position) + Vector3.up * spawnHeight;
+
+        // Visual beam outline.
+        Gizmos.color = new Color(1f, 1f, 1f, 0.4f);
         Gizmos.DrawWireSphere(origin, radius);
         Gizmos.DrawWireSphere(origin + fwd * range, radius);
         Gizmos.DrawLine(origin, origin + fwd * range);
+
+        // Hit volume (always at least as big as the visual).
+        float hitRadius = radius * Mathf.Max(0.1f, hitRadiusMultiplier);
+        Gizmos.color = new Color(1f, 0.3f, 0.3f, 0.5f);
+        Gizmos.DrawWireSphere(origin, hitRadius);
+        Gizmos.DrawWireSphere(origin + fwd * range, hitRadius);
     }
 }

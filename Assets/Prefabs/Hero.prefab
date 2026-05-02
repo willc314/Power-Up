@@ -2620,7 +2620,7 @@ MonoBehaviour:
   spawnDistance: 0.8
   spawnHeight: 1
   crossbowVisualPrefab: {fileID: 6721586060920507822, guid: 8e5012eaa9daab14aa5a36ff5fb52bad, type: 3}
-  visualSpawnDistance: 1
+  visualSpawnDistance: 0.8
   visualSpawnHeight: 1
   visualRotationOffset: {x: -90, y: 90, z: 0}
 --- !u!114 &-3973025407638285087
@@ -2681,11 +2681,11 @@ MonoBehaviour:
   slowdownWhileCharging: 0.4
   minReleaseTime: 0.1
   arrowPrefab: {fileID: 5075199840621078879, guid: 14c125fb9e5d3c04db5be83d0ab292d9, type: 3}
-  arrowSpeed: 45
+  arrowSpeed: 100
   arrowMinDamage: 10
-  arrowMaxDamage: 70
-  arrowMinScale: 1
-  arrowMaxScale: 2.5
+  arrowMaxDamage: 90
+  arrowMinScale: 0.8
+  arrowMaxScale: 3
   overchargeTime: 5
   deathBeamPrefab: {fileID: 8083981251407719041, guid: 5b65ab245209fd5468ad11d4e38a7460, type: 3}
   overchargeColor: {r: 1, g: 0.85760844, b: 0.1566037, a: 1}

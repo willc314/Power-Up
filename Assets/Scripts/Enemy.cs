@@ -20,7 +20,7 @@ using UnityEngine;
 [RequireComponent(typeof(Rigidbody))]
 public class Enemy : MonoBehaviour
 {
-    public enum Behavior { Chaser, Charger, Tank, Ranged }
+    public enum Behavior { Chaser, Charger, Tank, Ranged, Crossbow }
 
     [Header("Behavior")]
     public Behavior behavior = Behavior.Chaser;
@@ -39,6 +39,12 @@ public class Enemy : MonoBehaviour
     [Header("Detection")]
     [Tooltip("Maximum distance at which the enemy notices the player. 0 = always.")]
     public float aggroRange = 25f;
+
+    [Header("Debug")]
+    [Tooltip("If true, shows current HP as a small label above the enemy in both Scene and Game view. Useful for tuning weapon damage.")]
+    public bool debugShowHealth = true;
+    [Tooltip("How far above the enemy's pivot the HP label sits.")]
+    public float debugLabelHeight = 2.5f;
 
     [Header("Hit Particles")]
     [Tooltip("Number of debris particles spawned when this enemy takes damage. Set to 0 to disable.")]
@@ -66,6 +72,38 @@ public class Enemy : MonoBehaviour
     [Tooltip("Seconds of recovery after a dash before starting another telegraph.")]
     public float dashRecovery = 1.2f;
 
+    [Header("Crossbow / Telegraph settings (Behavior=Crossbow)")]
+    [Tooltip("Projectile spawned when the telegraph completes. Use an EnemyProjectile prefab (e.g. Arrow_Regular with EnemyProjectile attached).")]
+    public EnemyProjectile crossbowProjectile;
+    [Tooltip("Damage of each crossbow shot (separate from melee damage).")]
+    public float crossbowDamage = 25f;
+    [Tooltip("Override the projectile's Speed. 0 = use the prefab default.")]
+    public float crossbowProjectileSpeed = 18f;
+    [Tooltip("Vertical offset above the enemy's pivot the arrow fires from.")]
+    public float crossbowSpawnHeight = 1.5f;
+    [Tooltip("Seconds the enemy spends telegraphing before firing.")]
+    public float telegraphDuration = 2f;
+    [Tooltip("How fast the telegraph line tracks the player's current position, in units/sec. Lower = harder to dodge if you're slow, easier if you sidestep. 0 = locks on the player's position at the start of the telegraph.")]
+    public float telegraphTrackSpeed = 3f;
+    [Tooltip("Color of the telegraph line.")]
+    public Color telegraphColor = new Color(1f, 0.15f, 0.15f);
+    [Tooltip("Width of the telegraph line in world units.")]
+    public float telegraphLineWidth = 0.08f;
+    [Tooltip("Maximum distance at which the enemy will start telegraphing a shot.")]
+    public float crossbowAimMaxRange = 25f;
+    [Tooltip("Seconds between consecutive crossbow shots.")]
+    public float crossbowAttackCooldown = 4f;
+
+    [Header("Split on Death")]
+    [Tooltip("If true, spawns child enemies when this one dies (e.g. big slime → small slimes).")]
+    public bool splitOnDeath = false;
+    [Tooltip("Prefab to spawn when killed. Usually a smaller Enemy prefab.")]
+    public GameObject splitPrefab;
+    [Tooltip("Number of children to spawn.")]
+    public int splitCount = 5;
+    [Tooltip("How far from the dying enemy each child spawns. The children fan out in a ring.")]
+    public float splitRadius = 1.6f;
+
     [Header("Ranged settings")]
     [Tooltip("Projectile prefab to fire. Must have an EnemyProjectile component.")]
     public EnemyProjectile projectilePrefab;
@@ -86,6 +124,13 @@ public class Enemy : MonoBehaviour
     private Hero player;
     private DamageFlash damageFlash;
 
+    // Crossbow / telegraph state
+    private bool aiming;
+    private float telegraphTimer;
+    private Vector3 telegraphTargetPos;
+    private float crossbowAttackTimer;
+    private LineRenderer telegraphLine;
+
     // Charger state machine
     private enum ChargerPhase { Approach, Telegraph, Dash, Recover }
     private ChargerPhase chargerPhase = ChargerPhase.Approach;
@@ -104,12 +149,40 @@ public class Enemy : MonoBehaviour
 
         damageFlash = GetComponent<DamageFlash>();
         currentHP = maxHP;
+
+        if (behavior == Behavior.Crossbow)
+        {
+            telegraphLine = gameObject.AddComponent<LineRenderer>();
+            telegraphLine.startWidth = telegraphLineWidth;
+            telegraphLine.endWidth = telegraphLineWidth;
+            telegraphLine.material = GetTelegraphMaterial();
+            telegraphLine.startColor = telegraphColor;
+            telegraphLine.endColor = telegraphColor;
+            telegraphLine.useWorldSpace = true;
+            telegraphLine.positionCount = 2;
+            telegraphLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            telegraphLine.receiveShadows = false;
+            telegraphLine.enabled = false;
+        }
+    }
+
+    private static Material cachedTelegraphMat;
+    private static Material GetTelegraphMaterial()
+    {
+        if (cachedTelegraphMat != null) return cachedTelegraphMat;
+        Shader s = Shader.Find("Sprites/Default");
+        if (s == null) s = Shader.Find("Universal Render Pipeline/Unlit");
+        if (s == null) s = Shader.Find("Unlit/Color");
+        cachedTelegraphMat = new Material(s);
+        cachedTelegraphMat.hideFlags = HideFlags.HideAndDontSave;
+        return cachedTelegraphMat;
     }
 
     private void Update()
     {
         if (meleeTimer > 0f) meleeTimer -= Time.deltaTime;
         if (shootTimer > 0f) shootTimer -= Time.deltaTime;
+        if (crossbowAttackTimer > 0f) crossbowAttackTimer -= Time.deltaTime;
     }
 
     private void FixedUpdate()
@@ -136,10 +209,11 @@ public class Enemy : MonoBehaviour
 
         switch (behavior)
         {
-            case Behavior.Chaser: TickChaser(dir, dist); break;
-            case Behavior.Tank:   TickTank(dir, dist);   break;
-            case Behavior.Charger:TickCharger(dir, dist);break;
-            case Behavior.Ranged: TickRanged(dir, dist); break;
+            case Behavior.Chaser:   TickChaser(dir, dist);   break;
+            case Behavior.Tank:     TickTank(dir, dist);     break;
+            case Behavior.Charger:  TickCharger(dir, dist);  break;
+            case Behavior.Ranged:   TickRanged(dir, dist);   break;
+            case Behavior.Crossbow: TickCrossbow(dir, dist); break;
         }
     }
 
@@ -244,6 +318,87 @@ public class Enemy : MonoBehaviour
         }
     }
 
+    private void TickCrossbow(Vector3 dir, float dist)
+    {
+        if (!aiming)
+        {
+            // Walk toward player slowly until in range, then stop and aim.
+            if (dist > crossbowAimMaxRange * 0.85f) MoveInDirection(dir, moveSpeed);
+            else                                    rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
+
+            if (crossbowAttackTimer <= 0f && dist <= crossbowAimMaxRange) StartAiming();
+        }
+        else
+        {
+            // Hold position while aiming.
+            rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
+            UpdateTelegraph();
+
+            telegraphTimer -= Time.fixedDeltaTime;
+            if (telegraphTimer <= 0f)
+            {
+                FireCrossbow();
+                StopAiming();
+            }
+        }
+    }
+
+    private void StartAiming()
+    {
+        if (player == null) return;
+        aiming = true;
+        telegraphTimer = telegraphDuration;
+        telegraphTargetPos = player.transform.position;
+        if (telegraphLine != null)
+        {
+            telegraphLine.startColor = telegraphColor;
+            telegraphLine.endColor = telegraphColor;
+            telegraphLine.startWidth = telegraphLineWidth;
+            telegraphLine.endWidth = telegraphLineWidth;
+            telegraphLine.enabled = true;
+            UpdateTelegraph();
+        }
+    }
+
+    private void StopAiming()
+    {
+        aiming = false;
+        crossbowAttackTimer = crossbowAttackCooldown;
+        if (telegraphLine != null) telegraphLine.enabled = false;
+    }
+
+    private void UpdateTelegraph()
+    {
+        if (player == null) return;
+        // MoveTowards gives a constant tracking speed in units/sec — sidestepping
+        // faster than this leaves the telegraph behind, which is the core dodge mechanic.
+        telegraphTargetPos = Vector3.MoveTowards(telegraphTargetPos, player.transform.position, telegraphTrackSpeed * Time.fixedDeltaTime);
+
+        if (telegraphLine != null)
+        {
+            Vector3 start = transform.position + Vector3.up * crossbowSpawnHeight;
+            Vector3 end = telegraphTargetPos;
+            end.y = start.y; // keep the telegraph horizontal
+            telegraphLine.SetPosition(0, start);
+            telegraphLine.SetPosition(1, end);
+        }
+    }
+
+    private void FireCrossbow()
+    {
+        if (crossbowProjectile == null) return;
+        Vector3 start = transform.position + Vector3.up * crossbowSpawnHeight;
+        Vector3 dir = telegraphTargetPos - start;
+        dir.y = 0f;
+        if (dir.sqrMagnitude < 0.0001f) return;
+        dir.Normalize();
+
+        Quaternion rot = Quaternion.LookRotation(dir, Vector3.up);
+        EnemyProjectile p = Instantiate(crossbowProjectile, start, rot);
+        if (crossbowProjectileSpeed > 0f) p.speed = crossbowProjectileSpeed;
+        p.Launch(dir, crossbowDamage);
+    }
+
     // ---------- Helpers ----------
 
     private void MoveInDirection(Vector3 dir, float speed)
@@ -313,8 +468,23 @@ public class Enemy : MonoBehaviour
     {
         IsDead = true;
         rb.velocity = Vector3.zero;
+        if (telegraphLine != null) telegraphLine.enabled = false;
+
         // Notify the score / kill tracker. Safe if there is no GameManager in scene.
         if (GameManager.Instance != null) GameManager.Instance.OnEnemyKilled(this);
+
+        if (splitOnDeath && splitPrefab != null && splitCount > 0)
+        {
+            for (int i = 0; i < splitCount; i++)
+            {
+                float angle = (360f / splitCount) * i + Random.Range(-15f, 15f);
+                Vector3 offset = Quaternion.Euler(0f, angle, 0f) * Vector3.forward * splitRadius;
+                Vector3 pos = transform.position + offset + Vector3.up * 0.1f;
+                Quaternion rot = Quaternion.Euler(0f, angle, 0f);
+                Instantiate(splitPrefab, pos, rot);
+            }
+        }
+
         // TODO: play death animation, drop XP/loot, etc.
         Destroy(gameObject);
     }
@@ -331,4 +501,44 @@ public class Enemy : MonoBehaviour
             Gizmos.DrawWireSphere(transform.position, retreatRange);
         }
     }
+
+    // ---- Debug HP label ----
+
+    private void OnGUI()
+    {
+        if (!debugShowHealth || IsDead) return;
+        Camera cam = Camera.main;
+        if (cam == null) return;
+
+        Vector3 worldPos = transform.position + Vector3.up * debugLabelHeight;
+        Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
+        if (screenPos.z < 0f) return; // behind the camera
+
+        string text = $"{currentHP:F0} / {maxHP:F0}";
+        GUIStyle style = GUI.skin.label;
+        Vector2 size = style.CalcSize(new GUIContent(text));
+        Rect r = new Rect(
+            screenPos.x - size.x * 0.5f - 4f,
+            Screen.height - screenPos.y - size.y - 2f,
+            size.x + 8f,
+            size.y + 4f);
+
+        // Dark background box for readability against any environment.
+        Color prev = GUI.color;
+        GUI.color = new Color(0f, 0f, 0f, 0.65f);
+        GUI.DrawTexture(r, Texture2D.whiteTexture);
+        GUI.color = currentHP <= maxHP * 0.33f ? new Color(1f, 0.4f, 0.4f) : Color.white;
+        GUI.Label(new Rect(r.x + 4f, r.y + 2f, r.width, r.height), text);
+        GUI.color = prev;
+    }
+
+#if UNITY_EDITOR
+    private void OnDrawGizmos()
+    {
+        if (!debugShowHealth || !Application.isPlaying || IsDead) return;
+        UnityEditor.Handles.Label(
+            transform.position + Vector3.up * debugLabelHeight,
+            $"HP: {currentHP:F0}/{maxHP:F0}");
+    }
+#endif
 }
