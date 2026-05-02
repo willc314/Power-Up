@@ -32,10 +32,14 @@ public class Hero : MonoBehaviour
     [System.NonSerialized] public float speedMultiplier = 1f;
 
     [Header("Weapons")]
-    [Tooltip("Fired on left click. Drag a Weapon component (e.g. SwordWeapon) here.")]
+    [Tooltip("Fired on left click. Drag a Weapon component (e.g. SwordWeapon) here. Overwritten on spawn if 'Randomize Weapons On Spawn' is on.")]
     public Weapon primaryWeapon;
-    [Tooltip("Fired on right click. Drag a Weapon component (e.g. ShieldWeapon) here.")]
+    [Tooltip("Fired on right click. Drag a Weapon component (e.g. ShieldWeapon) here. Overwritten on spawn if 'Randomize Weapons On Spawn' is on.")]
     public Weapon secondaryWeapon;
+    [Tooltip("If true, on spawn the hero is given a single random weapon (primary only) drawn from the pool below — or, if that's empty, from every Weapon component on the hero. The secondary slot stays empty.")]
+    public bool randomizeWeaponsOnSpawn = true;
+    [Tooltip("Optional pool of weapons the random pick chooses from. Leave empty to use every Weapon component found on this hero (and its children).")]
+    public System.Collections.Generic.List<Weapon> randomWeaponPool = new System.Collections.Generic.List<Weapon>();
 
     [Header("Dash")]
     [Tooltip("Key that triggers a dash. Default Space.")]
@@ -123,6 +127,38 @@ public class Hero : MonoBehaviour
 
         cam = Camera.main;
         currentHP = maxHP;
+
+        if (randomizeWeaponsOnSpawn) PickRandomWeapons();
+    }
+
+    /// <summary>
+    /// Replaces primaryWeapon with a random weapon drawn from randomWeaponPool
+    /// (or, if that's empty, from every Weapon component attached to this hero
+    /// or a child). The secondary slot is cleared so the hero spawns with a
+    /// single weapon.
+    /// </summary>
+    private void PickRandomWeapons()
+    {
+        // Build the candidate pool. Inspector-provided list wins so designers
+        // can blacklist weapons (e.g. exclude the bow if it isn't tuned yet).
+        var pool = new System.Collections.Generic.List<Weapon>();
+        if (randomWeaponPool != null && randomWeaponPool.Count > 0)
+        {
+            foreach (var w in randomWeaponPool) if (w != null) pool.Add(w);
+        }
+        else
+        {
+            pool.AddRange(GetComponentsInChildren<Weapon>(includeInactive: true));
+        }
+
+        if (pool.Count == 0)
+        {
+            Debug.LogWarning("[Hero] randomizeWeaponsOnSpawn is on but no Weapon components were found.");
+            return;
+        }
+
+        primaryWeapon   = pool[Random.Range(0, pool.Count)];
+        secondaryWeapon = null;
     }
 
     private void OnDestroy()

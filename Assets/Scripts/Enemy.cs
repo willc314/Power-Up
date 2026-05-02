@@ -313,6 +313,8 @@ public class Enemy : MonoBehaviour
     {
         IsDead = true;
         rb.velocity = Vector3.zero;
+        // Notify the score / kill tracker. Safe if there is no GameManager in scene.
+        if (GameManager.Instance != null) GameManager.Instance.OnEnemyKilled(this);
         // TODO: play death animation, drop XP/loot, etc.
         Destroy(gameObject);
     }

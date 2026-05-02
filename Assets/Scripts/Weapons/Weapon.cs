@@ -13,6 +13,8 @@ public abstract class Weapon : MonoBehaviour
     [Header("Common")]
     [Tooltip("Display name for HUD or debug.")]
     public string weaponName = "Weapon";
+    [Tooltip("Icon shown in the HUD weapon slot when this weapon is equipped. Optional — leave empty for a placeholder.")]
+    public Sprite hudIcon;
     [Tooltip("Damage applied per individual hit on an enemy.")]
     public float damage = 25f;
     [Tooltip("Seconds between firings. Subclasses can add extra conditions (e.g. shield must return first).")]
@@ -24,6 +26,19 @@ public abstract class Weapon : MonoBehaviour
 
     /// <summary>True when the weapon is allowed to fire right now.</summary>
     public virtual bool CanFire => cooldownTimer <= 0f;
+
+    /// <summary>
+    /// 0 when the weapon is ready to fire, 1 when the cooldown has just been
+    /// reset. Useful for HUD radial fills / cooldown overlays.
+    /// </summary>
+    public float CooldownProgress
+    {
+        get
+        {
+            if (cooldown <= 0f) return 0f;
+            return Mathf.Clamp01(cooldownTimer / cooldown);
+        }
+    }
 
     protected virtual void Update()
     {
