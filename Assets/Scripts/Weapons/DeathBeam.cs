@@ -1,0 +1,156 @@
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// A bright beam fired from the hero. Lasts duration seconds, follows the
+/// hero's facing (briefly controllable — the player can rotate during the
+/// beam), pierces everything in a long thin capsule, and shakes the camera
+/// while it's active. The hero is locked in place while firing.
+///
+/// The visual is whatever model is on this prefab (e.g. a stretched cylinder).
+/// The script positions it as a long box from the hero forward, scaled to
+/// `range` length and `radius * 2` thickness.
+/// </summary>
+public class DeathBeam : MonoBehaviour
+{
+    [Header("Beam")]
+    [Tooltip("How long the beam stays active.")]
+    public float duration = 1.5f;
+    [Tooltip("Length of the beam in world units.")]
+    public float range = 30f;
+    [Tooltip("Thickness (radius) of the damage capsule. Scales the visual on X and Z.")]
+    public float radius = 0.6f;
+    [Tooltip("Damage dealt per second to each enemy in the beam.")]
+    public float damagePerSecond = 200f;
+
+    [Header("Hero Control")]
+    [Tooltip("Hero speed multiplier while the beam is active. 0 = locked in place.")]
+    [Range(0f, 1f)] public float heroSpeedDuringBeam = 0f;
+
+    [Header("Camera")]
+    [Tooltip("Camera shake amplitude while the beam is active.")]
+    public float shakeAmplitude = 0.5f;
+
+    [Header("VFX")]
+    [Tooltip("Optional particle prefab spawned at the beam origin (parented to the hero).")]
+    public GameObject vfxPrefab;
+    [Tooltip("Vertical offset above the hero pivot the beam fires from.")]
+    public float spawnHeight = 1.0f;
+
+    [Header("Trail Particles")]
+    [Tooltip("How many particles per second flow backward from the beam toward the player. 0 = none.")]
+    public float beamParticlesPerSecond = 80f;
+    [Tooltip("Color of the trail particles.")]
+    public Color beamParticleColor = Color.white;
+    [Tooltip("Speed each trail particle starts at, flowing back toward the player.")]
+    public float beamParticleSpeed = 12f;
+    [Tooltip("Particle lifetime.")]
+    public float beamParticleLifetime = 0.35f;
+    [Tooltip("Edge length of each particle cube.")]
+    public float beamParticleSize = 0.1f;
+    [Tooltip("Cone spread angle in degrees.")]
+    public float beamParticleSpread = 12f;
+
+    private Hero owner;
+    private LayerMask enemyLayers;
+    private float timer;
+    private GameObject vfxInstance;
+    private CameraFollow cam;
+    private readonly Collider[] hitBuffer = new Collider[64];
+    private float particleAccumulator;
+
+    public void Init(Hero owner, LayerMask enemyLayers)
+    {
+        this.owner = owner;
+        this.enemyLayers = enemyLayers;
+        timer = 0f;
+        owner.speedMultiplier = heroSpeedDuringBeam;
+
+        // Disable any colliders on the visual so the stretched box doesn't physically shove the hero.
+        // Damage is handled by the OverlapCapsule call in Update, not by physics collisions.
+        foreach (var c in GetComponentsInChildren<Collider>()) c.enabled = false;
+
+        cam = Camera.main != null ? Camera.main.GetComponent<CameraFollow>() : null;
+
+        if (vfxPrefab != null)
+        {
+            vfxInstance = Instantiate(vfxPrefab, owner.transform.position + Vector3.up * spawnHeight, owner.transform.rotation, owner.transform);
+        }
+
+        // Visual scale: stretch X/Z to thickness, Y to a thin slab, length on Z.
+        // We scale the model so a 1-unit cube becomes a beam of (radius*2) thickness and `range` length.
+        transform.localScale = new Vector3(radius * 2f, radius * 2f, range);
+    }
+
+    private void Update()
+    {
+        if (owner == null || owner.IsDead) { Cleanup(); Destroy(gameObject); return; }
+
+        timer += Time.deltaTime;
+
+        // Position: follow the hero, oriented along their forward.
+        Vector3 origin = owner.transform.position + Vector3.up * spawnHeight;
+        // Center the beam halfway down its length so the box sits in front of the hero.
+        transform.position = origin + owner.transform.forward * (range * 0.5f);
+        transform.rotation = owner.transform.rotation;
+
+        // Damage tick — capsule from origin to origin + forward * range.
+        Vector3 p1 = origin + owner.transform.forward * radius;
+        Vector3 p2 = origin + owner.transform.forward * (range - radius);
+        int n = Physics.OverlapCapsuleNonAlloc(p1, p2, radius, hitBuffer, enemyLayers, QueryTriggerInteraction.Collide);
+        float dmg = damagePerSecond * Time.deltaTime;
+        HashSet<Enemy> hitOnce = new HashSet<Enemy>();
+        for (int i = 0; i < n; i++)
+        {
+            Enemy e = hitBuffer[i].GetComponentInParent<Enemy>();
+            if (e != null && hitOnce.Add(e)) e.TakeDamage(dmg);
+        }
+
+        // Continuous camera shake.
+        if (cam != null && shakeAmplitude > 0f) cam.Shake(shakeAmplitude, 0.1f);
+
+        // Trail particles flowing backward (toward the hero) along the beam.
+        EmitTrailParticles(origin);
+
+        if (timer >= duration) { Cleanup(); Destroy(gameObject); }
+    }
+
+    private void EmitTrailParticles(Vector3 origin)
+    {
+        if (beamParticlesPerSecond <= 0f) return;
+        particleAccumulator += beamParticlesPerSecond * Time.deltaTime;
+        Vector3 backward = -owner.transform.forward;
+        while (particleAccumulator >= 1f)
+        {
+            // Pick a random point along the beam — not too close to the hero, not at the very end.
+            float along = Random.Range(radius * 2f, range);
+            Vector3 spawnPoint = origin + owner.transform.forward * along
+                                 + Random.insideUnitSphere * radius * 0.5f;
+            HitParticles.EmitBurst(spawnPoint, backward,
+                count: 1,
+                speed: beamParticleSpeed,
+                lifetime: beamParticleLifetime,
+                size: beamParticleSize,
+                color: beamParticleColor,
+                spreadAngle: beamParticleSpread,
+                useGravity: false);
+            particleAccumulator -= 1f;
+        }
+    }
+
+    private void Cleanup()
+    {
+        if (owner != null) owner.speedMultiplier = 1f;
+        if (vfxInstance != null) Destroy(vfxInstance, 0.3f);
+    }
+
+    private void OnDrawGizmosSelected()
+    {
+        Gizmos.color = new Color(1f, 1f, 1f, 0.4f);
+        Vector3 fwd = Application.isPlaying && owner != null ? owner.transform.forward : transform.forward;
+        Vector3 origin = (Application.isPlaying && owner != null ? owner.transform.position : transform.position) + Vector3.up * spawnHeight;
+        Gizmos.DrawWireSphere(origin, radius);
+        Gizmos.DrawWireSphere(origin + fwd * range, radius);
+        Gizmos.DrawLine(origin, origin + fwd * range);
+    }
+}

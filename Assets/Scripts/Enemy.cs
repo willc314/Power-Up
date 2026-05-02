@@ -40,6 +40,22 @@ public class Enemy : MonoBehaviour
     [Tooltip("Maximum distance at which the enemy notices the player. 0 = always.")]
     public float aggroRange = 25f;
 
+    [Header("Hit Particles")]
+    [Tooltip("Number of debris particles spawned when this enemy takes damage. Set to 0 to disable.")]
+    public int hitParticleCount = 8;
+    [Tooltip("Color of the hit particles.")]
+    public Color hitParticleColor = new Color(0.7f, 0.1f, 0.1f);
+    [Tooltip("Initial speed of hit particles.")]
+    public float hitParticleSpeed = 5f;
+    [Tooltip("Size (edge length) of each particle cube.")]
+    public float hitParticleSize = 0.18f;
+    [Tooltip("Seconds before each particle self-destroys.")]
+    public float hitParticleLifetime = 0.5f;
+    [Tooltip("Spread cone angle in degrees. 0 = laser-straight; 90 = full hemisphere.")]
+    public float hitParticleSpread = 35f;
+    [Tooltip("Vertical offset above the enemy pivot where particles spawn.")]
+    public float hitParticleHeight = 1.0f;
+
     [Header("Charger settings")]
     [Tooltip("How much faster than moveSpeed the dash is.")]
     public float dashSpeedMultiplier = 3f;
@@ -262,7 +278,35 @@ public class Enemy : MonoBehaviour
         if (IsDead) return;
         currentHP = Mathf.Max(0f, currentHP - amount);
         if (damageFlash != null) damageFlash.Flash();
+        SpawnHitParticles();
         if (currentHP <= 0f) Die();
+    }
+
+    private void SpawnHitParticles()
+    {
+        if (hitParticleCount <= 0) return;
+        // Direction: from the player outward through the enemy. Falls back to enemy's facing if the player is missing.
+        Vector3 dir;
+        if (Hero.Instance != null)
+        {
+            dir = transform.position - Hero.Instance.transform.position;
+            dir.y = 0f;
+            if (dir.sqrMagnitude < 0.0001f) dir = transform.forward;
+            dir.Normalize();
+        }
+        else
+        {
+            dir = transform.forward;
+        }
+        Vector3 origin = transform.position + Vector3.up * hitParticleHeight;
+        HitParticles.EmitBurst(origin, dir,
+            count: hitParticleCount,
+            speed: hitParticleSpeed,
+            lifetime: hitParticleLifetime,
+            size: hitParticleSize,
+            color: hitParticleColor,
+            spreadAngle: hitParticleSpread,
+            useGravity: true);
     }
 
     private void Die()

@@ -30,6 +30,20 @@ public abstract class Weapon : MonoBehaviour
         if (cooldownTimer > 0f) cooldownTimer -= Time.deltaTime;
     }
 
+    // ---- Input lifecycle (called from Hero each frame) ----
+    // Default behavior: weapons auto-repeat fire while the button is held (existing
+    // sword/shield/dagger/crossbow/grenade behavior). Bow overrides all three to
+    // implement charging.
+
+    /// <summary>Called once on the frame the fire button is pressed. Return true to play attack anim.</summary>
+    public virtual bool OnFireDown(Hero owner) { return false; }
+
+    /// <summary>Called every frame the fire button is held. Default: try to fire (auto-repeat).</summary>
+    public virtual bool OnFireHeld(Hero owner) { return TryFire(owner); }
+
+    /// <summary>Called once on the frame the fire button is released. Return true to play attack anim.</summary>
+    public virtual bool OnFireUp(Hero owner) { return false; }
+
     /// <summary>
     /// Try to fire the weapon. Returns true if it actually went off so the caller
     /// (e.g. Hero) can play an attack animation.
@@ -42,6 +56,6 @@ public abstract class Weapon : MonoBehaviour
         return true;
     }
 
-    /// <summary>Subclasses spawn slashes / projectiles / etc. here.</summary>
-    protected abstract void Fire(Hero owner);
+    /// <summary>Subclasses spawn slashes / projectiles / etc. here. Optional — weapons that don't use the cooldown/Fire pattern (e.g. Bow) can leave this as no-op.</summary>
+    protected virtual void Fire(Hero owner) { }
 }

@@ -1,0 +1,65 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!1 &5443250219044755459
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 7208931925086524228}
+  - component: {fileID: -8435590880832280935}
+  m_Layer: 0
+  m_Name: GrenadeExplosion
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &7208931925086524228
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5443250219044755459}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &-8435590880832280935
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5443250219044755459}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8e051506b9518c34ab18da333d372c33, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  radius: 6
+  damage: 60
+  hitLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  hitsHero: 0
+  vfxPrefab: {fileID: 0}
+  vfxLifetime: 2
+  useDebrisBurst: 1
+  debrisCount: 24
+  debrisColor: {r: 1, g: 0.30065316, b: 0.10196078, a: 1}
+  debrisSpeed: 5
+  debrisSize: 0.3
+  debrisLifetime: 0.5
+  debrisSpread: 90
+  debrisHeight: 0.3
+  shakeAmplitude: 0.2
+  shakeDuration: 0.2
+  debugLog: 1

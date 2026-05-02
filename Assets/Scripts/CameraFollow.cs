@@ -54,6 +54,11 @@ public class CameraFollow : MonoBehaviour
     private Vector3 currentVelocity; // used by SmoothDamp
     private Camera cam;
 
+    // Screen shake state (driven by Shake()).
+    private float shakeAmplitude;
+    private float shakeTimer;
+    private float shakeDuration;
+
     private void Awake()
     {
         cam = GetComponent<Camera>();
@@ -88,6 +93,9 @@ public class CameraFollow : MonoBehaviour
             transform.position = Vector3.SmoothDamp(transform.position, desired, ref currentVelocity, smoothTime, maxSpd, Time.deltaTime);
         }
 
+        // Apply shake AFTER smoothing — otherwise SmoothDamp averages out the high-frequency noise and the shake is invisible.
+        transform.position += GetShakeOffset();
+
         if (lookAtTarget) transform.LookAt(target);
     }
 
@@ -112,6 +120,30 @@ public class CameraFollow : MonoBehaviour
             lean = lean.normalized * maxLookAheadDistance;
 
         return lean;
+    }
+
+    /// <summary>
+    /// Trigger a screen shake. Shakes are additive — re-calling extends or strengthens.
+    /// </summary>
+    public void Shake(float amplitude, float duration)
+    {
+        // Take the strongest shake currently active.
+        if (amplitude > shakeAmplitude) shakeAmplitude = amplitude;
+        if (duration > shakeTimer) { shakeTimer = duration; shakeDuration = duration; }
+    }
+
+    private Vector3 GetShakeOffset()
+    {
+        if (shakeTimer <= 0f) return Vector3.zero;
+        shakeTimer -= Time.deltaTime;
+        // Fall off linearly so the shake settles smoothly.
+        float falloff = shakeDuration > 0f ? Mathf.Clamp01(shakeTimer / shakeDuration) : 0f;
+        Vector3 noise = new Vector3(
+            (Random.value - 0.5f) * 2f,
+            0f,
+            (Random.value - 0.5f) * 2f);
+        if (shakeTimer <= 0f) { shakeAmplitude = 0f; }
+        return noise * shakeAmplitude * falloff;
     }
 
     /// <summary>

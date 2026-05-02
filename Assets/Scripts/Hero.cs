@@ -25,6 +25,12 @@ public class Hero : MonoBehaviour
     [Tooltip("Movement speed in units per second.")]
     public float moveSpeed = 5f;
 
+    /// <summary>
+    /// Weapons can multiply the hero's effective move speed (e.g. the Bow slows
+    /// the hero while charging). Reset to 1f after the slowing condition ends.
+    /// </summary>
+    [System.NonSerialized] public float speedMultiplier = 1f;
+
     [Header("Weapons")]
     [Tooltip("Fired on left click. Drag a Weapon component (e.g. SwordWeapon) here.")]
     public Weapon primaryWeapon;
@@ -99,16 +105,11 @@ public class Hero : MonoBehaviour
         // --- Aim ---
         FaceMouse();
 
-        // --- Attack: dispatch to weapons every frame the button is held.
-        // Each weapon's own cooldown rate-limits how often it actually fires. ---
-        if (Input.GetMouseButton(0) && primaryWeapon != null)
-        {
-            if (primaryWeapon.TryFire(this) && animator != null) animator.SetTrigger(kAttack);
-        }
-        if (Input.GetMouseButton(1) && secondaryWeapon != null)
-        {
-            if (secondaryWeapon.TryFire(this) && animator != null) animator.SetTrigger(kAttack);
-        }
+        // --- Attack: dispatch press/hold/release to the weapons. Auto-repeat
+        // weapons (sword, dagger, crossbow, ...) only use OnFireHeld; the Bow
+        // uses all three to implement charging.
+        DispatchWeaponInput(0, primaryWeapon);
+        DispatchWeaponInput(1, secondaryWeapon);
 
         // Drive the walk/idle animation off how hard the player is pushing the stick/keys.
         if (animator != null)
@@ -122,8 +123,18 @@ public class Hero : MonoBehaviour
     {
         if (IsDead) return;
 
-        Vector3 target = rb.position + moveInput * moveSpeed * Time.fixedDeltaTime;
+        Vector3 target = rb.position + moveInput * moveSpeed * speedMultiplier * Time.fixedDeltaTime;
         rb.MovePosition(target);
+    }
+
+    private void DispatchWeaponInput(int button, Weapon w)
+    {
+        if (w == null) return;
+        bool playAnim = false;
+        if (Input.GetMouseButtonDown(button)) playAnim |= w.OnFireDown(this);
+        if (Input.GetMouseButton(button))     playAnim |= w.OnFireHeld(this);
+        if (Input.GetMouseButtonUp(button))   playAnim |= w.OnFireUp(this);
+        if (playAnim && animator != null) animator.SetTrigger(kAttack);
     }
 
     private void FaceMouse()
