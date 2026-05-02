@@ -63,8 +63,8 @@ public class SwordSlash : MonoBehaviour
     [Tooltip("Kept for old prefabs. No longer used for damage unless Use Legacy Blade Capsule is checked.")]
     public Vector3 bladeCenterOffset = new Vector3(0f, 1.25f, 0f);
 
-    [Tooltip("If true, uses the old blade capsule hitbox instead of the new full-swing fan hitbox.")]
-    public bool useLegacyBladeCapsule = false;
+    [Tooltip("If true, the hitbox is a capsule along the actual sword blade (it sweeps through enemies as the sword arcs). If false, uses the static fan-shaped area in front of the hero. Blade capsule feels more responsive and weighty.")]
+    public bool useLegacyBladeCapsule = true;
 
     public enum BladeAxis { X = 0, Y = 1, Z = 2 }
 
@@ -95,6 +95,13 @@ public class SwordSlash : MonoBehaviour
         this.rightToLeft = rightToLeft;
 
         timer = 0f;
+
+        // First hit check on the click frame so the sword feels snappy.
+        // Without this there's a ~1-frame gap before the first damage tick runs in Update().
+        if (useLegacyBladeCapsule)
+            DamageUsingLegacyBladeCapsule();
+        else
+            DamageUsingFanArea();
 
         Destroy(gameObject, duration + 0.1f);
     }
@@ -219,7 +226,46 @@ public class SwordSlash : MonoBehaviour
         }
 
         if (debugDrawHitbox)
-            Debug.DrawLine(p1, p2, Color.red);
+            DrawLegacyCapsuleDebug(p1, p2);
+    }
+
+    private void DrawLegacyCapsuleDebug(Vector3 p1, Vector3 p2)
+    {
+        // Center axis line.
+        Debug.DrawLine(p1, p2, Color.red);
+
+        // Approximate the two end-spheres as 8-segment rings perpendicular to the axis,
+        // plus 4 parallel "tube" lines connecting them. Cheap to draw and clearly shows
+        // the blade-shaped capsule sweeping with the sword.
+        Vector3 axis = (p2 - p1);
+        if (axis.sqrMagnitude < 0.0001f) return;
+        axis.Normalize();
+
+        Vector3 perp1 = Vector3.Cross(axis, Vector3.up);
+        if (perp1.sqrMagnitude < 0.0001f) perp1 = Vector3.Cross(axis, Vector3.right);
+        perp1.Normalize();
+        Vector3 perp2 = Vector3.Cross(axis, perp1).normalized;
+
+        const int segments = 8;
+        Vector3 prevA = p1 + perp1 * bladeRadius;
+        Vector3 prevB = p2 + perp1 * bladeRadius;
+        for (int i = 1; i <= segments; i++)
+        {
+            float a = (i / (float)segments) * Mathf.PI * 2f;
+            Vector3 offset = (Mathf.Cos(a) * perp1 + Mathf.Sin(a) * perp2) * bladeRadius;
+            Vector3 nextA = p1 + offset;
+            Vector3 nextB = p2 + offset;
+            Debug.DrawLine(prevA, nextA, Color.red);
+            Debug.DrawLine(prevB, nextB, Color.red);
+            prevA = nextA;
+            prevB = nextB;
+        }
+
+        // Four "tube" lines along the length so the capsule reads as a 3D shape.
+        Debug.DrawLine(p1 + perp1 * bladeRadius, p2 + perp1 * bladeRadius, Color.red);
+        Debug.DrawLine(p1 - perp1 * bladeRadius, p2 - perp1 * bladeRadius, Color.red);
+        Debug.DrawLine(p1 + perp2 * bladeRadius, p2 + perp2 * bladeRadius, Color.red);
+        Debug.DrawLine(p1 - perp2 * bladeRadius, p2 - perp2 * bladeRadius, Color.red);
     }
 
     private void ComputeCapsuleEndpoints(out Vector3 p1, out Vector3 p2)

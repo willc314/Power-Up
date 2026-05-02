@@ -98,13 +98,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   arcDegrees: 140
   duration: 0.25
-  radius: 2
-  verticalOffset: 1
-  bladeLength: 2
-  bladeRadius: 1
-  bladeAxis: 1
-  bladeCenterOffset: {x: 0, y: 1.25, z: 0}
+  radius: 1.5
+  verticalOffset: 0.5
+  hitArcDegrees: 140
+  hitInnerRadius: 0.3
+  hitOuterRadius: 2.6
+  hitHeight: 0.25
+  hitVerticalTolerance: 2
+  broadCheckPadding: 0.4
   debugDrawHitbox: 1
+  bladeLength: 4.2
+  bladeRadius: 0.4
+  bladeAxis: 1
+  bladeCenterOffset: {x: 0, y: 0.3, z: 0}
+  useLegacyBladeCapsule: 1
   modelPitch: 90
   modelYaw: 0
   modelRoll: 0

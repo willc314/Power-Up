@@ -66,6 +66,12 @@ public abstract class Weapon : MonoBehaviour
     /// <summary>True when the weapon is allowed to fire right now.</summary>
     public virtual bool CanFire => cooldownTimer <= 0f;
 
+    /// <summary>
+    /// 0..1 fraction of remaining cooldown. 1 = just fired (HUD overlay full),
+    /// 0 = ready to fire (overlay empty). Drives the cooldown overlay fillAmount in GameHUD.
+    /// </summary>
+    public float CooldownProgress => cooldown > 0f ? Mathf.Clamp01(cooldownTimer / cooldown) : 0f;
+
     public bool IsDamageMaxed => damageLevel >= maxDamageLevel;
 
     protected virtual void Update()

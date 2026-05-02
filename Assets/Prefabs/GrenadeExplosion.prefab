@@ -44,12 +44,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3cb5c75b512f76840b11edefbcfce672, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  radius: 6
+  radius: 5
   damage: 60
   hitLayers:
     serializedVersion: 2
     m_Bits: 4294967295
-  hitsHero: 1
+  hitsHero: 0
   vfxPrefab: {fileID: 0}
   vfxLifetime: 2
   useDebrisBurst: 1

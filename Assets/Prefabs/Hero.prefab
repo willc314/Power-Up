@@ -2540,8 +2540,8 @@ GameObject:
   - component: {fileID: 8888070785139311172}
   - component: {fileID: 6495423849874514616}
   - component: {fileID: 3670884374136682343}
-  - component: {fileID: 7107583408462250173}
   - component: {fileID: 7951920723698609831}
+  - component: {fileID: -3973025407638285087}
   m_Layer: 6
   m_Name: Hero
   m_TagString: Untagged
@@ -2654,12 +2654,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   maxHP: 100
   moveSpeed: 5
-maxedWeaponBoostMode: 0
+  maxedWeaponBoostMode: 0
   maxHPBoostAmount: 10
   moveSpeedBoostAmount: 0.25
   maxMoveSpeed: 10
-  primaryWeapon: {fileID: 2667012709088315797}
-  secondaryWeapon: {fileID: 8888070785139311172}
+  primaryWeapon: {fileID: 0}
+  secondaryWeapon: {fileID: 0}
   randomizeWeaponsOnSpawn: 1
   randomWeaponPool: []
   dashKey: 32
@@ -2675,18 +2675,18 @@ maxedWeaponBoostMode: 0
   dashParticleLifetime: 0.4
   dashParticleSpread: 35
   dashParticleHeight: 0.1
-  swordWeapon: {fileID: 2667012709088315797}
-  shieldWeapon: {fileID: 8888070785139311172}
-  bowWeapon: {fileID: 6495423849874514616}
-  daggerWeapon: {fileID: 7107583408462250173}
-  crossbowWeapon: {fileID: 3670884374136682343}
-  grenadeWeapon: {fileID: 7951920723698609831}
+  swordWeapon: {fileID: 0}
+  shieldWeapon: {fileID: 0}
+  bowWeapon: {fileID: 0}
+  daggerWeapon: {fileID: 0}
+  crossbowWeapon: {fileID: 0}
+  grenadeWeapon: {fileID: 0}
   swordHandVisual: {fileID: 0}
   shieldHandVisual: {fileID: 0}
-  bowHandVisual: {fileID: 131850, guid: 8093457b576f04fbfa270bca1b2553a1, type: 3}
-  daggerHandVisual: {fileID: 3740159220165885527, guid: 41913b50274a244418607f629adfd3c6, type: 3}
-  crossbowHandVisual: {fileID: 6721586060920507822, guid: 8e5012eaa9daab14aa5a36ff5fb52bad, type: 3}
-  grenadeHandVisual: {fileID: 6256244120178977583, guid: dea83f823520fd74198a6bfcc72b73aa, type: 3}
+  bowHandVisual: {fileID: 0}
+  daggerHandVisual: {fileID: 0}
+  crossbowHandVisual: {fileID: 0}
+  grenadeHandVisual: {fileID: 0}
   aimPlaneY: 0
   animator: {fileID: 0}
   animSpeedDamping: 0.08
@@ -2719,12 +2719,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Sword
+  hudIcon: {fileID: 21300000, guid: e72881f0e573a0545b1de9d94deae2d5, type: 3}
+  hudIconRotation: 0
   weaponType: 1
   damage: 25
   cooldown: 0.5
   enemyLayers:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 128
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
@@ -2744,6 +2746,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Shield
+  hudIcon: {fileID: 21300000, guid: 115e358592e7a8f47a95a553e2e6afe1, type: 3}
+  hudIconRotation: 0
   weaponType: 2
   damage: 25
   cooldown: 0.5
@@ -2769,6 +2773,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Bow
+  hudIcon: {fileID: 21300000, guid: 9df7bf01e5e2e674cbfb58474eceebfa, type: 3}
+  hudIconRotation: 0
   weaponType: 3
   damage: 25
   cooldown: 0.5
@@ -2813,6 +2819,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Crossbow
+  hudIcon: {fileID: 21300000, guid: 1794869fcf593ae46905cdc6f487fda7, type: 3}
+  hudIconRotation: 0
   weaponType: 5
   damage: 25
   cooldown: 0.5
@@ -2829,39 +2837,6 @@ MonoBehaviour:
   visualSpawnDistance: 0.8
   visualSpawnHeight: 1
   visualRotationOffset: {x: -90, y: 90, z: 0}
---- !u!114 &-3973025407638285087
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 8189980434977739222}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 773445828f81c534ea1945746f71f258, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  weaponName: Dagger
-  weaponType: 4
-  damage: 25
-  cooldown: 0.5
-  enemyLayers:
-    serializedVersion: 2
-    m_Bits: 4294967295
-  damageLevel: 1
-  maxDamageLevel: 5
-  damageIncreasePerLevel: 5
-  stabPrefab: {fileID: 3891962484159435510, guid: 41913b50274a244418607f629adfd3c6, type: 3}
-  stabStartDistance: 0.4
-  stabSpawnHeight: 1
-  fallbackStabRange: 1.8
-  fallbackStabRadius: 0.45
-  fallbackStabHeight: 1.5
-  debugFallbackHitbox: 1
-  thrownDaggerPrefab: {fileID: 0}
-  thrownDamage: 20
-  throwEveryNStabs: 4
-  throwSpawnHeight: 1
 --- !u!114 &7951920723698609831
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2875,12 +2850,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Grenade
+  hudIcon: {fileID: 21300000, guid: 6acd75eb83b33bd4cab73dde4ce2cf65, type: 3}
+  hudIconRotation: 0
   weaponType: 6
   damage: 25
   cooldown: 0.5
   enemyLayers:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 1014
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
@@ -2889,6 +2866,41 @@ MonoBehaviour:
   arcHeight: 3
   flightTime: 0.8
   spawnHeight: 1
+--- !u!114 &-3973025407638285087
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8189980434977739222}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 773445828f81c534ea1945746f71f258, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  weaponName: Dagger
+  hudIcon: {fileID: 21300000, guid: 190bcc830cf158044abf4f80ab64c674, type: 3}
+  hudIconRotation: 0
+  weaponType: 4
+  damage: 25
+  cooldown: 0.25
+  enemyLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  damageLevel: 1
+  maxDamageLevel: 5
+  damageIncreasePerLevel: 5
+  stabPrefab: {fileID: 3891962484159435510, guid: 41913b50274a244418607f629adfd3c6, type: 3}
+  stabStartDistance: 0.4
+  stabSpawnHeight: 1
+  fallbackStabRange: 1.8
+  fallbackStabRadius: 0.45
+  fallbackStabHeight: 1.5
+  debugFallbackHitbox: 1
+  thrownDaggerPrefab: {fileID: 2748083729983195067, guid: a8850862a1d6ac1409c93899f9fdc7f7, type: 3}
+  thrownDamage: 20
+  throwEveryNStabs: 4
+  throwSpawnHeight: 1
 --- !u!1 &8206070634150816031
 GameObject:
   m_ObjectHideFlags: 0
