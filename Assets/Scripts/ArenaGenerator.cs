@@ -53,12 +53,23 @@ public class ArenaGenerator : MonoBehaviour
     public int maxPlacementAttempts = 20;
 
     [Header("Auto Colliders")]
-    [Tooltip("If true, any spawned obstacle that has no Collider gets a CapsuleCollider added automatically, sized from its mesh bounds. Use this when your obstacle prefabs (e.g. Polytope trees/rocks) ship without colliders.")]
+    [Tooltip("If true, any spawned obstacle that has no Collider gets a CapsuleCollider added automatically. This is useful when obstacle prefabs ship without colliders.")]
     public bool autoAddColliders = true;
-    [Tooltip("Capsule radius multiplier. 0.5 = capsule fits the full footprint. 0.3 makes a thin capsule that just covers the trunk of trees (lets you walk close without bumping into invisible branches).")]
-    [Range(0.1f, 1.0f)] public float colliderRadiusFactor = 0.4f;
-    [Tooltip("Capsule height multiplier. 1.0 = full mesh height. 0.5 = waist-high (trees you can shoot over).")]
-    [Range(0.1f, 2.0f)] public float colliderHeightFactor = 1.0f;
+
+    [Tooltip("Optional layer assigned to generated obstacles. Use an Obstacle layer so enemies can detect and avoid structures.")]
+    public LayerMask obstacleLayer;
+
+    [Tooltip("Capsule radius multiplier based on the obstacle footprint. Lower values make trees only block around the trunk/stump instead of their leaves/branches.")]
+    [Range(0.03f, 1.0f)] public float colliderRadiusFactor = 0.12f;
+
+    [Tooltip("Capsule height multiplier based on the obstacle height. Lower values make only the bottom trunk/stump block movement.")]
+    [Range(0.1f, 2.0f)] public float colliderHeightFactor = 0.35f;
+
+    [Tooltip("Minimum automatic obstacle collider height.")]
+    public float colliderMinHeight = 1.5f;
+
+    [Tooltip("Minimum automatic obstacle collider radius.")]
+    public float colliderMinRadius = 0.3f;
 
     [Header("Player")]
     [Tooltip("Hero prefab to instantiate when the arena is generated. Drag your Hero prefab in here (it must have the Hero script attached).")]
@@ -247,7 +258,7 @@ public class ArenaGenerator : MonoBehaviour
 
             GameObject obj = Instantiate(prefab, candidate, Quaternion.Euler(0f, yaw, 0f), parent);
             obj.transform.localScale = prefab.transform.localScale * scale;
-            if (autoAddColliders) EnsureCollider(obj);
+            SetupObstacleCollision(obj);
             placedCount++;
         }
 
@@ -255,11 +266,21 @@ public class ArenaGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// Adds a CapsuleCollider sized from the obstacle's mesh bounds, but only
-    /// if the obstacle (or any child) doesn't already have a Collider.
+    /// Assigns the obstacle layer and adds a lower CapsuleCollider if the obstacle
+    /// has no Collider. The collider is centered near the bottom of the mesh
+    /// bounds so tree leaves/branches do not create huge invisible walls.
     /// </summary>
-    private void EnsureCollider(GameObject obstacle)
+    private void SetupObstacleCollision(GameObject obstacle)
     {
+        if (obstacle == null) return;
+
+        if (obstacleLayer.value != 0)
+        {
+            int layer = GetFirstLayerFromMask(obstacleLayer);
+            SetLayerRecursively(obstacle, layer);
+        }
+
+        if (!autoAddColliders) return;
         if (obstacle.GetComponentInChildren<Collider>(includeInactive: true) != null) return;
 
         Renderer[] renderers = obstacle.GetComponentsInChildren<Renderer>();
@@ -276,12 +297,36 @@ public class ArenaGenerator : MonoBehaviour
         if (Mathf.Abs(lossy.z) < 0.0001f) lossy.z = 1f;
 
         CapsuleCollider cc = obstacle.AddComponent<CapsuleCollider>();
-        cc.center = obstacle.transform.InverseTransformPoint(bounds.center);
-        cc.height = (bounds.size.y / Mathf.Abs(lossy.y)) * colliderHeightFactor;
-        float footprintWidth = Mathf.Max(bounds.size.x / Mathf.Abs(lossy.x),
-                                         bounds.size.z / Mathf.Abs(lossy.z));
-        cc.radius = footprintWidth * 0.5f * colliderRadiusFactor;
         cc.direction = 1; // Y axis
+
+        float worldHeight = Mathf.Max(colliderMinHeight, bounds.size.y * colliderHeightFactor);
+        float footprintWidth = Mathf.Max(bounds.size.x, bounds.size.z);
+        float worldRadius = Mathf.Max(colliderMinRadius, footprintWidth * 0.5f * colliderRadiusFactor);
+
+        // Put the capsule at the bottom of the bounds so only trunks/stumps block movement.
+        Vector3 bottomWorld = new Vector3(bounds.center.x, bounds.min.y, bounds.center.z);
+        Vector3 centerWorld = bottomWorld + Vector3.up * (worldHeight * 0.5f);
+
+        cc.center = obstacle.transform.InverseTransformPoint(centerWorld);
+        cc.height = worldHeight / Mathf.Abs(lossy.y);
+        cc.radius = worldRadius / Mathf.Max(Mathf.Abs(lossy.x), Mathf.Abs(lossy.z));
+    }
+
+    private int GetFirstLayerFromMask(LayerMask mask)
+    {
+        int value = mask.value;
+        for (int i = 0; i < 32; i++)
+        {
+            if ((value & (1 << i)) != 0) return i;
+        }
+        return 0;
+    }
+
+    private void SetLayerRecursively(GameObject obj, int layer)
+    {
+        obj.layer = layer;
+        foreach (Transform child in obj.transform)
+            SetLayerRecursively(child.gameObject, layer);
     }
 
     // Editor visualization so you can see the arena footprint before pressing play.

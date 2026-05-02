@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 5417753968640945927}
   - component: {fileID: 7698599806916587570}
   - component: {fileID: 8208375279522049726}
-  - component: {fileID: 8274515395915719521}
+  - component: {fileID: 6711622995299847906}
   m_Layer: 0
   m_Name: ThrownShield
   m_TagString: Untagged
@@ -84,7 +84,7 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &8274515395915719521
+--- !u!114 &6711622995299847906
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -93,7 +93,7 @@ MonoBehaviour:
   m_GameObject: {fileID: 3075305834080414222}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 825579f250d3a3e4bb59497765e1832c, type: 3}
+  m_Script: {fileID: 11500000, guid: fa6259327d84c4248b3ee9e6e8c802c1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
   throwSpeed: 14

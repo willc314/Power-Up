@@ -12,7 +12,7 @@ GameObject:
   - component: {fileID: 5434091385927951326}
   - component: {fileID: 182365225315884755}
   - component: {fileID: 5697152034634494904}
-  - component: {fileID: 8083981251407719041}
+  - component: {fileID: 4926047971536815124}
   m_Layer: 0
   m_Name: DeathBeamVisual
   m_TagString: Untagged
@@ -106,7 +106,7 @@ BoxCollider:
   serializedVersion: 3
   m_Size: {x: 1, y: 1, z: 1}
   m_Center: {x: 0, y: 0, z: 0}
---- !u!114 &8083981251407719041
+--- !u!114 &4926047971536815124
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -115,15 +115,15 @@ MonoBehaviour:
   m_GameObject: {fileID: 5514918855898946780}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e2e9a3b02e270e64c981e5cc2183ae1b, type: 3}
+  m_Script: {fileID: 11500000, guid: 982d88fe3dc52584bb0986f428361225, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  duration: 2
-  range: 50
-  radius: 0.8
+  duration: 1.5
+  range: 30
+  radius: 0.6
   damagePerSecond: 200
   heroSpeedDuringBeam: 0
-  shakeAmplitude: 0.3
+  shakeAmplitude: 0.5
   vfxPrefab: {fileID: 0}
   spawnHeight: 1
   beamParticlesPerSecond: 80
