@@ -167,6 +167,10 @@ public class GameHUD : MonoBehaviour
             slot.icon.color = icon != null
                 ? new Color(1f, 1f, 1f, 1f)
                 : new Color(1f, 1f, 1f, 0.08f);
+            // Per-weapon spin so we can hand-correct icons that came out
+            // sideways from the renderer. Negate so positive values turn
+            // clockwise from the user's point of view.
+            slot.icon.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -w.hudIconRotation);
         }
 
         if (slot.cooldownOverlay != null) slot.cooldownOverlay.fillAmount = w.CooldownProgress;

@@ -2490,6 +2490,21 @@ MonoBehaviour:
   moveSpeed: 5
   primaryWeapon: {fileID: -4825117159744072496}
   secondaryWeapon: {fileID: 7380220090727494558}
+  randomizeWeaponsOnSpawn: 1
+  randomWeaponPool: []
+  dashKey: 32
+  dashSpeed: 22
+  dashDuration: 0.18
+  dashCooldown: 1
+  dashInterruptsWeapons: 1
+  dashParticles: 1
+  dashParticlesPerSecond: 80
+  dashParticleColor: {r: 0.65, g: 0.55, b: 0.42, a: 1}
+  dashParticleSpeed: 4
+  dashParticleSize: 0.12
+  dashParticleLifetime: 0.4
+  dashParticleSpread: 35
+  dashParticleHeight: 0.1
   aimPlaneY: 0
   animator: {fileID: 0}
   animSpeedDamping: 0.08
@@ -2507,6 +2522,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Weapon
+  hudIcon: {fileID: 21300000, guid: e72881f0e573a0545b1de9d94deae2d5, type: 3}
+  hudIconRotation: 0
   damage: 25
   cooldown: 0.5
   enemyLayers:
@@ -2528,6 +2545,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Weapon
+  hudIcon: {fileID: 21300000, guid: 115e358592e7a8f47a95a553e2e6afe1, type: 3}
+  hudIconRotation: 0
   damage: 25
   cooldown: 0.5
   enemyLayers:
@@ -2564,6 +2583,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Weapon
+  hudIcon: {fileID: 21300000, guid: 190bcc830cf158044abf4f80ab64c674, type: 3}
+  hudIconRotation: 0
   damage: 15
   cooldown: 0.18
   enemyLayers:
@@ -2571,7 +2592,7 @@ MonoBehaviour:
     m_Bits: 128
   stabPrefab: {fileID: 3310464804780213159, guid: 41913b50274a244418607f629adfd3c6, type: 3}
   stabStartDistance: 0.4
-  thrownDaggerPrefab: {fileID: 0}
+  thrownDaggerPrefab: {fileID: 2748083729983195067, guid: a8850862a1d6ac1409c93899f9fdc7f7, type: 3}
   thrownDamage: 20
   throwEveryNStabs: 4
   throwSpawnHeight: 1
@@ -2588,6 +2609,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Weapon
+  hudIcon: {fileID: 21300000, guid: 1794869fcf593ae46905cdc6f487fda7, type: 3}
+  hudIconRotation: 0
   damage: 30
   cooldown: 0.6
   enemyLayers:
@@ -2599,7 +2622,7 @@ MonoBehaviour:
   crossbowVisualPrefab: {fileID: 6721586060920507822, guid: 8e5012eaa9daab14aa5a36ff5fb52bad, type: 3}
   visualSpawnDistance: 1
   visualSpawnHeight: 1
-  visualRotationOffset: {x: 0, y: -90, z: 0}
+  visualRotationOffset: {x: -90, y: 90, z: 0}
 --- !u!114 &-3973025407638285087
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2613,6 +2636,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Weapon
+  hudIcon: {fileID: 21300000, guid: 6acd75eb83b33bd4cab73dde4ce2cf65, type: 3}
+  hudIconRotation: 0
   damage: 25
   cooldown: 2
   enemyLayers:
@@ -2636,6 +2661,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   weaponName: Weapon
+  hudIcon: {fileID: 21300000, guid: 9df7bf01e5e2e674cbfb58474eceebfa, type: 3}
+  hudIconRotation: 0
   damage: 25
   cooldown: 0.5
   enemyLayers:

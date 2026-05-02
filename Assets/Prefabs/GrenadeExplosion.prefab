@@ -56,8 +56,8 @@ MonoBehaviour:
   debrisCount: 24
   debrisColor: {r: 1, g: 0.30065316, b: 0.10196078, a: 1}
   debrisSpeed: 5
-  debrisSize: 0.3
-  debrisLifetime: 0.5
+  debrisSize: 0.2
+  debrisLifetime: 2
   debrisSpread: 90
   debrisHeight: 0.3
   shakeAmplitude: 0.2
