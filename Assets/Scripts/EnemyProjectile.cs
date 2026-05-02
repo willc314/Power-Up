@@ -34,7 +34,9 @@ public class EnemyProjectile : MonoBehaviour
     public void Launch(Vector3 direction, float damageAmount)
     {
         damage = damageAmount;
-        direction.y = 0f;
+        // Direction is full 3D so the projectile can fly at an angle (e.g. a tall
+        // slime firing down at the player's chest). Older callers that pass a
+        // horizontal vector (y already 0) are unaffected.
         if (direction.sqrMagnitude > 0.0001f) direction.Normalize();
         rb.velocity = direction * speed;
         Destroy(gameObject, lifetime);
