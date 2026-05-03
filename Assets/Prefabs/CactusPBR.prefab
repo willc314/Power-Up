@@ -202,9 +202,12 @@ MonoBehaviour:
   attackRange: 1.4
   attackCooldown: 1
   aggroRange: 25
+  debugShowHealth: 1
+  debugLabelHeight: 2.5
   powerUpPrefab: {fileID: 5873131192069686212, guid: 2cb7ec1c1ebc3534bbc753a4c279d9b4, type: 3}
-  powerUpDropChance: 0.5
-  possiblePowerUpTypes: 01000000020000000300000004000000
+  powerUpDropChance: 0.3
+  dropAllWeaponPowerUps: 1
+  possiblePowerUpTypes: 010000000200000003000000040000000400000004000000
   powerUpDropHeight: 0.1
   useObstacleAvoidance: 1
   obstacleMask:
@@ -225,6 +228,37 @@ MonoBehaviour:
   dashTelegraphTime: 0.6
   dashDuration: 0.4
   dashRecovery: 1.2
+  crossbowProjectile: {fileID: 0}
+  crossbowDamage: 25
+  crossbowProjectileSpeed: 18
+  crossbowSpawnHeight: 1.5
+  crossbowTargetHeight: 0.5
+  telegraphDuration: 2
+  telegraphTrackSpeed: 3
+  telegraphColor: {r: 1, g: 0.15, b: 0.15, a: 1}
+  telegraphLineWidth: 0.08
+  telegraphExtensionDistance: 6
+  crossbowAimMaxRange: 25
+  crossbowAttackCooldown: 4
+  skRangedDuration: 12
+  skMeleeDuration: 8
+  skJumpDuration: 1
+  skJumpArcHeight: 8
+  skRetreatJumpDistance: 12
+  skMeleeSpeed: 4
+  skMeleeRange: 1.6
+  skMeleeDamage: 18
+  skMeleeCooldown: 0.9
+  skSpeedBoostMultiplier: 1.8
+  skSpeedBoostDuration: 4
+  skShieldHits: 2
+  skAttackSpeedBoostMultiplier: 0.5
+  skAttackSpeedBoostDuration: 6
+  skKiteRange: 7
+  splitOnDeath: 0
+  splitPrefab: {fileID: 0}
+  splitCount: 5
+  splitRadius: 1.6
   projectilePrefab: {fileID: 0}
   projectileSpawn: {fileID: 0}
   preferredRange: 8

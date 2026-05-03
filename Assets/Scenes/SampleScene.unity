@@ -1059,15 +1059,21 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e4e7cff423b7d3646964dd351bbd6d63, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  enemyPrefabs:
-  - {fileID: 4245915190017150719, guid: cbc814ca6b730954b8a5e3641bde01c9, type: 3}
-  - {fileID: 1931298151966786, guid: 928a1377c1cd4515b208fef3a396b8ea, type: 3}
-  - {fileID: 1524411113276028, guid: e2aafa8770d34a9591b41bedf4e318ba, type: 3}
-  - {fileID: 662468794185850985, guid: a48631e259d0486fa83621f7d8f36e72, type: 3}
+  weightedEnemyPrefabs:
+  - prefab: {fileID: 1931298151966786, guid: 928a1377c1cd4515b208fef3a396b8ea, type: 3}
+    spawnWeight: 50
+  - prefab: {fileID: 4245915190017150719, guid: cbc814ca6b730954b8a5e3641bde01c9, type: 3}
+    spawnWeight: 40
+  - prefab: {fileID: 662468794185850985, guid: a48631e259d0486fa83621f7d8f36e72, type: 3}
+    spawnWeight: 30
+  - prefab: {fileID: 1524411113276028, guid: e2aafa8770d34a9591b41bedf4e318ba, type: 3}
+    spawnWeight: 20
+  - prefab: {fileID: 7975725054647801711, guid: ad4cb73d2e032624d8a5f581979f9c2c, type: 3}
+    spawnWeight: 3
   arenaGenerator: {fileID: 10077675}
   hero: {fileID: 0}
   spawnInterval: 5
-  startingEnemiesPerWave: 5
+  startingEnemiesPerWave: 8
   maxEnemiesPerWave: 20
   waveIncreaseEverySeconds: 30
   maxAliveEnemies: 555

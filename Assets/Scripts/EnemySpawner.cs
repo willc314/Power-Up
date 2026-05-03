@@ -16,14 +16,16 @@ using UnityEngine;
 ///   * keeps a maximum number of alive spawned enemies
 ///   * places enemies around the Hero between a minimum and maximum distance
 ///   * raycasts downward so enemies spawn on top of the generated floor
+///   * supports weighted spawn chances for each enemy prefab
 ///
 /// Setup:
 ///   1. Create an empty GameObject named "Spawner".
 ///   2. Add this script to it.
-///   3. Drag enemy prefabs into Enemy Prefabs.
-///   4. Drag the Arena GameObject into Arena Generator, or leave it empty
+///   3. Add enemy prefabs into Weighted Enemy Prefabs.
+///   4. Set higher Spawn Weight for common enemies and lower Spawn Weight for rare enemies.
+///   5. Drag the Arena GameObject into Arena Generator, or leave it empty
 ///      and the script will find one automatically.
-///   5. Leave Hero empty if ArenaGenerator spawns the Hero at runtime.
+///   6. Leave Hero empty if ArenaGenerator spawns the Hero at runtime.
 ///
 /// Enemy prefab checklist:
 ///   * Enemy.cs
@@ -33,9 +35,19 @@ using UnityEngine;
 /// </summary>
 public class EnemySpawner : MonoBehaviour
 {
+    [System.Serializable]
+    public class WeightedEnemyPrefab
+    {
+        [Tooltip("Enemy prefab to spawn.")]
+        public GameObject prefab;
+
+        [Tooltip("Higher number = more common. Lower number = rarer. 0 means this enemy will not spawn.")]
+        public float spawnWeight = 1f;
+    }
+
     [Header("References")]
-    [Tooltip("Enemy prefabs to spawn. Each prefab should have Enemy.cs, Rigidbody, and Collider.")]
-    public GameObject[] enemyPrefabs;
+    [Tooltip("Enemy prefabs with individual spawn weights. Use this instead of the old equal-chance Enemy Prefabs list.")]
+    public WeightedEnemyPrefab[] weightedEnemyPrefabs;
 
     [Tooltip("Optional reference to ArenaGenerator. Used to keep enemies inside the arena.")]
     public ArenaGenerator arenaGenerator;
@@ -123,7 +135,7 @@ public class EnemySpawner : MonoBehaviour
         if (debugLogs)
         {
             Debug.Log("EnemySpawner: started.");
-            Debug.Log("EnemySpawner: enemy prefab count = " + (enemyPrefabs == null ? 0 : enemyPrefabs.Length));
+            Debug.Log("EnemySpawner: weighted enemy prefab count = " + (weightedEnemyPrefabs == null ? 0 : weightedEnemyPrefabs.Length));
             Debug.Log("EnemySpawner: arena found = " + (arenaGenerator != null));
             Debug.Log("EnemySpawner: hero found at Start = " + (hero != null));
         }
@@ -145,10 +157,10 @@ public class EnemySpawner : MonoBehaviour
         if (hero.IsDead)
             return;
 
-        if (enemyPrefabs == null || enemyPrefabs.Length == 0)
+        if (weightedEnemyPrefabs == null || weightedEnemyPrefabs.Length == 0)
         {
             if (debugLogs)
-                Debug.LogWarning("EnemySpawner: no enemy prefabs assigned.");
+                Debug.LogWarning("EnemySpawner: no weighted enemy prefabs assigned.");
 
             return;
         }
@@ -252,11 +264,49 @@ public class EnemySpawner : MonoBehaviour
 
     private GameObject GetRandomEnemyPrefab()
     {
-        if (enemyPrefabs == null || enemyPrefabs.Length == 0)
+        if (weightedEnemyPrefabs == null || weightedEnemyPrefabs.Length == 0)
             return null;
 
-        int index = Random.Range(0, enemyPrefabs.Length);
-        return enemyPrefabs[index];
+        float totalWeight = 0f;
+
+        for (int i = 0; i < weightedEnemyPrefabs.Length; i++)
+        {
+            if (weightedEnemyPrefabs[i] == null)
+                continue;
+
+            if (weightedEnemyPrefabs[i].prefab == null)
+                continue;
+
+            if (weightedEnemyPrefabs[i].spawnWeight <= 0f)
+                continue;
+
+            totalWeight += weightedEnemyPrefabs[i].spawnWeight;
+        }
+
+        if (totalWeight <= 0f)
+            return null;
+
+        float roll = Random.Range(0f, totalWeight);
+        float currentWeight = 0f;
+
+        for (int i = 0; i < weightedEnemyPrefabs.Length; i++)
+        {
+            if (weightedEnemyPrefabs[i] == null)
+                continue;
+
+            if (weightedEnemyPrefabs[i].prefab == null)
+                continue;
+
+            if (weightedEnemyPrefabs[i].spawnWeight <= 0f)
+                continue;
+
+            currentWeight += weightedEnemyPrefabs[i].spawnWeight;
+
+            if (roll <= currentWeight)
+                return weightedEnemyPrefabs[i].prefab;
+        }
+
+        return null;
     }
 
     private bool TryGetSpawnPosition(out Vector3 finalPosition)
