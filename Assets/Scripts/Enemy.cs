@@ -14,7 +14,7 @@ using UnityEngine;
 /// This version keeps your partner's hit-particle effects and adds the systems
 /// needed by your powerup/arena work:
 ///   * simple obstacle avoidance around structures, rocks, and trees
-///   * powerup drops when enemies die
+///   * powerup drops when enemies die, including sword, shield, bow, dagger, crossbow, and grenade
 ///
 /// Setup checklist on the Enemy GameObject:
 ///   * Rigidbody  (Use Gravity = on; the script freezes X/Z rotation)
@@ -52,6 +52,7 @@ public class Enemy : MonoBehaviour
     public bool debugShowHealth = true;
     [Tooltip("How far above the enemy's pivot the HP label sits.")]
     public float debugLabelHeight = 2.5f;
+
     [Header("Powerup Drop")]
     [Tooltip("PowerUp prefab that can drop when this enemy dies.")]
     public PowerUp powerUpPrefab;
@@ -59,13 +60,18 @@ public class Enemy : MonoBehaviour
     [Tooltip("Chance from 0 to 1 that this enemy drops a powerup on death.")]
     [Range(0f, 1f)] public float powerUpDropChance = 0.25f;
 
-    [Tooltip("Weapon powerup types this enemy can drop. If empty, sword/shield/bow/dagger are used.")]
+    [Tooltip("If true, enemies can drop every weapon powerup, ignoring the Inspector list.")]
+    public bool dropAllWeaponPowerUps = true;
+
+    [Tooltip("Weapon powerup types this enemy can drop. Used only if Drop All Weapon Powerups is false.")]
     public eWeaponType[] possiblePowerUpTypes = new eWeaponType[]
     {
         eWeaponType.sword,
         eWeaponType.shield,
         eWeaponType.bow,
-        eWeaponType.dagger
+        eWeaponType.dagger,
+        eWeaponType.crossbow,
+        eWeaponType.grenade
     };
 
     [Tooltip("How high above the enemy position the powerup spawns.")]
@@ -200,7 +206,6 @@ public class Enemy : MonoBehaviour
     [Tooltip("Seconds between shots.")]
     public float shootCooldown = 1.5f;
 
-    // --- runtime state ---
     private float currentHP;
     private float meleeTimer;
     private float shootTimer;
@@ -208,14 +213,12 @@ public class Enemy : MonoBehaviour
     private Hero player;
     private DamageFlash damageFlash;
 
-    // Crossbow / telegraph state
     private bool aiming;
     private float telegraphTimer;
     private Vector3 telegraphTargetPos;
     private float crossbowAttackTimer;
     private LineRenderer telegraphLine;
 
-    // Slime King state
     private enum SlimeKingPhase { Ranged, JumpToMelee, Melee, JumpToRanged }
     private SlimeKingPhase skPhase = SlimeKingPhase.Ranged;
     private float skPhaseTimer;
@@ -226,7 +229,6 @@ public class Enemy : MonoBehaviour
     private int skCurrentShieldHits;
     private GameObject skShieldVisual;
 
-    // Charger state machine
     private enum ChargerPhase { Approach, Telegraph, Dash, Recover }
     private ChargerPhase chargerPhase = ChargerPhase.Approach;
     private float chargerPhaseTimer;
@@ -284,7 +286,6 @@ public class Enemy : MonoBehaviour
 
     private void FixedUpdate()
     {
-        // Lazy lookup: works whether the hero was placed in the scene or spawned by ArenaGenerator after this enemy.
         if (player == null) player = Hero.Instance;
 
         if (IsDead || player == null || player.IsDead) { StopMoving(); return; }
@@ -300,22 +301,19 @@ public class Enemy : MonoBehaviour
         }
 
         Vector3 dir = dist > 0.001f ? toPlayer / dist : Vector3.zero;
-        // Always face the player.
         if (dir.sqrMagnitude > 0.0001f)
             transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
 
         switch (behavior)
         {
-            case Behavior.Chaser:    TickChaser(dir, dist);    break;
-            case Behavior.Tank:      TickTank(dir, dist);      break;
-            case Behavior.Charger:   TickCharger(dir, dist);   break;
-            case Behavior.Ranged:    TickRanged(dir, dist);    break;
-            case Behavior.Crossbow:  TickCrossbow(dir, dist);  break;
+            case Behavior.Chaser: TickChaser(dir, dist); break;
+            case Behavior.Tank: TickTank(dir, dist); break;
+            case Behavior.Charger: TickCharger(dir, dist); break;
+            case Behavior.Ranged: TickRanged(dir, dist); break;
+            case Behavior.Crossbow: TickCrossbow(dir, dist); break;
             case Behavior.SlimeKing: TickSlimeKing(dir, dist); break;
         }
     }
-
-    // ---------- Behaviors ----------
 
     private void TickChaser(Vector3 dir, float dist)
     {
@@ -347,7 +345,6 @@ public class Enemy : MonoBehaviour
         {
             case ChargerPhase.Approach:
                 MoveInDirection(GetAvoidedDirection(dir), moveSpeed);
-                // Once we're roughly in line of sight, telegraph a dash.
                 if (dist < preferredRange || dist < attackRange + 3f)
                 {
                     chargerPhase = ChargerPhase.Telegraph;
@@ -389,7 +386,6 @@ public class Enemy : MonoBehaviour
 
     private void TickRanged(Vector3 dir, float dist)
     {
-        // Kite: keep around `preferredRange`. Back away if too close.
         if (dist < retreatRange)
             MoveInDirection(GetAvoidedDirection(-dir), moveSpeed);
         else if (dist > preferredRange)
@@ -408,15 +404,13 @@ public class Enemy : MonoBehaviour
     {
         if (!aiming)
         {
-            // Walk toward player slowly until in range, then stop and aim.
             if (dist > crossbowAimMaxRange * 0.85f) MoveInDirection(dir, moveSpeed);
-            else                                    rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
+            else rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
 
             if (crossbowAttackTimer <= 0f && dist <= crossbowAimMaxRange) StartAiming();
         }
         else
         {
-            // Hold position while aiming.
             rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
             UpdateTelegraph();
 
@@ -456,16 +450,11 @@ public class Enemy : MonoBehaviour
     private void UpdateTelegraph()
     {
         if (player == null) return;
-        // MoveTowards gives a constant tracking speed in units/sec — sidestepping
-        // faster than this leaves the telegraph behind, which is the core dodge mechanic.
         Vector3 playerAimPoint = player.transform.position + Vector3.up * crossbowTargetHeight;
         telegraphTargetPos = Vector3.MoveTowards(telegraphTargetPos, playerAimPoint, telegraphTrackSpeed * Time.fixedDeltaTime);
 
         if (telegraphLine != null)
         {
-            // Line goes from the slime's "mouth" down to the aim point on the player,
-            // then continues past for telegraphExtensionDistance units so the player
-            // sees where the arrow keeps going.
             Vector3 start = transform.position + Vector3.up * crossbowSpawnHeight;
             Vector3 end = telegraphTargetPos;
             if (telegraphExtensionDistance > 0f)
@@ -483,7 +472,6 @@ public class Enemy : MonoBehaviour
     {
         if (crossbowProjectile == null) return;
         Vector3 start = transform.position + Vector3.up * crossbowSpawnHeight;
-        // 3D direction so the arrow can angle down from a tall enemy to a shorter player.
         Vector3 dir = telegraphTargetPos - start;
         if (dir.sqrMagnitude < 0.0001f) return;
         dir.Normalize();
@@ -494,16 +482,14 @@ public class Enemy : MonoBehaviour
         p.Launch(dir, crossbowDamage);
     }
 
-    // ---------- Slime King ----------
-
     private void TickSlimeKing(Vector3 dir, float dist)
     {
         switch (skPhase)
         {
-            case SlimeKingPhase.Ranged:        TickSlimeRanged(dir, dist);        break;
-            case SlimeKingPhase.JumpToMelee:   TickJump(SlimeKingPhase.Melee);    break;
-            case SlimeKingPhase.Melee:         TickSlimeMelee(dir, dist);         break;
-            case SlimeKingPhase.JumpToRanged:  TickJump(SlimeKingPhase.Ranged);   break;
+            case SlimeKingPhase.Ranged: TickSlimeRanged(dir, dist); break;
+            case SlimeKingPhase.JumpToMelee: TickJump(SlimeKingPhase.Melee); break;
+            case SlimeKingPhase.Melee: TickSlimeMelee(dir, dist); break;
+            case SlimeKingPhase.JumpToRanged: TickJump(SlimeKingPhase.Ranged); break;
         }
     }
 
@@ -513,9 +499,8 @@ public class Enemy : MonoBehaviour
 
         if (!aiming)
         {
-            // Kite away if too close, otherwise hold position.
             if (dist < skKiteRange) MoveInDirection(-dir, moveSpeed);
-            else                    rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
+            else rb.velocity = new Vector3(0f, rb.velocity.y, 0f);
 
             if (crossbowAttackTimer <= 0f && dist <= crossbowAimMaxRange) StartAiming();
         }
@@ -540,7 +525,6 @@ public class Enemy : MonoBehaviour
         skPhaseTimer += Time.fixedDeltaTime;
 
         float speed = moveSpeed * skMeleeSpeed / Mathf.Max(0.01f, moveSpeed) * (skSpeedBoostTimer > 0f ? skSpeedBoostMultiplier : 1f);
-        // Simpler: use skMeleeSpeed directly with optional boost.
         speed = skMeleeSpeed * (skSpeedBoostTimer > 0f ? skSpeedBoostMultiplier : 1f);
 
         if (dist > skMeleeRange)
@@ -572,7 +556,6 @@ public class Enemy : MonoBehaviour
             return;
         }
 
-        // Parabolic arc: linear XZ + quadratic Y peaking at progress 0.5.
         Vector3 pos = Vector3.Lerp(skJumpStart, skJumpEnd, skJumpProgress);
         pos.y += 4f * skJumpArcHeight * skJumpProgress * (1f - skJumpProgress);
         transform.position = pos;
@@ -616,19 +599,16 @@ public class Enemy : MonoBehaviour
 
         if (nextPhase == SlimeKingPhase.Melee)
         {
-            // Buff: speed boost + shield.
             skSpeedBoostTimer = skSpeedBoostDuration;
             skCurrentShieldHits = skShieldHits;
             CreateShieldVisual();
         }
         else if (nextPhase == SlimeKingPhase.Ranged)
         {
-            // Buff: attack speed boost.
             skAttackSpeedBoostTimer = skAttackSpeedBoostDuration;
             DestroyShieldVisual();
         }
 
-        // Small landing impact — debris burst at the slime's feet.
         HitParticles.EmitBurst(transform.position + Vector3.up * 0.1f, Vector3.up,
             count: 18, speed: 6f, lifetime: 0.55f, size: 0.18f,
             color: hitParticleColor, spreadAngle: 75f, useGravity: true);
@@ -654,11 +634,7 @@ public class Enemy : MonoBehaviour
         skShieldVisual = null;
     }
 
-    // Override aiming/firing timing so the SlimeKing's attack-speed boost shortens
-    // both the telegraph and the cooldown when active.
     private float SkAttackMultiplier => skAttackSpeedBoostTimer > 0f ? skAttackSpeedBoostMultiplier : 1f;
-
-    // ---------- Helpers ----------
 
     private Vector3 GetAvoidedDirection(Vector3 desiredDirection)
     {
@@ -719,7 +695,6 @@ public class Enemy : MonoBehaviour
 
     private void MoveInDirection(Vector3 dir, float speed)
     {
-        // Preserve gravity on Y; only drive XZ velocity.
         dir.y = 0f;
         if (dir.sqrMagnitude > 0.001f) dir.Normalize();
 
@@ -751,13 +726,10 @@ public class Enemy : MonoBehaviour
         p.Launch(dir, attackDamage);
     }
 
-    // ---------- Damage / death ----------
-
     public void TakeDamage(float amount)
     {
         if (IsDead) return;
 
-        // Slime King shield absorbs hits without reducing HP. Each hit pops a small blue spark.
         if (skCurrentShieldHits > 0)
         {
             skCurrentShieldHits--;
@@ -777,7 +749,7 @@ public class Enemy : MonoBehaviour
     private void SpawnHitParticles()
     {
         if (hitParticleCount <= 0) return;
-        // Direction: from the player outward through the enemy. Falls back to enemy's facing if the player is missing.
+
         Vector3 dir;
         if (Hero.Instance != null)
         {
@@ -807,7 +779,6 @@ public class Enemy : MonoBehaviour
         StopMoving();
         if (telegraphLine != null) telegraphLine.enabled = false;
 
-        // Notify the score / kill tracker. Safe if there is no GameManager in scene.
         if (GameManager.Instance != null) GameManager.Instance.OnEnemyKilled(this);
 
         if (splitOnDeath && splitPrefab != null && splitCount > 0)
@@ -823,7 +794,6 @@ public class Enemy : MonoBehaviour
         }
 
         TryDropPowerUp();
-        // TODO: play death animation, drop XP/loot, etc.
         Destroy(gameObject);
     }
 
@@ -842,6 +812,21 @@ public class Enemy : MonoBehaviour
 
     private eWeaponType PickRandomPowerUpType()
     {
+        if (dropAllWeaponPowerUps)
+        {
+            eWeaponType[] allTypes = new eWeaponType[]
+            {
+                eWeaponType.sword,
+                eWeaponType.shield,
+                eWeaponType.bow,
+                eWeaponType.dagger,
+                eWeaponType.crossbow,
+                eWeaponType.grenade
+            };
+
+            return allTypes[Random.Range(0, allTypes.Length)];
+        }
+
         eWeaponType[] pool = possiblePowerUpTypes;
 
         if (pool == null || pool.Length == 0)
@@ -851,7 +836,9 @@ public class Enemy : MonoBehaviour
                 eWeaponType.sword,
                 eWeaponType.shield,
                 eWeaponType.bow,
-                eWeaponType.dagger
+                eWeaponType.dagger,
+                eWeaponType.crossbow,
+                eWeaponType.grenade
             };
         }
 
@@ -886,8 +873,6 @@ public class Enemy : MonoBehaviour
         }
     }
 
-    // ---- Debug HP label ----
-
     private void OnGUI()
     {
         if (!debugShowHealth || IsDead) return;
@@ -896,7 +881,7 @@ public class Enemy : MonoBehaviour
 
         Vector3 worldPos = transform.position + Vector3.up * debugLabelHeight;
         Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
-        if (screenPos.z < 0f) return; // behind the camera
+        if (screenPos.z < 0f) return;
 
         string text = $"{currentHP:F0} / {maxHP:F0}";
         GUIStyle style = GUI.skin.label;
@@ -907,7 +892,6 @@ public class Enemy : MonoBehaviour
             size.x + 8f,
             size.y + 4f);
 
-        // Dark background box for readability against any environment.
         Color prev = GUI.color;
         GUI.color = new Color(0f, 0f, 0f, 0.65f);
         GUI.DrawTexture(r, Texture2D.whiteTexture);
