@@ -2675,18 +2675,18 @@ MonoBehaviour:
   dashParticleLifetime: 0.4
   dashParticleSpread: 35
   dashParticleHeight: 0.1
-  swordWeapon: {fileID: 0}
-  shieldWeapon: {fileID: 0}
-  bowWeapon: {fileID: 0}
-  daggerWeapon: {fileID: 0}
-  crossbowWeapon: {fileID: 0}
-  grenadeWeapon: {fileID: 0}
-  swordHandVisual: {fileID: 0}
-  shieldHandVisual: {fileID: 0}
-  bowHandVisual: {fileID: 0}
-  daggerHandVisual: {fileID: 0}
-  crossbowHandVisual: {fileID: 0}
-  grenadeHandVisual: {fileID: 0}
+  swordWeapon: {fileID: 2667012709088315797}
+  shieldWeapon: {fileID: 8888070785139311172}
+  bowWeapon: {fileID: 6495423849874514616}
+  daggerWeapon: {fileID: -3973025407638285087}
+  crossbowWeapon: {fileID: 3670884374136682343}
+  grenadeWeapon: {fileID: 7951920723698609831}
+  swordHandVisual: {fileID: 5545342688175208653, guid: cbc65052b92d3a245a0e616c4b3de3a3, type: 3}
+  shieldHandVisual: {fileID: 3075305834080414222, guid: 28d318905bb3e5d46b0b92d326b2fc28, type: 3}
+  bowHandVisual: {fileID: 131850, guid: 8093457b576f04fbfa270bca1b2553a1, type: 3}
+  daggerHandVisual: {fileID: 3740159220165885527, guid: 41913b50274a244418607f629adfd3c6, type: 3}
+  crossbowHandVisual: {fileID: 6721586060920507822, guid: 8e5012eaa9daab14aa5a36ff5fb52bad, type: 3}
+  grenadeHandVisual: {fileID: 6256244120178977583, guid: dea83f823520fd74198a6bfcc72b73aa, type: 3}
   aimPlaneY: 0
   animator: {fileID: 0}
   animSpeedDamping: 0.08

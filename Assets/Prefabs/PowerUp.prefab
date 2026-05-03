@@ -345,14 +345,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _type: 0
+  pickupRadius: 1.25
   cubeRenderer: {fileID: 7533446484085117571}
-  letterText: {fileID: 8942782402036841773}
+  tmpLetterText: {fileID: 0}
+  letterText: {fileID: 0}
   lifeTime: 10
   rotateSpeed: {x: 0, y: 120, z: 0}
   bobHeight: 0.25
   bobSpeed: 3
-  swordColor: {r: 1, g: 0.35, b: 0.25, a: 1}
+  swordColor: {r: 0.79622644, g: 0, b: 0.15279415, a: 1}
   shieldColor: {r: 0.25, g: 0.65, b: 1, a: 1}
-  bowColor: {r: 0.4, g: 1, b: 0.4, a: 1}
+  bowColor: {r: 0.84202915, g: 0.89433956, b: 0.84202915, a: 1}
   daggerColor: {r: 1, g: 1, b: 0.3, a: 1}
-  defaultColor: {r: 1, g: 1, b: 1, a: 1}
+  crossbowColor: {r: 0.65, g: 0.45, b: 0.25, a: 1}
+  grenadeColor: {r: 0.35, g: 1, b: 0.35, a: 1}
+  defaultColor: {r: 0.9245283, g: 0.47645244, b: 0.026165737, a: 1}
