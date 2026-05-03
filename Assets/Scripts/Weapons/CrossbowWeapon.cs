@@ -67,11 +67,14 @@ public class CrossbowWeapon : Weapon
                       + owner.transform.forward * spawnDistance
                       + Vector3.up * spawnHeight;
 
+        // One crit roll for the entire volley so all arrows in the fan share it.
+        float finalDamage = owner.ComputeAttackDamage(damage);
+
         int n = Mathf.Max(1, projectileCount);
         if (n == 1)
         {
             Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
-            p.Launch(owner.transform.forward, damage, enemyLayers);
+            p.Launch(owner.transform.forward, finalDamage, enemyLayers);
             return;
         }
 
@@ -85,7 +88,7 @@ public class CrossbowWeapon : Weapon
             float angle = Mathf.Lerp(-half, half, t);
             Vector3 dir = Quaternion.AngleAxis(angle, Vector3.up) * owner.transform.forward;
             Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
-            p.Launch(dir, damage, enemyLayers);
+            p.Launch(dir, finalDamage, enemyLayers);
         }
     }
 

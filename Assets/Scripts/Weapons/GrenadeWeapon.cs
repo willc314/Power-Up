@@ -38,6 +38,11 @@ public class GrenadeWeapon : Weapon
 
         Grenade g = Instantiate(grenadePrefab, startPos, Quaternion.identity);
         g.radiusBonus = explosionRadiusBonus;
+        // Bake hero damage modifiers (general damage + crit) into the
+        // explosion's damage. The base value comes from the explosion prefab
+        // since that's where Grenade's actual AOE damage lives.
+        if (grenadePrefab.explosionPrefab != null)
+            g.damageOverride = owner.ComputeAttackDamage(grenadePrefab.explosionPrefab.damage);
         g.Launch(startPos, endPos, arcHeight, flightTime);
     }
 

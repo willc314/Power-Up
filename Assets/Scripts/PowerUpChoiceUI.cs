@@ -160,6 +160,11 @@ public class PowerUpChoiceUI : MonoBehaviour
         // translates that kind into its own appropriate stat change.
         BoostKind boostKind = Weapon.GetBoostKindForPickup(pendingType);
 
+        // What's in the OTHER slot? Used to gray out actions that would put
+        // the picked-up weapon next to a duplicate of itself.
+        Weapon otherSlotWeapon = (slotIndex == 0) ? hero.secondaryWeapon : hero.primaryWeapon;
+        bool otherHasSameType  = otherSlotWeapon != null && otherSlotWeapon.weaponType == pendingType;
+
         if (equipped == null)
         {
             // Empty slot: show placeholder + single Equip button.
@@ -179,13 +184,25 @@ public class PowerUpChoiceUI : MonoBehaviour
             slot.boostButtonGO.SetActive(false);
             slot.heroStatButtonGO.SetActive(false);
 
-            slot.equipButtonText.text = "Equip " + GetWeaponName(pendingType);
-            slot.equipButton.onClick.RemoveAllListeners();
-            slot.equipButton.onClick.AddListener(() =>
+            // Disallow equipping a duplicate of the weapon already in the
+            // other slot — keeps the loadout to two distinct weapons.
+            if (otherHasSameType)
             {
-                hero.EquipWeaponInSlot(slotIndex, pendingType);
-                Close();
-            });
+                slot.equipButtonText.text = "Already Equipped";
+                slot.equipButton.interactable = false;
+                slot.equipButton.onClick.RemoveAllListeners();
+            }
+            else
+            {
+                slot.equipButtonText.text = "Equip " + GetWeaponName(pendingType);
+                slot.equipButton.interactable = true;
+                slot.equipButton.onClick.RemoveAllListeners();
+                slot.equipButton.onClick.AddListener(() =>
+                {
+                    hero.EquipWeaponInSlot(slotIndex, pendingType);
+                    Close();
+                });
+            }
         }
         else
         {
@@ -229,19 +246,32 @@ public class PowerUpChoiceUI : MonoBehaviour
             }
 
             // Replace button — swap this slot's weapon for the picked-up one.
-            // If the slot already has the same type, replacing is a no-op so
-            // we gray the button out for clarity.
+            // Disabled if it would result in a no-op (same weapon already
+            // here) or a duplicate (the other slot already has it).
             bool sameType = equipped.weaponType == pendingType;
-            slot.replaceButtonText.text = sameType
-                ? "Already " + equipped.weaponName
-                : "Replace with " + GetWeaponName(pendingType);
-            slot.replaceButton.interactable = !sameType;
-            slot.replaceButton.onClick.RemoveAllListeners();
-            slot.replaceButton.onClick.AddListener(() =>
+            if (sameType)
             {
-                hero.ReplaceWeaponSlot(slotIndex == 0, pendingType);
-                Close();
-            });
+                slot.replaceButtonText.text = "Already " + equipped.weaponName;
+                slot.replaceButton.interactable = false;
+                slot.replaceButton.onClick.RemoveAllListeners();
+            }
+            else if (otherHasSameType)
+            {
+                slot.replaceButtonText.text = "Already Equipped";
+                slot.replaceButton.interactable = false;
+                slot.replaceButton.onClick.RemoveAllListeners();
+            }
+            else
+            {
+                slot.replaceButtonText.text = "Replace with " + GetWeaponName(pendingType);
+                slot.replaceButton.interactable = true;
+                slot.replaceButton.onClick.RemoveAllListeners();
+                slot.replaceButton.onClick.AddListener(() =>
+                {
+                    hero.ReplaceWeaponSlot(slotIndex == 0, pendingType);
+                    Close();
+                });
+            }
 
             // Boost button — apply the pickup-defined boost to THIS weapon.
             // When the weapon is past its cap the boost still applies, but at
@@ -511,7 +541,9 @@ public class PowerUpChoiceUI : MonoBehaviour
         colors.colorMultiplier = 1f;
         button.colors = colors;
 
-        // Label
+        // Label — wrap and auto-shrink so long boost descriptions (the bow's
+        // multi-effect Crossbow-pickup label in particular) fit inside the
+        // button instead of overflowing off the slot panel.
         GameObject labelGo = MakeUI("Label", go.transform);
         var labelRt = (RectTransform)labelGo.transform;
         labelRt.anchorMin = Vector2.zero;
@@ -523,7 +555,11 @@ public class PowerUpChoiceUI : MonoBehaviour
         label.fontSize = 20;
         label.color = textColor;
         label.alignment = TextAnchor.MiddleCenter;
-        label.horizontalOverflow = HorizontalWrapMode.Overflow;
+        label.horizontalOverflow = HorizontalWrapMode.Wrap;
+        label.verticalOverflow   = VerticalWrapMode.Truncate;
+        label.resizeTextForBestFit = true;
+        label.resizeTextMinSize = 10;
+        label.resizeTextMaxSize = 24;
         label.raycastTarget = false;
 
         return go;

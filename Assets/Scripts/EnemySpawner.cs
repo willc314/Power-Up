@@ -74,6 +74,12 @@ public class EnemySpawner : MonoBehaviour
     [Tooltip("Cap on the HP multiplier so regular enemies don't become unkillable.")]
     public float regularHpMaxMultiplier = 20f;
 
+    [Header("Powerup Drop Scaling")]
+    [Tooltip("Multiplier on each enemy's powerUpDropChance when the spawn rate is at startSpawnsPerSecond. Higher = more powerups early in the run.")]
+    public float dropChanceMulAtStart = 4f;
+    [Tooltip("Multiplier on each enemy's powerUpDropChance once the ramp reaches maxSpawnsPerSecond. Lower = fewer drops during peak waves so the player isn't spammed.")]
+    public float dropChanceMulAtPeak = 0.4f;
+
     [Header("Boss Spawn (SlimeKing etc.)")]
     [Tooltip("Seconds before the FIRST boss spawn. Lets the player ramp up before facing one.")]
     public float bossFirstSpawnDelay = 60f;
@@ -125,12 +131,25 @@ public class EnemySpawner : MonoBehaviour
     public bool debugLogs = true;
     public bool drawSpawnRings = true;
 
+    public static EnemySpawner Instance { get; private set; }
+
     private readonly List<Enemy> aliveEnemies = new List<Enemy>();
     private Transform enemyRoot;
     private float elapsedTime;
     private float spawnAccumulator;   // fractional spawns banked frame-to-frame
     private float bossSpawnTimer;     // counts down to the next boss
     private int   bossesSpawned;      // how many bosses have spawned this run
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this) { Destroy(this); return; }
+        Instance = this;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
 
     private void Start()
     {
@@ -221,6 +240,21 @@ public class EnemySpawner : MonoBehaviour
     {
         float baseMul = Mathf.Max(0.01f, bossHpMultiplierPerSpawn);
         return Mathf.Pow(baseMul, bossesSpawned + 1);
+    }
+
+    /// <summary>
+    /// Multiplier on each enemy's powerUpDropChance, lerped from
+    /// dropChanceMulAtStart down to dropChanceMulAtPeak over
+    /// timeToReachMaxSpawnRate seconds. The intent is to keep total
+    /// powerups-per-second roughly steady regardless of spawn rate: more
+    /// drops per kill early when kills are rare, fewer per kill later when
+    /// the screen is full of enemies.
+    /// </summary>
+    public float GetCurrentDropChanceMultiplier()
+    {
+        if (timeToReachMaxSpawnRate <= 0.01f) return dropChanceMulAtPeak;
+        float t01 = Mathf.Clamp01(elapsedTime / timeToReachMaxSpawnRate);
+        return Mathf.Lerp(dropChanceMulAtStart, dropChanceMulAtPeak, t01);
     }
 
     // ---------- Spawn ----------

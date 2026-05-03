@@ -2661,6 +2661,15 @@ MonoBehaviour:
   healthRegenPerSecond: 1
   healthRegenBoostAmount: 0.5
   maxHealthRegenPerSecond: 100
+  damageMultiplier: 1
+  damageBoostAmount: 0.15
+  maxDamageMultiplier: 5
+  critRate: 0
+  critRateBoostAmount: 0.05
+  maxCritRate: 0.6
+  critDamage: 2
+  critDamageBoostAmount: 0.25
+  maxCritDamage: 6
   primaryWeapon: {fileID: 0}
   secondaryWeapon: {fileID: 0}
   randomizeWeaponsOnSpawn: 1
@@ -2672,6 +2681,8 @@ MonoBehaviour:
   dashInterruptsWeapons: 1
   dashInvulnerability: 1
   dashInvulnerabilityExtension: 0.1
+  dashPhasesThroughEnemies: 1
+  enemyLayerName: Enemy
   dashParticles: 1
   dashParticlesPerSecond: 80
   dashParticleColor: {r: 0.65, g: 0.55, b: 0.42, a: 1}
@@ -2796,15 +2807,15 @@ MonoBehaviour:
   hudIconRotation: 0
   hudIconZoom: 1.2
   weaponType: 3
-  damage: 25
+  damage: 30
   cooldown: 0.5
   enemyLayers:
     serializedVersion: 2
-    m_Bits: 4294967295
+    m_Bits: 951
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
-  minCooldown: 0.08
+  minCooldown: 0.001
   cooldownReductionPerBoost: 0.04
   postMaxBoostScale: 0.5
   extraAttackCount: 0
@@ -2815,10 +2826,10 @@ MonoBehaviour:
   bowSpawnHeight: 1
   bowVisualRotationOffset: {x: 0, y: -90, z: 0}
   glowColor: {r: 1, g: 1, b: 1, a: 1}
-  emissionIntensity: 2.5
+  emissionIntensity: 2
   useGlowLight: 1
   maxLightIntensity: 6
-  maxLightRange: 5
+  maxLightRange: 4
   fullChargeTime: 1.5
   slowdownWhileCharging: 0.4
   minReleaseTime: 0.1
@@ -2832,17 +2843,20 @@ MonoBehaviour:
   deathBeamPrefab: {fileID: 4926047971536815124, guid: 5b65ab245209fd5468ad11d4e38a7460, type: 3}
   overchargeColor: {r: 1, g: 0.95, b: 0.7, a: 1}
   overchargeVfxPrefab: {fileID: 0}
-  maxDamageIncreasePerLevel: 10
-  minDamageIncreasePerLevel: 3
+  maxDamageIncreasePerLevel: 30
+  minDamageIncreasePerLevel: 4
   minFullChargeTime: 0.4
   chargeTimeReductionPerBoost: 0.15
   minOverchargeTime: 1.5
   overchargeReductionPerBoost: 0.5
+  arrowProjectileCount: 1
+  maxArrowProjectileCount: 100
+  arrowSpreadAngle: 10
   deathBeamDpsBonus: 0
-  deathBeamDpsPerBoost: 25
+  deathBeamDpsPerBoost: 50
   deathBeamRadiusBonus: 0
   deathBeamRadiusPerBoost: 0.4
-  maxDeathBeamRadiusBonus: 3
+  maxDeathBeamRadiusBonus: 4
 --- !u!114 &3670884374136682343
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2868,18 +2882,18 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
-  minCooldown: 0.08
+  minCooldown: 0.001
   cooldownReductionPerBoost: 0.04
   postMaxBoostScale: 0.5
   extraAttackCount: 0
-  maxExtraAttackCount: 4
+  maxExtraAttackCount: 100
   extraAttackDelay: 0.15
   arrowPrefab: {fileID: 4093347662047577129, guid: 328739536d0ead6479ec0b1d111290f5, type: 3}
   spawnDistance: 0.8
   spawnHeight: 1
   projectileCount: 1
-  maxProjectileCount: 7
-  spreadAngle: 30
+  maxProjectileCount: 100
+  spreadAngle: 15
   crossbowVisualPrefab: {fileID: 6721586060920507822, guid: 8e5012eaa9daab14aa5a36ff5fb52bad, type: 3}
   visualSpawnDistance: 0.8
   visualSpawnHeight: 1
@@ -2909,11 +2923,11 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
-  minCooldown: 0.08
-  cooldownReductionPerBoost: 0.1
+  minCooldown: 0.01
+  cooldownReductionPerBoost: 0.2
   postMaxBoostScale: 0.5
   extraAttackCount: 0
-  maxExtraAttackCount: 4
+  maxExtraAttackCount: 120
   extraAttackDelay: 0.15
   grenadePrefab: {fileID: 5172283616525916960, guid: dea83f823520fd74198a6bfcc72b73aa, type: 3}
   throwDistance: 6
@@ -2948,21 +2962,21 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
-  minCooldown: 0.01
-  cooldownReductionPerBoost: 0.06
-  postMaxBoostScale: 0.5
+  minCooldown: 0.001
+  cooldownReductionPerBoost: 0.05
+  postMaxBoostScale: 0.4
   extraAttackCount: 0
-  maxExtraAttackCount: 4
-  extraAttackDelay: 0.15
+  maxExtraAttackCount: 100
+  extraAttackDelay: 0.1
   stabPrefab: {fileID: 3891962484159435510, guid: 41913b50274a244418607f629adfd3c6, type: 3}
   stabStartDistance: 0.4
   stabSpawnHeight: 1
-  fallbackStabRange: 1.8
+  fallbackStabRange: 2
   fallbackStabRadius: 0.45
   fallbackStabHeight: 1.5
   debugFallbackHitbox: 1
   thrownDaggerPrefab: {fileID: 2748083729983195067, guid: a8850862a1d6ac1409c93899f9fdc7f7, type: 3}
-  thrownDamage: 20
+  thrownDamage: 30
   throwEveryNStabs: 4
   throwSpawnHeight: 1
 --- !u!1 &8206070634150816031

@@ -34,7 +34,10 @@ public class Hero : MonoBehaviour
         Random,
         MaxHP,
         MoveSpeed,
-        HealthRegen
+        HealthRegen,
+        DamageBoost,
+        CritRate,
+        CritDamage
     }
 
     [Header("Stats")]
@@ -66,6 +69,28 @@ public class Hero : MonoBehaviour
     [Tooltip("Cap on healthRegenPerSecond.")]
     public float maxHealthRegenPerSecond = 10f;
 
+    [Header("Damage Modifiers")]
+    [Tooltip("Multiplier applied to ALL weapon damage at attack time. 1 = no change.")]
+    public float damageMultiplier = 1f;
+    [Tooltip("How much damageMultiplier grows per Damage Boost. 0.15 = +15% per pickup.")]
+    public float damageBoostAmount = 0.15f;
+    [Tooltip("Cap on damageMultiplier.")]
+    public float maxDamageMultiplier = 5f;
+
+    [Tooltip("Probability (0..1) that an attack rolls a critical hit, multiplying damage by critDamage.")]
+    [Range(0f, 1f)] public float critRate = 0f;
+    [Tooltip("How much critRate grows per Crit Rate boost. 0.05 = +5% per pickup.")]
+    public float critRateBoostAmount = 0.05f;
+    [Tooltip("Cap on critRate.")]
+    [Range(0f, 1f)] public float maxCritRate = 0.6f;
+
+    [Tooltip("Damage multiplier applied on a critical hit. 2 = double damage on crits.")]
+    public float critDamage = 2f;
+    [Tooltip("How much critDamage grows per Crit Damage boost.")]
+    public float critDamageBoostAmount = 0.25f;
+    [Tooltip("Cap on critDamage.")]
+    public float maxCritDamage = 6f;
+
     [Header("Active Weapons")]
     [Tooltip("Fired on left click. Drag a Weapon component (e.g. SwordWeapon) here. Overwritten on spawn if 'Randomize Weapons On Spawn' is on.")]
     public Weapon primaryWeapon;
@@ -95,6 +120,8 @@ public class Hero : MonoBehaviour
     public bool dashPhasesThroughEnemies = true;
     [Tooltip("Layer name enemies live on. Used to selectively ignore collision with the hero during dash. Leave 'Enemy' unless your project uses a different name.")]
     public string enemyLayerName = "Enemy";
+    [Tooltip("Distance to keep from the arena edge during a dash. Prevents tunneling through the boundary wall when the dash speed would carry the hero past it in one physics tick.")]
+    public float dashArenaEdgeMargin = 0.5f;
 
     [Header("Dash Particles")]
     [Tooltip("Spawn dust particles flying behind the hero during the dash.")]
@@ -191,6 +218,7 @@ public class Hero : MonoBehaviour
     private float invulnerabilityTimer;
     private int   cachedEnemyLayer = -1;
     private bool  enemyCollisionIgnored;
+    private ArenaGenerator cachedArena;
     public bool IsDashing => dashTimer > 0f;
 
     /// <summary>
@@ -217,6 +245,10 @@ public class Hero : MonoBehaviour
         cachedEnemyLayer = LayerMask.NameToLayer(enemyLayerName);
         if (cachedEnemyLayer < 0 && dashPhasesThroughEnemies)
             Debug.LogWarning("[Hero] dashPhasesThroughEnemies is on but layer '" + enemyLayerName + "' doesn't exist; phase-through will be a no-op.");
+
+        // Cache the arena so the dash can clamp inside its bounds rather
+        // than tunneling through the wall colliders at high speed.
+        cachedArena = FindObjectOfType<ArenaGenerator>();
 
         CacheWeaponComponents();
         ConfigureWeaponTypes();
@@ -319,7 +351,20 @@ public class Hero : MonoBehaviour
         {
             dashTimer -= Time.fixedDeltaTime;
             Vector3 step = dashDirection * dashSpeed * Time.fixedDeltaTime;
-            rb.MovePosition(rb.position + step);
+            Vector3 target = rb.position + step;
+
+            // Clamp to arena bounds so the dash can't tunnel past the wall
+            // colliders at high speed. Wall colliders still handle normal
+            // movement; this is a safety net specifically for the dash.
+            if (cachedArena == null) cachedArena = FindObjectOfType<ArenaGenerator>();
+            if (cachedArena != null)
+            {
+                float half = cachedArena.arenaSize * 0.5f - dashArenaEdgeMargin;
+                target.x = Mathf.Clamp(target.x, -half, half);
+                target.z = Mathf.Clamp(target.z, -half, half);
+            }
+
+            rb.MovePosition(target);
             EmitDashParticles();
             if (dashTimer <= 0f)
             {
@@ -736,21 +781,21 @@ public class Hero : MonoBehaviour
 
     /// <summary>
     /// Picks a non-Random hero stat to boost using the existing
-    /// maxedWeaponBoostMode setting. If that's Random, picks one of MaxHP /
-    /// MoveSpeed / HealthRegen at random, biasing away from any stat that's
-    /// already at its cap.
+    /// maxedWeaponBoostMode setting. If that's Random, picks from the full
+    /// stat pool at random, excluding any stat that's already at its cap.
     /// </summary>
     public HeroStatBoostMode RollHeroStatBoost()
     {
         if (maxedWeaponBoostMode != HeroStatBoostMode.Random)
             return maxedWeaponBoostMode;
 
-        // Build the list of un-capped candidates, fall back to all-three if
-        // somehow everything is capped (shouldn't happen in normal play).
         var candidates = new System.Collections.Generic.List<HeroStatBoostMode>();
         candidates.Add(HeroStatBoostMode.MaxHP); // MaxHP has no hard cap.
-        if (moveSpeed           < maxMoveSpeed - 0.001f)         candidates.Add(HeroStatBoostMode.MoveSpeed);
-        if (healthRegenPerSecond < maxHealthRegenPerSecond - 0.001f) candidates.Add(HeroStatBoostMode.HealthRegen);
+        if (moveSpeed             < maxMoveSpeed - 0.001f)             candidates.Add(HeroStatBoostMode.MoveSpeed);
+        if (healthRegenPerSecond  < maxHealthRegenPerSecond - 0.001f)  candidates.Add(HeroStatBoostMode.HealthRegen);
+        if (damageMultiplier      < maxDamageMultiplier - 0.001f)      candidates.Add(HeroStatBoostMode.DamageBoost);
+        if (critRate              < maxCritRate - 0.001f)              candidates.Add(HeroStatBoostMode.CritRate);
+        if (critDamage            < maxCritDamage - 0.001f)            candidates.Add(HeroStatBoostMode.CritDamage);
         return candidates[Random.Range(0, candidates.Count)];
     }
 
@@ -761,14 +806,32 @@ public class Hero : MonoBehaviour
         {
             case HeroStatBoostMode.MaxHP:
                 return $"+{maxHPBoostAmount:0.#} Max HP";
+
             case HeroStatBoostMode.MoveSpeed:
                 if (moveSpeed >= maxMoveSpeed - 0.001f) return "Move Speed Maxed";
                 float speedDelta = Mathf.Min(maxMoveSpeed, moveSpeed + moveSpeedBoostAmount) - moveSpeed;
                 return $"+{speedDelta:0.##} Move Speed";
+
             case HeroStatBoostMode.HealthRegen:
                 if (healthRegenPerSecond >= maxHealthRegenPerSecond - 0.001f) return "Regen Maxed";
                 float regenDelta = Mathf.Min(maxHealthRegenPerSecond, healthRegenPerSecond + healthRegenBoostAmount) - healthRegenPerSecond;
                 return $"+{regenDelta:0.##} HP/sec";
+
+            case HeroStatBoostMode.DamageBoost:
+                if (damageMultiplier >= maxDamageMultiplier - 0.001f) return "Damage Maxed";
+                float dmgDelta = Mathf.Min(maxDamageMultiplier, damageMultiplier + damageBoostAmount) - damageMultiplier;
+                return $"+{dmgDelta * 100f:0}% Damage";
+
+            case HeroStatBoostMode.CritRate:
+                if (critRate >= maxCritRate - 0.001f) return "Crit Rate Maxed";
+                float crDelta = Mathf.Min(maxCritRate, critRate + critRateBoostAmount) - critRate;
+                return $"+{crDelta * 100f:0}% Crit Rate";
+
+            case HeroStatBoostMode.CritDamage:
+                if (critDamage >= maxCritDamage - 0.001f) return "Crit Damage Maxed";
+                float cdDelta = Mathf.Min(maxCritDamage, critDamage + critDamageBoostAmount) - critDamage;
+                return $"+{cdDelta:0.##}× Crit Damage";
+
             default:
                 return "+Stat";
         }
@@ -795,7 +858,37 @@ public class Hero : MonoBehaviour
                     healthRegenPerSecond + healthRegenBoostAmount);
                 Debug.Log("Hero health regen increased to " + healthRegenPerSecond + " HP/sec.");
                 break;
+
+            case HeroStatBoostMode.DamageBoost:
+                damageMultiplier = Mathf.Min(maxDamageMultiplier, damageMultiplier + damageBoostAmount);
+                Debug.Log("Hero damage multiplier is now " + damageMultiplier + "×.");
+                break;
+
+            case HeroStatBoostMode.CritRate:
+                critRate = Mathf.Min(maxCritRate, critRate + critRateBoostAmount);
+                Debug.Log("Hero crit rate is now " + (critRate * 100f) + "%.");
+                break;
+
+            case HeroStatBoostMode.CritDamage:
+                critDamage = Mathf.Min(maxCritDamage, critDamage + critDamageBoostAmount);
+                Debug.Log("Hero crit damage is now " + critDamage + "×.");
+                break;
         }
+    }
+
+    /// <summary>
+    /// Apply Hero damage modifiers to a base damage value: multiplies by
+    /// damageMultiplier and rolls a critRate-chance critical hit
+    /// (multiplying again by critDamage on success). Each weapon's Fire
+    /// calls this once per attack so all hits in that attack consistently
+    /// crit (or don't).
+    /// </summary>
+    public float ComputeAttackDamage(float baseDamage)
+    {
+        float dmg = baseDamage * Mathf.Max(0f, damageMultiplier);
+        if (critRate > 0f && Random.value < critRate)
+            dmg *= Mathf.Max(1f, critDamage);
+        return dmg;
     }
 
     /// <summary>Backward-compatible no-arg overload: rolls a random stat (respecting maxedWeaponBoostMode).</summary>

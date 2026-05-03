@@ -29,6 +29,13 @@ public class Grenade : MonoBehaviour
     /// </summary>
     [System.NonSerialized] public float radiusBonus = 0f;
 
+    /// <summary>
+    /// Final explosion damage to use, after the GrenadeWeapon has applied
+    /// hero damage modifiers (general damage + crit roll). Set to 0 or below
+    /// to keep the Explosion prefab's own damage value.
+    /// </summary>
+    [System.NonSerialized] public float damageOverride = 0f;
+
     public void Launch(Vector3 startPos, Vector3 endPos, float arcHeight, float flightTime)
     {
         this.startPos = startPos;
@@ -62,6 +69,8 @@ public class Grenade : MonoBehaviour
             Explosion ex = Instantiate(explosionPrefab, transform.position, Quaternion.identity);
             // Apply the upgrade-driven radius bonus before the AOE damage pass.
             if (radiusBonus > 0f) ex.radius += radiusBonus;
+            // Hero damage modifiers are baked into damageOverride by GrenadeWeapon.
+            if (damageOverride > 0f) ex.damage = damageOverride;
             ex.Detonate();
         }
         Destroy(gameObject);

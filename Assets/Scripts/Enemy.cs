@@ -976,7 +976,16 @@ public class Enemy : MonoBehaviour
     private void TryDropPowerUp()
     {
         if (powerUpPrefab == null) return;
-        if (Random.value > powerUpDropChance) return;
+
+        // Scale the drop chance by the spawner's current multiplier so the
+        // player gets generous drops early (when kills are rare) and fewer
+        // drops per kill once spawn rates ramp up — net powerups per second
+        // stays roughly steady throughout the run.
+        float chance = powerUpDropChance;
+        if (EnemySpawner.Instance != null)
+            chance = Mathf.Clamp01(chance * EnemySpawner.Instance.GetCurrentDropChanceMultiplier());
+
+        if (Random.value > chance) return;
 
         eWeaponType dropType = PickRandomPowerUpType();
         if (dropType == eWeaponType.none) return;

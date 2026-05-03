@@ -28,11 +28,12 @@ public class ShieldWeapon : Weapon
                          + Vector3.up * spawnHeight;
 
         ShieldThrow shield = Instantiate(shieldPrefab, spawnPos, owner.transform.rotation);
-        shield.Init(owner.transform, damage, enemyLayers, owner.transform.forward);
+        // Apply hero damage multipliers + crit roll (one roll per throw).
+        shield.Init(owner.transform, owner.ComputeAttackDamage(damage), enemyLayers, owner.transform.forward);
     }
 
     // Crossbow pickup → Projectiles boost. On the Shield, this chains an
-    // extra throw after extraAttackDelay seconds — they boomerang back
+    // extra throw spread across the cooldown — they boomerang back
     // independently so multiple shields can be in flight at once.
     public override bool IsBoostMaxed(BoostKind kind)
     {

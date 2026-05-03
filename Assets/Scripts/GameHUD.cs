@@ -54,6 +54,8 @@ public class GameHUD : MonoBehaviour
     private Canvas canvas;
     private Text timerText;
     private Text scoreText;
+    private Text highScoreText;
+    private Text newHighScoreText;
     private RectTransform healthFillRect;
     private Image healthFillImg;
     private Text healthText;
@@ -111,8 +113,27 @@ public class GameHUD : MonoBehaviour
     private void UpdateScore()
     {
         if (scoreText == null) return;
-        int s = gameManager != null ? gameManager.Score : 0;
+        int s  = gameManager != null ? gameManager.Score     : 0;
+        int hs = gameManager != null ? gameManager.HighScore : 0;
         scoreText.text = "Score  " + s.ToString();
+
+        if (highScoreText != null) highScoreText.text = "Best   " + hs.ToString();
+
+        if (newHighScoreText != null && gameManager != null)
+        {
+            bool show = gameManager.NewHighScoreThisRun;
+            if (newHighScoreText.gameObject.activeSelf != show)
+                newHighScoreText.gameObject.SetActive(show);
+
+            if (show)
+            {
+                // Gentle pulse so the player can't miss it.
+                float pulse = 0.85f + 0.15f * (Mathf.Sin(Time.unscaledTime * 4.5f) * 0.5f + 0.5f);
+                Color c = newHighScoreText.color;
+                c.a = pulse;
+                newHighScoreText.color = c;
+            }
+        }
     }
 
     private void UpdateHealth()
@@ -227,6 +248,7 @@ public class GameHUD : MonoBehaviour
 
     private void BuildScore(Transform parent)
     {
+        // -------- Current score (large, top of stack) --------
         GameObject go = MakeUIObject("Score", parent);
         RectTransform rt = (RectTransform)go.transform;
         AnchorTopRight(rt, margin, margin, 360, 60);
@@ -242,6 +264,40 @@ public class GameHUD : MonoBehaviour
         scoreText.text = "Score  0";
 
         AddTextOutline(go);
+
+        // -------- High score (smaller, sits under the score) --------
+        GameObject hsGo = MakeUIObject("HighScore", parent);
+        RectTransform hsRt = (RectTransform)hsGo.transform;
+        AnchorTopRight(hsRt, margin, margin + scoreFontSize + 6, 360, 36);
+
+        highScoreText = hsGo.AddComponent<Text>();
+        highScoreText.font = defaultFont;
+        highScoreText.fontSize = Mathf.Max(16, scoreFontSize - 14);
+        highScoreText.color = new Color(textColor.r, textColor.g, textColor.b, 0.7f);
+        highScoreText.alignment = TextAnchor.UpperRight;
+        highScoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        highScoreText.verticalOverflow = VerticalWrapMode.Overflow;
+        highScoreText.raycastTarget = false;
+        highScoreText.text = "Best  0";
+        AddTextOutline(hsGo);
+
+        // -------- "NEW HIGH SCORE!" banner (gold, pulses, hidden until earned) --------
+        GameObject nhGo = MakeUIObject("NewHighScore", parent);
+        RectTransform nhRt = (RectTransform)nhGo.transform;
+        AnchorTopRight(nhRt, margin, margin + scoreFontSize + 6 + 38, 420, 38);
+
+        newHighScoreText = nhGo.AddComponent<Text>();
+        newHighScoreText.font = defaultFont;
+        newHighScoreText.fontSize = Mathf.Max(18, scoreFontSize - 12);
+        newHighScoreText.color = new Color(1f, 0.85f, 0.2f);
+        newHighScoreText.alignment = TextAnchor.UpperRight;
+        newHighScoreText.fontStyle = FontStyle.Bold;
+        newHighScoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        newHighScoreText.verticalOverflow = VerticalWrapMode.Overflow;
+        newHighScoreText.raycastTarget = false;
+        newHighScoreText.text = "★ NEW HIGH SCORE!";
+        AddTextOutline(nhGo);
+        nhGo.SetActive(false); // hidden until the player surpasses their previous best
     }
 
     private void BuildHealth(Transform parent)

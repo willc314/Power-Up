@@ -97,20 +97,20 @@ public abstract class Weapon : MonoBehaviour
     [Header("Attack-Speed Boost")]
     [Tooltip("Floor for cooldown when applying AttackSpeed boosts.")]
     public float minCooldown = 0.08f;
-    [Tooltip("How much cooldown shrinks per AttackSpeed boost (seconds).")]
-    public float cooldownReductionPerBoost = 0.04f;
+    [Tooltip("Attack speed gained per AttackSpeed boost, as a fraction. 0.15 = +15% attack speed per pickup (cooldown shrinks accordingly, with diminishing returns as it approaches minCooldown).")]
+    [Range(0f, 1f)] public float attackSpeedIncreasePercent = 0.15f;
 
     [Header("Post-Max Scaling")]
     [Tooltip("After the weapon hits its main cap, further boosts still apply but at this fraction of normal strength. 0.5 = half-strength, forever.")]
     [Range(0f, 1f)] public float postMaxBoostScale = 0.5f;
 
     [Header("Extra Attacks (Projectile boost on melee/thrown)")]
-    [Tooltip("How many extra Fire() calls happen after each successful TryFire, spaced by extraAttackDelay seconds. Bumped by the Projectiles boost on Sword/Shield/Dagger/Grenade.")]
+    [Tooltip("How many extra Fire() calls happen after each successful TryFire. Spacing is derived from cooldown so all extras complete before the next normal attack. Bumped by the Projectiles boost on Sword/Shield/Dagger/Grenade.")]
     public int extraAttackCount = 0;
     [Tooltip("Cap on extraAttackCount. Past this, Projectiles boosts fall back to scaled damage.")]
     public int maxExtraAttackCount = 4;
-    [Tooltip("Seconds between each extra attack.")]
-    public float extraAttackDelay = 0.15f;
+    [Tooltip("Lower bound on the time between extra attacks. Used when cooldown / (extraAttackCount + 1) would otherwise be too small to be visible.")]
+    public float extraAttackMinSpacing = 0.05f;
 
     // ---- Boost API ----
     // The picked-up weapon defines a BoostKind. The chosen slot's weapon
@@ -170,7 +170,8 @@ public abstract class Weapon : MonoBehaviour
                     return $"+{damageIncreasePerLevel * scale:0.#} Damage";
                 }
                 float cur = Mathf.Max(minCooldown, cooldown);
-                float nxt = Mathf.Max(minCooldown, cooldown - cooldownReductionPerBoost * scale);
+                // % attack speed → cooldown shrinks by 1/(1+pct).
+                float nxt = Mathf.Max(minCooldown, cooldown / (1f + attackSpeedIncreasePercent * scale));
                 if (nxt >= cur) return "Attack Speed Maxed";
                 return $"+{(cur / nxt - 1f) * 100f:0}% Attack Speed";
 
@@ -197,7 +198,10 @@ public abstract class Weapon : MonoBehaviour
                     damageLevel++;
                     return true;
                 }
-                cooldown = Mathf.Max(minCooldown, cooldown - cooldownReductionPerBoost * scale);
+                // % reduction in cooldown → cooldown / (1 + pct). After enough
+                // boosts the floor takes over (Mathf.Max), giving diminishing
+                // returns as attack speed approaches the cap.
+                cooldown = Mathf.Max(minCooldown, cooldown / (1f + attackSpeedIncreasePercent * scale));
                 return true;
 
             default:
@@ -259,11 +263,7 @@ public abstract class Weapon : MonoBehaviour
             return false;
 
         Fire(owner);
-
-        // Cooldown extends to cover any scheduled extra attacks so the player
-        // can't queue overlapping waves by holding the fire button.
-        float extrasDuration = extraAttackCount * extraAttackDelay;
-        cooldownTimer = cooldown + extrasDuration;
+        cooldownTimer = cooldown;
 
         if (extraAttackCount > 0)
             StartCoroutine(FireExtras(owner));
@@ -272,18 +272,27 @@ public abstract class Weapon : MonoBehaviour
     }
 
     /// <summary>
-    /// Coroutine that fires extraAttackCount additional Fire(owner) calls,
-    /// spaced by extraAttackDelay seconds. Used by the Projectiles boost on
-    /// melee/thrown weapons (Sword, Shield, Dagger, Grenade) to chain a
-    /// follow-up attack after the initial one.
+    /// Coroutine that fires extraAttackCount additional Fire(owner) calls
+    /// evenly spread across the weapon's cooldown so that all of them
+    /// complete before the next normal attack is allowed. Spacing is derived
+    /// from the current cooldown — faster weapons fire their extras faster.
     /// </summary>
     private IEnumerator FireExtras(Hero owner)
     {
-        // Snapshot the count so a boost taken mid-sequence doesn't extend it.
+        // Snapshot count + cooldown so live mutations during the sequence
+        // (a boost picked up mid-run, etc.) don't change the schedule.
         int n = extraAttackCount;
+        float window = cooldown;
+        // Spread N extras over the cooldown: spacing = window / (N + 1) puts
+        // the last extra at N*window/(N+1) < window, so the next normal Fire
+        // can fire on schedule without overlap.
+        float spacing = window > 0f
+            ? Mathf.Max(extraAttackMinSpacing, window / (n + 1))
+            : Mathf.Max(extraAttackMinSpacing, 0.1f);
+
         for (int i = 0; i < n; i++)
         {
-            yield return new WaitForSeconds(extraAttackDelay);
+            yield return new WaitForSeconds(spacing);
             // Bail out if anything has gone away mid-sequence.
             if (this == null || owner == null || owner.IsDead) yield break;
             Fire(owner);

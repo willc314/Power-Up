@@ -506,7 +506,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   behavior: 5
-  maxHP: 500
+  maxHP: 750
   attackDamage: 12
   moveSpeed: 1.2
   attackRange: 1.4
@@ -570,7 +570,7 @@ MonoBehaviour:
   skSpeedBoostDuration: 4
   skShieldHits: 3
   skAttackSpeedBoostMultiplier: 0.1
-  skAttackSpeedBoostDuration: 8
+  skAttackSpeedBoostDuration: 7
   skKiteRange: 7
   splitOnDeath: 1
   splitPrefab: {fileID: 1931298151966786, guid: 928a1377c1cd4515b208fef3a396b8ea, type: 3}
@@ -614,6 +614,7 @@ MonoBehaviour:
   attackClip: Attack01
   hitClip: GetHit
   dieClip: Die
+  victoryClip: Victory
   walkVelocityThreshold: 0.1
   crossfadeDuration: 0.15
 --- !u!1 &9195813814562645754

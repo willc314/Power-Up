@@ -60,11 +60,10 @@ public class DaggerWeapon : Weapon
 
     // Boost behavior:
     //   * AttackSpeed (Dagger pickup) is fully handled by the base Weapon
-    //     class via minCooldown / cooldownReductionPerBoost.
-    //   * Projectiles (Crossbow pickup) chains an extra stab/throw after
-    //     extraAttackDelay seconds. Because Fire() increments stabCount on
-    //     every call, those follow-ups participate in the every-Nth-throw
-    //     logic too.
+    //     class via minCooldown + attackSpeedIncreasePercent (% per boost).
+    //   * Projectiles (Crossbow pickup) chains extra stabs/throws spread
+    //     across the cooldown. Because Fire() increments stabCount on every
+    //     call, those follow-ups participate in the every-Nth-throw logic too.
 
     public override bool IsBoostMaxed(BoostKind kind)
     {
@@ -140,7 +139,8 @@ public class DaggerWeapon : Weapon
                           + Vector3.up * stabSpawnHeight;
 
             DaggerStab stab = Instantiate(stabPrefab, spawn, owner.transform.rotation, owner.transform);
-            stab.Init(owner.transform, damage, enemyLayers, stabStartDistance);
+            // One crit roll per stab so all hits from this thrust crit (or don't) together.
+            stab.Init(owner.transform, owner.ComputeAttackDamage(damage), enemyLayers, stabStartDistance);
             return;
         }
 
@@ -155,7 +155,8 @@ public class DaggerWeapon : Weapon
                       + Vector3.up * throwSpawnHeight;
 
         Projectile p = Instantiate(thrownDaggerPrefab, spawn, Quaternion.identity);
-        p.Launch(owner.transform.forward, thrownDamage, enemyLayers);
+        // One crit roll per throw.
+        p.Launch(owner.transform.forward, owner.ComputeAttackDamage(thrownDamage), enemyLayers);
     }
 
     private void FallbackStabDamage(Hero owner)
@@ -172,12 +173,15 @@ public class DaggerWeapon : Weapon
             QueryTriggerInteraction.Collide
         );
 
+        // One crit roll for the whole fallback hit (matches the with-prefab path).
+        float finalDamage = owner.ComputeAttackDamage(damage);
+
         for (int i = 0; i < n; i++)
         {
             Enemy enemy = fallbackHitBuffer[i].GetComponentInParent<Enemy>();
 
             if (enemy != null)
-                enemy.TakeDamage(damage);
+                enemy.TakeDamage(finalDamage);
         }
 
         if (debugFallbackHitbox)

@@ -18,8 +18,8 @@ public class SwordWeapon : Weapon
     // Toggles each fire so successive swings come from opposite sides.
     private bool nextSwingRightToLeft = false;
 
-    // Crossbow pickup → Projectiles boost. On a Sword, this chains an extra
-    // slash after extraAttackDelay seconds (the alternating-arc logic in
+    // Crossbow pickup → Projectiles boost. On a Sword, this chains extra
+    // slashes spread across the cooldown (the alternating-arc logic in
     // Fire() makes those extras swing from the opposite side automatically).
     public override bool IsBoostMaxed(BoostKind kind)
     {
@@ -68,7 +68,8 @@ public class SwordWeapon : Weapon
 
         // Parent to the owner so the slash follows the hero's facing while it sweeps.
         SwordSlash slash = Instantiate(slashPrefab, spawnPos, owner.transform.rotation, owner.transform);
-        slash.Init(owner.transform, damage, enemyLayers, nextSwingRightToLeft);
+        // Apply hero damage multipliers + roll one crit for the whole swing.
+        slash.Init(owner.transform, owner.ComputeAttackDamage(damage), enemyLayers, nextSwingRightToLeft);
         nextSwingRightToLeft = !nextSwingRightToLeft;
     }
 }

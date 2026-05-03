@@ -1134,9 +1134,11 @@ MonoBehaviour:
   startSpawnsPerSecond: 0.5
   maxSpawnsPerSecond: 12
   timeToReachMaxSpawnRate: 600
-  spawnRateRampPower: 2
+  spawnRateRampPower: 1.6
   regularHpBonusPerMinute: 2
   regularHpMaxMultiplier: 2000
+  dropChanceMulAtStart: 2
+  dropChanceMulAtPeak: 0.4
   bossFirstSpawnDelay: 60
   bossSpawnInterval: 60
   bossHpMultiplierPerSpawn: 3
@@ -1675,10 +1677,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   pointsPerKill: 10
+  pointsPerBossKill: 50
   pointsPerSecond: 1
   stopTimerOnDeath: 1
   elapsedTime: 0
   kills: 0
+  bossKills: 0
 --- !u!4 &2054455414
 Transform:
   m_ObjectHideFlags: 0
