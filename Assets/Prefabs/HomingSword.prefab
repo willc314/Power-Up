@@ -148,10 +148,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6f1881b9b321cfe4ea6960e26e258fa8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  speed: 8
+  speed: 6
   lifetime: 3
   homing: 1
-  turnSpeed: 80
+  turnSpeed: 60
   homingDuration: 2
   homingMaxRange: 15
   homingAimHeight: 0.5

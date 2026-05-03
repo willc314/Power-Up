@@ -52,6 +52,14 @@ public class CrossbowWeapon : Weapon
         return false;
     }
 
+    public override void OnInterrupted(Hero owner)
+    {
+        // Hero calls this when something cancels the player's input mid-hold
+        // (e.g. dashing, opening the powerup choice panel). Without this, the
+        // crossbow visual would stay parented in front of the hero.
+        DespawnVisual();
+    }
+
     protected override void Fire(Hero owner)
     {
         if (arrowPrefab == null) { Debug.LogWarning("CrossbowWeapon: Arrow Prefab not assigned."); return; }
@@ -91,7 +99,13 @@ public class CrossbowWeapon : Weapon
 
     public override string DescribeBoost(BoostKind kind)
     {
-        if (kind == BoostKind.Projectiles) return "+1 Projectile";
+        if (kind == BoostKind.Projectiles)
+        {
+            // At hard projectile cap, post-max boosts fall back to scaled damage.
+            if (IsBoostMaxed(BoostKind.Projectiles))
+                return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
+            return "+1 Projectile";
+        }
         return base.DescribeBoost(kind);
     }
 
@@ -99,7 +113,13 @@ public class CrossbowWeapon : Weapon
     {
         if (kind == BoostKind.Projectiles)
         {
-            if (IsBoostMaxed(BoostKind.Projectiles)) return false;
+            if (IsBoostMaxed(BoostKind.Projectiles))
+            {
+                // At max projectiles — keep boosts useful as scaled damage.
+                damage     += damageIncreasePerLevel * postMaxBoostScale;
+                damageLevel++;
+                return true;
+            }
             projectileCount++;
             return true;
         }

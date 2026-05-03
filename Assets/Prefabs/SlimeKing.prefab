@@ -505,15 +505,22 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   behavior: 5
-  maxHP: 200
-  attackDamage: 8
+  maxHP: 500
+  attackDamage: 12
   moveSpeed: 1.2
   attackRange: 1.4
   attackCooldown: 1
   aggroRange: 60
-  debugShowHealth: 1
+  showHealthBar: 1
+  healthBarHeight: 1.8
+  healthBarSize: {x: 0.9, y: 0.12}
+  bossHealthBarSize: {x: 2.6, y: 0.32}
+  bossShowHpText: 1
+  healthBarColor: {r: 0.85, g: 0.2, b: 0.2, a: 1}
+  healthBarBgColor: {r: 0, g: 0, b: 0, a: 0.7}
+  debugShowHealth: 0
   debugLabelHeight: 2.5
-  powerUpPrefab: {fileID: 0}
+  powerUpPrefab: {fileID: 5873131192069686212, guid: 2cb7ec1c1ebc3534bbc753a4c279d9b4, type: 3}
   powerUpDropChance: 1
   dropAllWeaponPowerUps: 1
   possiblePowerUpTypes: 010000000200000003000000040000000500000006000000
@@ -533,9 +540,9 @@ MonoBehaviour:
   hitParticleLifetime: 0.5
   hitParticleSpread: 35
   hitParticleHeight: 1
-  dashSpeedMultiplier: 3
-  dashTelegraphTime: 0.6
-  dashDuration: 0.4
+  dashSpeedMultiplier: 6
+  dashTelegraphTime: 0.8
+  dashDuration: 0.3
   dashRecovery: 1.2
   crossbowProjectile: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
   crossbowDamage: 40
@@ -550,23 +557,23 @@ MonoBehaviour:
   crossbowAimMaxRange: 30
   crossbowAttackCooldown: 4
   skRangedDuration: 12
-  skMeleeDuration: 8
+  skMeleeDuration: 4
   skJumpDuration: 1
   skJumpArcHeight: 8
   skRetreatJumpDistance: 12
   skMeleeSpeed: 4
   skMeleeRange: 1.6
-  skMeleeDamage: 18
+  skMeleeDamage: 30
   skMeleeCooldown: 0.9
   skSpeedBoostMultiplier: 1.8
   skSpeedBoostDuration: 4
-  skShieldHits: 2
-  skAttackSpeedBoostMultiplier: 0.5
-  skAttackSpeedBoostDuration: 6
+  skShieldHits: 3
+  skAttackSpeedBoostMultiplier: 0.1
+  skAttackSpeedBoostDuration: 8
   skKiteRange: 7
   splitOnDeath: 1
   splitPrefab: {fileID: 1931298151966786, guid: 928a1377c1cd4515b208fef3a396b8ea, type: 3}
-  splitCount: 5
+  splitCount: 10
   splitRadius: 1.6
   projectilePrefab: {fileID: 0}
   projectileSpawn: {fileID: 0}

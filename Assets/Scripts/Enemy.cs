@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// Single enemy controller used by all enemy prefabs.
@@ -47,10 +48,26 @@ public class Enemy : MonoBehaviour
     [Tooltip("Maximum distance at which the enemy notices the player. 0 = always.")]
     public float aggroRange = 25f;
 
+    [Header("Health Bar")]
+    [Tooltip("Show a small world-space health bar above this enemy (and a bigger one with HP text on bosses).")]
+    public bool showHealthBar = true;
+    [Tooltip("Height above the enemy's pivot where the health bar sits (world units).")]
+    public float healthBarHeight = 2.2f;
+    [Tooltip("Size of the regular-enemy health bar in world units (width × height).")]
+    public Vector2 healthBarSize = new Vector2(0.9f, 0.12f);
+    [Tooltip("Size of the boss health bar in world units (width × height). Used when behavior = SlimeKing.")]
+    public Vector2 bossHealthBarSize = new Vector2(2.6f, 0.32f);
+    [Tooltip("Show numeric current/max HP inside the health bar. Recommended for bosses, off for regulars.")]
+    public bool bossShowHpText = true;
+    [Tooltip("Color of the bar fill at full health.")]
+    public Color healthBarColor = new Color(0.85f, 0.2f, 0.2f, 1f);
+    [Tooltip("Color of the bar background.")]
+    public Color healthBarBgColor = new Color(0f, 0f, 0f, 0.7f);
+
     [Header("Debug")]
-    [Tooltip("If true, shows current HP as a small label above the enemy in both Scene and Game view. Useful for tuning weapon damage.")]
-    public bool debugShowHealth = true;
-    [Tooltip("How far above the enemy's pivot the HP label sits.")]
+    [Tooltip("If true, shows current HP as a small text label above the enemy via OnGUI. Off by default — the world-space health bar replaces it.")]
+    public bool debugShowHealth = false;
+    [Tooltip("How far above the enemy's pivot the OnGUI debug label sits.")]
     public float debugLabelHeight = 2.5f;
 
     [Header("Powerup Drop")]
@@ -238,6 +255,19 @@ public class Enemy : MonoBehaviour
     public float MaxHP => maxHP;
     public bool IsDead { get; private set; }
 
+    /// <summary>
+    /// Multiply this enemy's max HP and current HP by <paramref name="multiplier"/>.
+    /// Call right after Instantiate so the spawner can scale HP with elapsed
+    /// game time. Awake() runs synchronously inside Instantiate and sets
+    /// currentHP = maxHP, so multiplying both here keeps them in sync.
+    /// </summary>
+    public void ScaleHP(float multiplier)
+    {
+        if (multiplier <= 0f) return;
+        maxHP     *= multiplier;
+        currentHP *= multiplier;
+    }
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
@@ -261,6 +291,135 @@ public class Enemy : MonoBehaviour
             telegraphLine.receiveShadows = false;
             telegraphLine.enabled = false;
         }
+
+        if (showHealthBar) BuildHealthBar();
+    }
+
+    // -------------------- Health bar (world-space, billboarded) --------------------
+
+    private Transform healthBarRoot;
+    private Image healthBarFill;
+    private Text healthBarText;
+    private float healthBarMaxWidthPx;
+
+    private void BuildHealthBar()
+    {
+        bool isBoss = behavior == Behavior.SlimeKing;
+        Vector2 sizeWorld = isBoss ? bossHealthBarSize : healthBarSize;
+        // Use a fixed-pixel canvas scaled down so 1 px = 0.01 world unit.
+        // That keeps font rendering crisp regardless of how big the bar is.
+        const float worldPerPixel = 0.01f;
+        Vector2 sizePx = sizeWorld / worldPerPixel;
+
+        GameObject canvasGo = new GameObject("HealthBar",
+            typeof(RectTransform), typeof(Canvas));
+        canvasGo.transform.SetParent(transform, false);
+        canvasGo.transform.localPosition = new Vector3(0f, healthBarHeight, 0f);
+        canvasGo.transform.localScale = Vector3.one * worldPerPixel;
+        canvasGo.layer = gameObject.layer;
+
+        Canvas canvas = canvasGo.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.sortingOrder = 5;
+
+        var canvasRt = (RectTransform)canvasGo.transform;
+        canvasRt.sizeDelta = sizePx;
+
+        // Background panel
+        GameObject bgGo = new GameObject("BG", typeof(RectTransform), typeof(Image));
+        bgGo.transform.SetParent(canvasGo.transform, false);
+        var bgRt = (RectTransform)bgGo.transform;
+        bgRt.anchorMin = Vector2.zero; bgRt.anchorMax = Vector2.one;
+        bgRt.offsetMin = Vector2.zero; bgRt.offsetMax = Vector2.zero;
+        var bgImg = bgGo.GetComponent<Image>();
+        bgImg.color = healthBarBgColor;
+        bgImg.raycastTarget = false;
+
+        // Foreground fill
+        GameObject fillContainer = new GameObject("FillContainer", typeof(RectTransform));
+        fillContainer.transform.SetParent(canvasGo.transform, false);
+        var fcRt = (RectTransform)fillContainer.transform;
+        // Inset by a small margin so the fill doesn't cover the BG outline.
+        float insetPx = isBoss ? 4f : 2f;
+        fcRt.anchorMin = Vector2.zero; fcRt.anchorMax = Vector2.one;
+        fcRt.offsetMin = new Vector2(insetPx, insetPx);
+        fcRt.offsetMax = new Vector2(-insetPx, -insetPx);
+
+        // The Fill rect is anchored to the LEFT side of FillContainer with a
+        // pivot on its own left edge, and we drive its width via sizeDelta.x.
+        // This avoids Image.Type.Filled, which is a no-op without a sprite —
+        // the original cause of the bar always reading full red.
+        GameObject fillGo = new GameObject("Fill", typeof(RectTransform), typeof(Image));
+        fillGo.transform.SetParent(fillContainer.transform, false);
+        var fillRt = (RectTransform)fillGo.transform;
+        fillRt.anchorMin = new Vector2(0f, 0f);
+        fillRt.anchorMax = new Vector2(0f, 1f);   // stretch vertically, anchor left
+        fillRt.pivot     = new Vector2(0f, 0.5f); // grow rightward from the left edge
+        fillRt.anchoredPosition = Vector2.zero;
+        healthBarMaxWidthPx = sizePx.x - insetPx * 2f;
+        fillRt.sizeDelta = new Vector2(healthBarMaxWidthPx, 0f);
+        healthBarFill = fillGo.GetComponent<Image>();
+        healthBarFill.color = healthBarColor;
+        healthBarFill.type = Image.Type.Simple;
+        healthBarFill.raycastTarget = false;
+
+        // HP text (bosses only by default).
+        if (isBoss && bossShowHpText)
+        {
+            GameObject txtGo = new GameObject("HPText", typeof(RectTransform), typeof(Text));
+            txtGo.transform.SetParent(canvasGo.transform, false);
+            var txtRt = (RectTransform)txtGo.transform;
+            txtRt.anchorMin = Vector2.zero; txtRt.anchorMax = Vector2.one;
+            txtRt.offsetMin = Vector2.zero; txtRt.offsetMax = Vector2.zero;
+
+            healthBarText = txtGo.GetComponent<Text>();
+            healthBarText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            healthBarText.alignment = TextAnchor.MiddleCenter;
+            healthBarText.color = Color.white;
+            healthBarText.fontSize = Mathf.Max(8, Mathf.RoundToInt(sizePx.y * 0.65f));
+            healthBarText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            healthBarText.verticalOverflow = VerticalWrapMode.Overflow;
+            healthBarText.raycastTarget = false;
+
+            var outline = txtGo.AddComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.95f);
+            outline.effectDistance = new Vector2(1.4f, -1.4f);
+        }
+
+        healthBarRoot = canvasGo.transform;
+    }
+
+    private void LateUpdate()
+    {
+        if (healthBarRoot == null) return;
+
+        // Hide bar once dead so it doesn't linger an extra frame.
+        if (IsDead)
+        {
+            if (healthBarRoot.gameObject.activeSelf) healthBarRoot.gameObject.SetActive(false);
+            return;
+        }
+
+        // Billboard: face the camera every frame so the bar reads correctly
+        // regardless of the enemy's orientation.
+        Camera cam = Camera.main;
+        if (cam != null)
+            healthBarRoot.rotation = cam.transform.rotation;
+
+        // Update fill ratio by resizing the rect's width — robust, doesn't
+        // require a sprite the way Image.Type.Filled does.
+        if (healthBarFill != null)
+        {
+            float ratio = maxHP > 0f ? Mathf.Clamp01(currentHP / maxHP) : 0f;
+            var rt = healthBarFill.rectTransform;
+            Vector2 sd = rt.sizeDelta;
+            sd.x = healthBarMaxWidthPx * ratio;
+            rt.sizeDelta = sd;
+        }
+
+        // Update HP numbers (bosses only).
+        if (healthBarText != null)
+            healthBarText.text = $"{Mathf.CeilToInt(currentHP)} / {Mathf.CeilToInt(maxHP)}";
     }
 
     private static Material cachedTelegraphMat;

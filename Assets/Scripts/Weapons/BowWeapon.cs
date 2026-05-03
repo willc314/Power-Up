@@ -106,12 +106,12 @@ public class BowWeapon : Weapon
     public float deathBeamDpsBonus = 0f;
     [Tooltip("How much beam DPS grows per Damage boost.")]
     public float deathBeamDpsPerBoost = 25f;
-    [Tooltip("Total bonus length added to the spawned death beam from Range boosts. Set by TryApplyBoost(Range).")]
-    public float deathBeamRangeBonus = 0f;
-    [Tooltip("How much beam range grows per Range boost (world units).")]
-    public float deathBeamRangePerBoost = 4f;
-    [Tooltip("Cap on deathBeamRangeBonus.")]
-    public float maxDeathBeamRangeBonus = 30f;
+    [Tooltip("Total bonus radius added to the spawned death beam from Range boosts. Set by TryApplyBoost(Range). Radius makes the beam thicker / cover a wider AOE.")]
+    public float deathBeamRadiusBonus = 0f;
+    [Tooltip("How much beam radius grows per Range boost (world units).")]
+    public float deathBeamRadiusPerBoost = 0.4f;
+    [Tooltip("Cap on deathBeamRadiusBonus.")]
+    public float maxDeathBeamRadiusBonus = 3f;
 
     public override bool IsBoostMaxed(BoostKind kind)
     {
@@ -124,7 +124,7 @@ public class BowWeapon : Weapon
                 return chargeFloor && overFloor;
 
             case BoostKind.Range:
-                return deathBeamRangeBonus >= maxDeathBeamRangeBonus - 0.001f;
+                return deathBeamRadiusBonus >= maxDeathBeamRadiusBonus - 0.001f;
 
             // Damage and Projectiles share the bow's damage path.
             case BoostKind.Damage:
@@ -140,24 +140,37 @@ public class BowWeapon : Weapon
         {
             case BoostKind.Damage:
             case BoostKind.Projectiles:
-                return $"+{maxDamageIncreasePerLevel:0.#} Max Damage  •  +{deathBeamDpsPerBoost:0.#} Beam DPS";
+                {
+                    // Past damage cap, all of arrow-damage AND beam-DPS increments shrink.
+                    float scale = IsBoostMaxed(BoostKind.Damage) ? postMaxBoostScale : 1f;
+                    return $"+{maxDamageIncreasePerLevel * scale:0.#} Max Damage  •  +{deathBeamDpsPerBoost * scale:0.#} Beam DPS";
+                }
 
             case BoostKind.AttackSpeed:
                 {
+                    // When both charge and overcharge are at their floors, fall back
+                    // to scaled damage so the boost still does something visible.
+                    float scale = IsBoostMaxed(BoostKind.AttackSpeed) ? postMaxBoostScale : 1f;
+                    bool chargeFloor = fullChargeTime <= minFullChargeTime + 0.001f;
+                    bool overFloor   = overchargeTime <= minOverchargeTime + 0.001f;
+                    if (chargeFloor && overFloor)
+                        return $"+{damageIncreasePerLevel * scale:0.#} Damage";
+
                     float curC = Mathf.Max(minFullChargeTime, fullChargeTime);
-                    float nxtC = Mathf.Max(minFullChargeTime, fullChargeTime - chargeTimeReductionPerBoost);
+                    float nxtC = Mathf.Max(minFullChargeTime, fullChargeTime - chargeTimeReductionPerBoost * scale);
                     float curO = Mathf.Max(minOverchargeTime, overchargeTime);
-                    float nxtO = Mathf.Max(minOverchargeTime, overchargeTime - overchargeReductionPerBoost);
+                    float nxtO = Mathf.Max(minOverchargeTime, overchargeTime - overchargeReductionPerBoost * scale);
                     bool chargeStuck = nxtC >= curC;
                     bool overStuck   = nxtO >= curO;
-                    if (chargeStuck && overStuck) return "Charge Speed Maxed";
                     string chargePart = chargeStuck ? "Charge maxed" : $"+{(curC / nxtC - 1f) * 100f:0}% Charge";
                     string overPart   = overStuck   ? "Beam maxed"   : $"-{(curO - nxtO):0.0}s to Beam";
                     return chargePart + "  •  " + overPart;
                 }
 
             case BoostKind.Range:
-                return $"+{deathBeamRangePerBoost:0.#} Beam Range";
+                if (IsBoostMaxed(BoostKind.Range))
+                    return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
+                return $"+{deathBeamRadiusPerBoost:0.##} Beam Radius";
         }
         return base.DescribeBoost(kind);
     }
@@ -167,27 +180,47 @@ public class BowWeapon : Weapon
         switch (kind)
         {
             // Both Damage and Projectiles boost the bow's damage path so a
-            // Crossbow pickup applied to the Bow does something visible.
+            // Crossbow pickup applied to the Bow does something visible. Past
+            // cap, all increments scale down by postMaxBoostScale.
             case BoostKind.Damage:
             case BoostKind.Projectiles:
-                if (IsDamageMaxed) return false;
-                damageLevel++;
-                damage             += damageIncreasePerLevel;
-                arrowMinDamage     += minDamageIncreasePerLevel;
-                arrowMaxDamage     += maxDamageIncreasePerLevel;
-                deathBeamDpsBonus  += deathBeamDpsPerBoost;
-                return true;
+                {
+                    float scale = IsBoostMaxed(BoostKind.Damage) ? postMaxBoostScale : 1f;
+                    damageLevel++;
+                    damage             += damageIncreasePerLevel    * scale;
+                    arrowMinDamage     += minDamageIncreasePerLevel * scale;
+                    arrowMaxDamage     += maxDamageIncreasePerLevel * scale;
+                    deathBeamDpsBonus  += deathBeamDpsPerBoost      * scale;
+                    return true;
+                }
 
             case BoostKind.AttackSpeed:
-                if (IsBoostMaxed(BoostKind.AttackSpeed)) return false;
-                fullChargeTime = Mathf.Max(minFullChargeTime, fullChargeTime - chargeTimeReductionPerBoost);
-                overchargeTime = Mathf.Max(minOverchargeTime, overchargeTime - overchargeReductionPerBoost);
-                return true;
+                {
+                    float scale = IsBoostMaxed(BoostKind.AttackSpeed) ? postMaxBoostScale : 1f;
+                    bool chargeFloor = fullChargeTime <= minFullChargeTime + 0.001f;
+                    bool overFloor   = overchargeTime <= minOverchargeTime + 0.001f;
+                    if (chargeFloor && overFloor)
+                    {
+                        // Both floors hit — convert to scaled damage.
+                        damage     += damageIncreasePerLevel * scale;
+                        damageLevel++;
+                        return true;
+                    }
+                    fullChargeTime = Mathf.Max(minFullChargeTime, fullChargeTime - chargeTimeReductionPerBoost * scale);
+                    overchargeTime = Mathf.Max(minOverchargeTime, overchargeTime - overchargeReductionPerBoost * scale);
+                    return true;
+                }
 
             case BoostKind.Range:
-                if (IsBoostMaxed(BoostKind.Range)) return false;
-                deathBeamRangeBonus = Mathf.Min(maxDeathBeamRangeBonus,
-                    deathBeamRangeBonus + deathBeamRangePerBoost);
+                if (IsBoostMaxed(BoostKind.Range))
+                {
+                    // Beam radius capped — fall back to scaled damage.
+                    damage     += damageIncreasePerLevel * postMaxBoostScale;
+                    damageLevel++;
+                    return true;
+                }
+                deathBeamRadiusBonus = Mathf.Min(maxDeathBeamRadiusBonus,
+                    deathBeamRadiusBonus + deathBeamRadiusPerBoost);
                 return true;
         }
         return base.TryApplyBoost(kind);
@@ -343,8 +376,8 @@ public class BowWeapon : Weapon
         DeathBeam beam = Instantiate(deathBeamPrefab, spawn, owner.transform.rotation);
         // Apply boost-driven bonuses to this instance before it initializes
         // (so its damage tick and visual stretch reflect the upgrades).
-        if (deathBeamDpsBonus   > 0f) beam.damagePerSecond += deathBeamDpsBonus;
-        if (deathBeamRangeBonus > 0f) beam.range           += deathBeamRangeBonus;
+        if (deathBeamDpsBonus    > 0f) beam.damagePerSecond += deathBeamDpsBonus;
+        if (deathBeamRadiusBonus > 0f) beam.radius          += deathBeamRadiusBonus;
         beam.Init(owner, enemyLayers);
     }
 

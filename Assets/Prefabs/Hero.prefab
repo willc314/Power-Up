@@ -2721,6 +2721,7 @@ MonoBehaviour:
   weaponName: Sword
   hudIcon: {fileID: 21300000, guid: e72881f0e573a0545b1de9d94deae2d5, type: 3}
   hudIconRotation: 0
+  hudIconZoom: 1
   weaponType: 1
   damage: 25
   cooldown: 0.5
@@ -2730,6 +2731,8 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
+  minCooldown: 0.08
+  cooldownReductionPerBoost: 0.04
   slashPrefab: {fileID: 2526017728917958653, guid: cbc65052b92d3a245a0e616c4b3de3a3, type: 3}
   spawnDistance: 1
   spawnHeight: 1
@@ -2748,6 +2751,7 @@ MonoBehaviour:
   weaponName: Shield
   hudIcon: {fileID: 21300000, guid: 115e358592e7a8f47a95a553e2e6afe1, type: 3}
   hudIconRotation: 0
+  hudIconZoom: 1
   weaponType: 2
   damage: 25
   cooldown: 0.5
@@ -2757,6 +2761,8 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
+  minCooldown: 0.08
+  cooldownReductionPerBoost: 0.04
   shieldPrefab: {fileID: 6711622995299847906, guid: 28d318905bb3e5d46b0b92d326b2fc28, type: 3}
   spawnDistance: 0.8
   spawnHeight: 1
@@ -2775,6 +2781,7 @@ MonoBehaviour:
   weaponName: Bow
   hudIcon: {fileID: 21300000, guid: 9df7bf01e5e2e674cbfb58474eceebfa, type: 3}
   hudIconRotation: 0
+  hudIconZoom: 1
   weaponType: 3
   damage: 25
   cooldown: 0.5
@@ -2784,6 +2791,8 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
+  minCooldown: 0.08
+  cooldownReductionPerBoost: 0.04
   bowVisualPrefab: {fileID: 131850, guid: 8093457b576f04fbfa270bca1b2553a1, type: 3}
   bowSpawnDistance: 1.2
   bowSpawnHeight: 1
@@ -2806,6 +2815,17 @@ MonoBehaviour:
   deathBeamPrefab: {fileID: 4926047971536815124, guid: 5b65ab245209fd5468ad11d4e38a7460, type: 3}
   overchargeColor: {r: 1, g: 0.95, b: 0.7, a: 1}
   overchargeVfxPrefab: {fileID: 0}
+  maxDamageIncreasePerLevel: 10
+  minDamageIncreasePerLevel: 3
+  minFullChargeTime: 0.4
+  chargeTimeReductionPerBoost: 0.15
+  minOverchargeTime: 1.5
+  overchargeReductionPerBoost: 0.5
+  deathBeamDpsBonus: 0
+  deathBeamDpsPerBoost: 25
+  deathBeamRangeBonus: 0
+  deathBeamRangePerBoost: 4
+  maxDeathBeamRangeBonus: 30
 --- !u!114 &3670884374136682343
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2821,6 +2841,7 @@ MonoBehaviour:
   weaponName: Crossbow
   hudIcon: {fileID: 21300000, guid: 1794869fcf593ae46905cdc6f487fda7, type: 3}
   hudIconRotation: 0
+  hudIconZoom: 1
   weaponType: 5
   damage: 25
   cooldown: 0.5
@@ -2830,9 +2851,14 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
+  minCooldown: 0.08
+  cooldownReductionPerBoost: 0.04
   arrowPrefab: {fileID: 4093347662047577129, guid: 328739536d0ead6479ec0b1d111290f5, type: 3}
   spawnDistance: 0.8
   spawnHeight: 1
+  projectileCount: 1
+  maxProjectileCount: 7
+  spreadAngle: 30
   crossbowVisualPrefab: {fileID: 6721586060920507822, guid: 8e5012eaa9daab14aa5a36ff5fb52bad, type: 3}
   visualSpawnDistance: 0.8
   visualSpawnHeight: 1
@@ -2852,20 +2878,26 @@ MonoBehaviour:
   weaponName: Grenade
   hudIcon: {fileID: 21300000, guid: 6acd75eb83b33bd4cab73dde4ce2cf65, type: 3}
   hudIconRotation: 0
+  hudIconZoom: 1
   weaponType: 6
   damage: 25
-  cooldown: 0.5
+  cooldown: 2
   enemyLayers:
     serializedVersion: 2
     m_Bits: 1014
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
+  minCooldown: 0.08
+  cooldownReductionPerBoost: 0.04
   grenadePrefab: {fileID: 5172283616525916960, guid: dea83f823520fd74198a6bfcc72b73aa, type: 3}
   throwDistance: 6
   arcHeight: 3
   flightTime: 0.8
   spawnHeight: 1
+  explosionRadiusBonus: 0
+  radiusIncreasePerLevel: 1
+  maxExplosionRadiusBonus: 5
 --- !u!114 &-3973025407638285087
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2881,6 +2913,7 @@ MonoBehaviour:
   weaponName: Dagger
   hudIcon: {fileID: 21300000, guid: 190bcc830cf158044abf4f80ab64c674, type: 3}
   hudIconRotation: 0
+  hudIconZoom: 1
   weaponType: 4
   damage: 25
   cooldown: 0.25
@@ -2890,6 +2923,8 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
+  minCooldown: 0.08
+  cooldownReductionPerBoost: 0.04
   stabPrefab: {fileID: 3891962484159435510, guid: 41913b50274a244418607f629adfd3c6, type: 3}
   stabStartDistance: 0.4
   stabSpawnHeight: 1

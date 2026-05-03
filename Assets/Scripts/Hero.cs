@@ -33,7 +33,8 @@ public class Hero : MonoBehaviour
     {
         Random,
         MaxHP,
-        MoveSpeed
+        MoveSpeed,
+        HealthRegen
     }
 
     [Header("Stats")]
@@ -58,6 +59,12 @@ public class Hero : MonoBehaviour
     public float moveSpeedBoostAmount = 0.25f;
     [Tooltip("Optional movement speed cap so speed boosts do not get ridiculous.")]
     public float maxMoveSpeed = 10f;
+    [Tooltip("Current health regen, in HP per second. Boosts add to this.")]
+    public float healthRegenPerSecond = 0f;
+    [Tooltip("How much HP/sec regen increases per boost.")]
+    public float healthRegenBoostAmount = 0.5f;
+    [Tooltip("Cap on healthRegenPerSecond.")]
+    public float maxHealthRegenPerSecond = 10f;
 
     [Header("Active Weapons")]
     [Tooltip("Fired on left click. Drag a Weapon component (e.g. SwordWeapon) here. Overwritten on spawn if 'Randomize Weapons On Spawn' is on.")]
@@ -254,6 +261,10 @@ public class Hero : MonoBehaviour
 
         DispatchWeaponInput(0, primaryWeapon);
         DispatchWeaponInput(1, secondaryWeapon);
+
+        // Passive health regen from hero stat boosts.
+        if (healthRegenPerSecond > 0f && currentHP < maxHP)
+            currentHP = Mathf.Min(maxHP, currentHP + healthRegenPerSecond * Time.deltaTime);
 
         if (animator != null)
         {
@@ -457,6 +468,14 @@ public class Hero : MonoBehaviour
         if (IsDead)
             return;
 
+        // Cancel any in-progress weapon state before the panel pauses time.
+        // Otherwise the bow/crossbow visual the player was holding stays in
+        // the world while paused — and the OnFireUp event never fires after
+        // unpause if the player released during the pause.
+        if (primaryWeapon != null)   primaryWeapon.OnInterrupted(this);
+        if (secondaryWeapon != null) secondaryWeapon.OnInterrupted(this);
+        speedMultiplier = 1f;
+
         if (PowerUpChoiceUI.Instance != null)
         {
             PowerUpChoiceUI.Instance.Show(this, type);
@@ -638,21 +657,53 @@ public class Hero : MonoBehaviour
         }
     }
 
-    public void ApplyHeroStatBoost()
+    /// <summary>
+    /// Picks a non-Random hero stat to boost using the existing
+    /// maxedWeaponBoostMode setting. If that's Random, picks one of MaxHP /
+    /// MoveSpeed / HealthRegen at random, biasing away from any stat that's
+    /// already at its cap.
+    /// </summary>
+    public HeroStatBoostMode RollHeroStatBoost()
     {
-        HeroStatBoostMode boost = maxedWeaponBoostMode;
+        if (maxedWeaponBoostMode != HeroStatBoostMode.Random)
+            return maxedWeaponBoostMode;
 
-        if (boost == HeroStatBoostMode.Random)
-        {
-            boost = Random.value < 0.5f
-                ? HeroStatBoostMode.MaxHP
-                : HeroStatBoostMode.MoveSpeed;
-        }
+        // Build the list of un-capped candidates, fall back to all-three if
+        // somehow everything is capped (shouldn't happen in normal play).
+        var candidates = new System.Collections.Generic.List<HeroStatBoostMode>();
+        candidates.Add(HeroStatBoostMode.MaxHP); // MaxHP has no hard cap.
+        if (moveSpeed           < maxMoveSpeed - 0.001f)         candidates.Add(HeroStatBoostMode.MoveSpeed);
+        if (healthRegenPerSecond < maxHealthRegenPerSecond - 0.001f) candidates.Add(HeroStatBoostMode.HealthRegen);
+        return candidates[Random.Range(0, candidates.Count)];
+    }
 
-        switch (boost)
+    /// <summary>Short label describing what <paramref name="stat"/> would do if applied right now.</summary>
+    public string DescribeHeroStatBoost(HeroStatBoostMode stat)
+    {
+        switch (stat)
         {
             case HeroStatBoostMode.MaxHP:
-                maxHP += maxHPBoostAmount;
+                return $"+{maxHPBoostAmount:0.#} Max HP";
+            case HeroStatBoostMode.MoveSpeed:
+                if (moveSpeed >= maxMoveSpeed - 0.001f) return "Move Speed Maxed";
+                float speedDelta = Mathf.Min(maxMoveSpeed, moveSpeed + moveSpeedBoostAmount) - moveSpeed;
+                return $"+{speedDelta:0.##} Move Speed";
+            case HeroStatBoostMode.HealthRegen:
+                if (healthRegenPerSecond >= maxHealthRegenPerSecond - 0.001f) return "Regen Maxed";
+                float regenDelta = Mathf.Min(maxHealthRegenPerSecond, healthRegenPerSecond + healthRegenBoostAmount) - healthRegenPerSecond;
+                return $"+{regenDelta:0.##} HP/sec";
+            default:
+                return "+Stat";
+        }
+    }
+
+    /// <summary>Apply a specific hero stat boost (no random roll). Used by the UI when a maxed weapon's boost is converted.</summary>
+    public void ApplyHeroStatBoost(HeroStatBoostMode stat)
+    {
+        switch (stat)
+        {
+            case HeroStatBoostMode.MaxHP:
+                maxHP     += maxHPBoostAmount;
                 currentHP += maxHPBoostAmount;
                 Debug.Log("Hero max HP increased to " + maxHP + ".");
                 break;
@@ -661,7 +712,19 @@ public class Hero : MonoBehaviour
                 moveSpeed = Mathf.Min(maxMoveSpeed, moveSpeed + moveSpeedBoostAmount);
                 Debug.Log("Hero move speed increased to " + moveSpeed + ".");
                 break;
+
+            case HeroStatBoostMode.HealthRegen:
+                healthRegenPerSecond = Mathf.Min(maxHealthRegenPerSecond,
+                    healthRegenPerSecond + healthRegenBoostAmount);
+                Debug.Log("Hero health regen increased to " + healthRegenPerSecond + " HP/sec.");
+                break;
         }
+    }
+
+    /// <summary>Backward-compatible no-arg overload: rolls a random stat (respecting maxedWeaponBoostMode).</summary>
+    public void ApplyHeroStatBoost()
+    {
+        ApplyHeroStatBoost(RollHeroStatBoost());
     }
 
     private void RefreshWeaponVisuals()

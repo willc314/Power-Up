@@ -99,6 +99,10 @@ public abstract class Weapon : MonoBehaviour
     [Tooltip("How much cooldown shrinks per AttackSpeed boost (seconds).")]
     public float cooldownReductionPerBoost = 0.04f;
 
+    [Header("Post-Max Scaling")]
+    [Tooltip("After the weapon hits its main cap, further boosts still apply but at this fraction of normal strength. 0.5 = half-strength, forever.")]
+    [Range(0f, 1f)] public float postMaxBoostScale = 0.5f;
+
     // ---- Boost API ----
     // The picked-up weapon defines a BoostKind. The chosen slot's weapon
     // applies that boost to itself. Each weapon overrides DescribeBoost /
@@ -140,38 +144,57 @@ public abstract class Weapon : MonoBehaviour
     /// Short human-readable label describing exactly what the next boost will
     /// do for THIS weapon (e.g. "+5 Damage", "+1 Projectile", "+15% Attack
     /// Speed"). Shown on the powerup choice UI's Boost button.
+    ///
+    /// When the weapon is past its cap (IsBoostMaxed returns true), the
+    /// description and applied magnitude both shrink by postMaxBoostScale,
+    /// so the UI always shows the actual delta the player will get.
     /// </summary>
     public virtual string DescribeBoost(BoostKind kind)
     {
+        float scale = IsBoostMaxed(kind) ? postMaxBoostScale : 1f;
         switch (kind)
         {
             case BoostKind.AttackSpeed:
+                if (cooldown <= minCooldown + 0.001f)
+                {
+                    // At the hard floor — boost falls back to scaled damage.
+                    return $"+{damageIncreasePerLevel * scale:0.#} Damage";
+                }
                 float cur = Mathf.Max(minCooldown, cooldown);
-                float nxt = Mathf.Max(minCooldown, cooldown - cooldownReductionPerBoost);
+                float nxt = Mathf.Max(minCooldown, cooldown - cooldownReductionPerBoost * scale);
                 if (nxt >= cur) return "Attack Speed Maxed";
                 return $"+{(cur / nxt - 1f) * 100f:0}% Attack Speed";
 
             default:
-                return $"+{damageIncreasePerLevel:0.#} Damage";
+                return $"+{damageIncreasePerLevel * scale:0.#} Damage";
         }
     }
 
     /// <summary>
-    /// Apply <paramref name="kind"/> to this weapon. Returns true if the boost
-    /// was actually applied; false if the weapon is already at its cap (the
-    /// UI can fall back to a Hero stat boost in that case).
+    /// Apply <paramref name="kind"/> to this weapon. Always returns true: even
+    /// past the cap, the boost still applies, just at postMaxBoostScale of its
+    /// normal magnitude (so the player can keep stacking smaller upgrades).
     /// </summary>
     public virtual bool TryApplyBoost(BoostKind kind)
     {
+        float scale = IsBoostMaxed(kind) ? postMaxBoostScale : 1f;
         switch (kind)
         {
             case BoostKind.AttackSpeed:
-                if (IsBoostMaxed(BoostKind.AttackSpeed)) return false;
-                cooldown = Mathf.Max(minCooldown, cooldown - cooldownReductionPerBoost);
+                if (cooldown <= minCooldown + 0.001f)
+                {
+                    // At hard floor — convert the boost into scaled damage.
+                    damage     += damageIncreasePerLevel * scale;
+                    damageLevel++;
+                    return true;
+                }
+                cooldown = Mathf.Max(minCooldown, cooldown - cooldownReductionPerBoost * scale);
                 return true;
 
             default:
-                return TryUpgradeDamage();
+                damage     += damageIncreasePerLevel * scale;
+                damageLevel++;
+                return true;
         }
     }
 

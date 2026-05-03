@@ -51,7 +51,13 @@ public class GrenadeWeapon : Weapon
 
     public override string DescribeBoost(BoostKind kind)
     {
-        if (kind == BoostKind.Range) return $"+{radiusIncreasePerLevel:0.#} Explosion Radius";
+        if (kind == BoostKind.Range)
+        {
+            // Past the radius cap, post-max boosts fall back to scaled damage.
+            if (IsBoostMaxed(BoostKind.Range))
+                return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
+            return $"+{radiusIncreasePerLevel:0.#} Explosion Radius";
+        }
         return base.DescribeBoost(kind);
     }
 
@@ -59,7 +65,13 @@ public class GrenadeWeapon : Weapon
     {
         if (kind == BoostKind.Range)
         {
-            if (IsBoostMaxed(BoostKind.Range)) return false;
+            if (IsBoostMaxed(BoostKind.Range))
+            {
+                // Radius capped — convert post-max boosts into scaled damage.
+                damage     += damageIncreasePerLevel * postMaxBoostScale;
+                damageLevel++;
+                return true;
+            }
             explosionRadiusBonus = Mathf.Min(maxExplosionRadiusBonus,
                 explosionRadiusBonus + radiusIncreasePerLevel);
             return true;

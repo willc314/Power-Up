@@ -78,6 +78,9 @@ public class PowerUpChoiceUI : MonoBehaviour
         public GameObject boostButtonGO;
         public Button boostButton;
         public Text boostButtonText;
+        public GameObject heroStatButtonGO; // 3rd option — only shown when the weapon is at cap
+        public Button heroStatButton;
+        public Text heroStatButtonText;
     }
 
     private void Awake()
@@ -174,6 +177,7 @@ public class PowerUpChoiceUI : MonoBehaviour
             slot.equipButtonGO.SetActive(true);
             slot.replaceButtonGO.SetActive(false);
             slot.boostButtonGO.SetActive(false);
+            slot.heroStatButtonGO.SetActive(false);
 
             slot.equipButtonText.text = "Equip " + GetWeaponName(pendingType);
             slot.equipButton.onClick.RemoveAllListeners();
@@ -204,9 +208,29 @@ public class PowerUpChoiceUI : MonoBehaviour
             slot.replaceButtonGO.SetActive(true);
             slot.boostButtonGO.SetActive(true);
 
+            bool maxed = equipped.IsBoostMaxed(boostKind);
+            // 3rd button (Hero Stat) only shows when the weapon is at its cap.
+            slot.heroStatButtonGO.SetActive(maxed);
+
+            // Re-anchor Replace/Boost so they cluster together visually
+            // regardless of whether Hero Stat is shown below them.
+            // 3-button mode: Replace=140, Boost=84, HeroStat=28.
+            // 2-button mode: Replace=84, Boost=28 (closer to bottom).
+            if (maxed)
+            {
+                SetButtonY(slot.replaceButtonGO, 140f);
+                SetButtonY(slot.boostButtonGO,    84f);
+                SetButtonY(slot.heroStatButtonGO, 28f);
+            }
+            else
+            {
+                SetButtonY(slot.replaceButtonGO, 84f);
+                SetButtonY(slot.boostButtonGO,   28f);
+            }
+
             // Replace button — swap this slot's weapon for the picked-up one.
-            // If the slot already has the same type, replacing is a no-op so we
-            // gray the button out for clarity.
+            // If the slot already has the same type, replacing is a no-op so
+            // we gray the button out for clarity.
             bool sameType = equipped.weaponType == pendingType;
             slot.replaceButtonText.text = sameType
                 ? "Already " + equipped.weaponName
@@ -219,24 +243,42 @@ public class PowerUpChoiceUI : MonoBehaviour
                 Close();
             });
 
-            // Boost button — apply the pickup-defined boost to this weapon.
-            // The label spells out the actual stat change for THIS weapon
-            // ("+10 Max Damage" on a Bow, "+1 Projectile" on a Crossbow,
-            // "+1 Explosion Radius" on a Grenade, "+X% Attack Speed" on most,
-            // "+X% Charge Speed" on a Bow, "+5 Damage" otherwise).
-            bool maxed = equipped.IsBoostMaxed(boostKind);
-            slot.boostButtonText.text = maxed
-                ? equipped.weaponName + " maxed (Hero stat instead)"
-                : "Boost " + equipped.weaponName + ":  " + equipped.DescribeBoost(boostKind);
-            slot.boostButton.interactable = true; // clickable even when maxed -> falls back to Hero stat boost
+            // Boost button — apply the pickup-defined boost to THIS weapon.
+            // When the weapon is past its cap the boost still applies, but at
+            // postMaxBoostScale strength (smaller increments forever).
+            // The label always spells out the exact stat change for that
+            // weapon ("+10 Max Damage", "+1 Projectile", "+1 Explosion Radius",
+            // "+X% Attack Speed", etc.).
+            slot.boostButton.interactable = true;
             slot.boostButton.onClick.RemoveAllListeners();
             Weapon weaponRef = equipped;
             BoostKind kindRef = boostKind;
+
+            string boostPrefix = maxed ? "Boost " + equipped.weaponName + " (post-max):  "
+                                       : "Boost " + equipped.weaponName + ":  ";
+            slot.boostButtonText.text = boostPrefix + equipped.DescribeBoost(boostKind);
             slot.boostButton.onClick.AddListener(() =>
             {
                 hero.UpgradeWeaponPower(weaponRef, kindRef);
                 Close();
             });
+
+            // Hero Stat button — only relevant when maxed. Pre-rolls a random
+            // hero stat (Max HP / Move Speed / Health Regen) and shows the
+            // exact stat that will be granted, so the player can compare it
+            // with the post-max weapon boost above.
+            if (maxed)
+            {
+                Hero.HeroStatBoostMode preRolled = hero.RollHeroStatBoost();
+                slot.heroStatButtonText.text = "Hero: " + hero.DescribeHeroStatBoost(preRolled);
+                slot.heroStatButton.interactable = true;
+                slot.heroStatButton.onClick.RemoveAllListeners();
+                slot.heroStatButton.onClick.AddListener(() =>
+                {
+                    hero.ApplyHeroStatBoost(preRolled);
+                    Close();
+                });
+            }
         }
     }
 
@@ -299,8 +341,11 @@ public class PowerUpChoiceUI : MonoBehaviour
         titleText.text = "Picked Up:";
 
         // -- Center: big picked-up icon + name (no buttons; informational) --
+        // slotH grew from 460 → 540 to leave room for the 3rd button (Hero
+        // Stat) that appears when the weapon is at its cap. The icon and name
+        // padding below were nudged to keep things from overlapping.
         const int slotW = 320;
-        const int slotH = 460;
+        const int slotH = 540;
         const int gap   = 60;
 
         // Compute three slot positions horizontally centered.
@@ -353,7 +398,12 @@ public class PowerUpChoiceUI : MonoBehaviour
     {
         slot.headerText = BuildSlotHeader(parent, "PRIMARY");
         slot.iconImg = BuildSlotIcon(parent, /*topPadding*/ 60);
-        slot.nameText = BuildSlotName(parent, /*bottomPadding*/ 168, big: false);
+        slot.nameText = BuildSlotName(parent, /*bottomPadding*/ 224, big: false);
+
+        // Buttons stack from the bottom of the slot.
+        // 3-button mode: Replace (y=140), Boost (y=84), Hero Stat (y=28).
+        // 2-button mode: Replace and Boost get re-anchored down to y=84/28.
+        // Equip is the empty-slot fallback at y=56.
 
         // --- Equip button (single, when slot is empty) ---
         slot.equipButtonGO = BuildButton(parent, "EquipButton",
@@ -361,16 +411,21 @@ public class PowerUpChoiceUI : MonoBehaviour
             out slot.equipButton, out slot.equipButtonText);
         slot.equipButtonText.text = "Equip";
 
-        // --- Replace + Boost buttons (when slot is filled) ---
+        // --- Replace + Boost + Hero Stat (filled slot) ---
         slot.replaceButtonGO = BuildButton(parent, "ReplaceButton",
-            new Vector2(0f, 84f), new Vector2(280f, 50f),
+            new Vector2(0f, 140f), new Vector2(280f, 50f),
             out slot.replaceButton, out slot.replaceButtonText);
         slot.replaceButtonText.text = "Replace";
 
         slot.boostButtonGO = BuildButton(parent, "BoostButton",
-            new Vector2(0f, 28f), new Vector2(280f, 50f),
+            new Vector2(0f, 84f), new Vector2(280f, 50f),
             out slot.boostButton, out slot.boostButtonText);
         slot.boostButtonText.text = "Boost";
+
+        slot.heroStatButtonGO = BuildButton(parent, "HeroStatButton",
+            new Vector2(0f, 28f), new Vector2(280f, 50f),
+            out slot.heroStatButton, out slot.heroStatButtonText);
+        slot.heroStatButtonText.text = "Hero Stat";
     }
 
     private Text BuildSlotHeader(Transform parent, string headerText)
@@ -479,6 +534,16 @@ public class PowerUpChoiceUI : MonoBehaviour
         GameObject go = new GameObject(name, typeof(RectTransform));
         go.transform.SetParent(parent, false);
         return go;
+    }
+
+    /// <summary>Re-anchor a button's Y position relative to the bottom of its parent.</summary>
+    private static void SetButtonY(GameObject buttonGO, float y)
+    {
+        if (buttonGO == null) return;
+        var rt = (RectTransform)buttonGO.transform;
+        Vector2 p = rt.anchoredPosition;
+        p.y = y;
+        rt.anchoredPosition = p;
     }
 
     private void AddOutline(GameObject go, Color color)

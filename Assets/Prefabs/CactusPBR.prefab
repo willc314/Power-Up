@@ -202,7 +202,14 @@ MonoBehaviour:
   attackRange: 1.4
   attackCooldown: 1
   aggroRange: 25
-  debugShowHealth: 1
+  showHealthBar: 1
+  healthBarHeight: 2.2
+  healthBarSize: {x: 0.9, y: 0.12}
+  bossHealthBarSize: {x: 2.6, y: 0.32}
+  bossShowHpText: 1
+  healthBarColor: {r: 0.85, g: 0.2, b: 0.2, a: 1}
+  healthBarBgColor: {r: 0, g: 0, b: 0, a: 0.7}
+  debugShowHealth: 0
   debugLabelHeight: 2.5
   powerUpPrefab: {fileID: 5873131192069686212, guid: 2cb7ec1c1ebc3534bbc753a4c279d9b4, type: 3}
   powerUpDropChance: 0.3
