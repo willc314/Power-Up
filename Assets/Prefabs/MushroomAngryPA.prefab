@@ -360,9 +360,9 @@ MonoBehaviour:
   hitParticleLifetime: 0.5
   hitParticleSpread: 35
   hitParticleHeight: 1
-  dashSpeedMultiplier: 10
-  dashTelegraphTime: 0.6
-  dashDuration: 0.4
+  dashSpeedMultiplier: 7
+  dashTelegraphTime: 0.8
+  dashDuration: 0.5
   dashRecovery: 1.2
   crossbowProjectile: {fileID: 0}
   crossbowDamage: 25

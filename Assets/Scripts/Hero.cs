@@ -91,6 +91,10 @@ public class Hero : MonoBehaviour
     public bool dashInvulnerability = true;
     [Tooltip("Extra seconds of i-frames added after the dash ends, so a collision landing on the last frame of the dash doesn't slip through.")]
     public float dashInvulnerabilityExtension = 0.05f;
+    [Tooltip("If true, the hero passes through enemies during dash (no physical collision, so the player can't get shoved or stopped).")]
+    public bool dashPhasesThroughEnemies = true;
+    [Tooltip("Layer name enemies live on. Used to selectively ignore collision with the hero during dash. Leave 'Enemy' unless your project uses a different name.")]
+    public string enemyLayerName = "Enemy";
 
     [Header("Dash Particles")]
     [Tooltip("Spawn dust particles flying behind the hero during the dash.")]
@@ -185,6 +189,8 @@ public class Hero : MonoBehaviour
     private Vector3 dashDirection;
     private float dashParticleAccumulator;
     private float invulnerabilityTimer;
+    private int   cachedEnemyLayer = -1;
+    private bool  enemyCollisionIgnored;
     public bool IsDashing => dashTimer > 0f;
 
     /// <summary>
@@ -205,6 +211,12 @@ public class Hero : MonoBehaviour
 
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
+
+        // Cache the enemy layer index up front so dash phase-through can
+        // toggle the Physics matrix in O(1).
+        cachedEnemyLayer = LayerMask.NameToLayer(enemyLayerName);
+        if (cachedEnemyLayer < 0 && dashPhasesThroughEnemies)
+            Debug.LogWarning("[Hero] dashPhasesThroughEnemies is on but layer '" + enemyLayerName + "' doesn't exist; phase-through will be a no-op.");
 
         CacheWeaponComponents();
         ConfigureWeaponTypes();
@@ -251,6 +263,14 @@ public class Hero : MonoBehaviour
     {
         if (Instance == this)
             Instance = null;
+        // Defensive: never leave the Physics matrix toggled if we get destroyed
+        // mid-dash (scene transitions, restarts, etc.).
+        SetEnemyCollisionIgnored(false);
+    }
+
+    private void OnDisable()
+    {
+        SetEnemyCollisionIgnored(false);
     }
 
     private void Update()
@@ -301,6 +321,13 @@ public class Hero : MonoBehaviour
             Vector3 step = dashDirection * dashSpeed * Time.fixedDeltaTime;
             rb.MovePosition(rb.position + step);
             EmitDashParticles();
+            if (dashTimer <= 0f)
+            {
+                // Dash just ended this tick — re-enable physics collision
+                // with enemies. (i-frames keep ticking down on their own
+                // timer for the small grace period.)
+                SetEnemyCollisionIgnored(false);
+            }
         }
         else
         {
@@ -314,6 +341,21 @@ public class Hero : MonoBehaviour
             Vector3 target = rb.position + moveInput * moveSpeed * speedMultiplier * Time.fixedDeltaTime;
             rb.MovePosition(target);
         }
+    }
+
+    /// <summary>
+    /// Toggle physics collision between the hero's layer and the enemy
+    /// layer. Used by the dash to phase through enemies. Idempotent — safe
+    /// to call repeatedly with the same value.
+    /// </summary>
+    private void SetEnemyCollisionIgnored(bool ignore)
+    {
+        if (!dashPhasesThroughEnemies) return;
+        if (cachedEnemyLayer < 0) return;
+        if (enemyCollisionIgnored == ignore) return;
+
+        Physics.IgnoreLayerCollision(gameObject.layer, cachedEnemyLayer, ignore);
+        enemyCollisionIgnored = ignore;
     }
 
     private void EmitDashParticles()
@@ -352,6 +394,11 @@ public class Hero : MonoBehaviour
         dashParticleAccumulator = 0f;
         // Cover the whole dash plus the small grace period afterward.
         invulnerabilityTimer = dashDuration + Mathf.Max(0f, dashInvulnerabilityExtension);
+
+        // Phase through enemies for the duration of the dash. This is restored
+        // when dashTimer hits zero in FixedUpdate (and defensively in
+        // OnDisable/OnDestroy in case anything cuts the dash short).
+        SetEnemyCollisionIgnored(true);
 
         if (dashInterruptsWeapons)
         {
