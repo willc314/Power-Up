@@ -30,4 +30,40 @@ public class ShieldWeapon : Weapon
         ShieldThrow shield = Instantiate(shieldPrefab, spawnPos, owner.transform.rotation);
         shield.Init(owner.transform, damage, enemyLayers, owner.transform.forward);
     }
+
+    // Crossbow pickup → Projectiles boost. On the Shield, this chains an
+    // extra throw after extraAttackDelay seconds — they boomerang back
+    // independently so multiple shields can be in flight at once.
+    public override bool IsBoostMaxed(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles) return extraAttackCount >= maxExtraAttackCount;
+        return base.IsBoostMaxed(kind);
+    }
+
+    public override string DescribeBoost(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles)
+        {
+            if (IsBoostMaxed(BoostKind.Projectiles))
+                return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
+            return "+1 Extra Shield";
+        }
+        return base.DescribeBoost(kind);
+    }
+
+    public override bool TryApplyBoost(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles)
+        {
+            if (IsBoostMaxed(BoostKind.Projectiles))
+            {
+                damage     += damageIncreasePerLevel * postMaxBoostScale;
+                damageLevel++;
+                return true;
+            }
+            extraAttackCount++;
+            return true;
+        }
+        return base.TryApplyBoost(kind);
+    }
 }

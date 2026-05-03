@@ -45,7 +45,8 @@ public class GrenadeWeapon : Weapon
 
     public override bool IsBoostMaxed(BoostKind kind)
     {
-        if (kind == BoostKind.Range) return explosionRadiusBonus >= maxExplosionRadiusBonus - 0.001f;
+        if (kind == BoostKind.Range)       return explosionRadiusBonus >= maxExplosionRadiusBonus - 0.001f;
+        if (kind == BoostKind.Projectiles) return extraAttackCount >= maxExtraAttackCount;
         return base.IsBoostMaxed(kind);
     }
 
@@ -57,6 +58,13 @@ public class GrenadeWeapon : Weapon
             if (IsBoostMaxed(BoostKind.Range))
                 return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
             return $"+{radiusIncreasePerLevel:0.#} Explosion Radius";
+        }
+        if (kind == BoostKind.Projectiles)
+        {
+            // Crossbow pickup → chains an extra grenade after a short delay.
+            if (IsBoostMaxed(BoostKind.Projectiles))
+                return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
+            return "+1 Extra Grenade";
         }
         return base.DescribeBoost(kind);
     }
@@ -74,6 +82,17 @@ public class GrenadeWeapon : Weapon
             }
             explosionRadiusBonus = Mathf.Min(maxExplosionRadiusBonus,
                 explosionRadiusBonus + radiusIncreasePerLevel);
+            return true;
+        }
+        if (kind == BoostKind.Projectiles)
+        {
+            if (IsBoostMaxed(BoostKind.Projectiles))
+            {
+                damage     += damageIncreasePerLevel * postMaxBoostScale;
+                damageLevel++;
+                return true;
+            }
+            extraAttackCount++;
             return true;
         }
         return base.TryApplyBoost(kind);

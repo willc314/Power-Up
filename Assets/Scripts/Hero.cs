@@ -172,6 +172,9 @@ public class Hero : MonoBehaviour
 
     public static Hero Instance { get; private set; }
 
+    /// <summary>Fires once when the hero dies. Subscribers (e.g. EnemyAnimator) can react globally.</summary>
+    public static event System.Action OnHeroDied;
+
     private Rigidbody rb;
     private Camera cam;
     private Vector3 moveInput;
@@ -801,6 +804,9 @@ public class Hero : MonoBehaviour
             animator.SetTrigger(kDie);
         }
 
+        // Notify any subscribers (e.g. EnemyAnimator on every alive enemy → play victory clip).
+        OnHeroDied?.Invoke();
+
         // Hand control to the death cam: focus + zoom on the corpse, ignore
         // cursor lean and screen shake until the EndScreen loads.
         if (Camera.main != null)
@@ -809,7 +815,9 @@ public class Hero : MonoBehaviour
             if (follow != null) follow.EnterDeathCam(transform);
         }
 
-        Invoke(nameof(LoadGameOver), 2f);
+        // Match the deathcam zoom duration so the camera reaches its
+        // final framed position before the EndScreen loads.
+        Invoke(nameof(LoadGameOver), 4f);
     }
 
     private void LoadGameOver()

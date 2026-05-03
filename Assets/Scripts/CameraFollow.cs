@@ -55,7 +55,7 @@ public class CameraFollow : MonoBehaviour
     [Tooltip("When EnterDeathCam is called, the offset is multiplied by this factor — smaller = more zoomed in. 0.55 reads as a clear close-up without going claustrophobic.")]
     [Range(0.1f, 1f)] public float deathZoomFactor = 0.55f;
     [Tooltip("Seconds the camera takes to ease from its normal offset down to the zoomed offset.")]
-    public float deathTransitionTime = 0.6f;
+    public float deathTransitionTime = 4f;
     [Tooltip("Smoothing time used while in death cam (overrides smoothTime). Lower = the corpse stays centered more tightly.")]
     public float deathSmoothTime = 0.25f;
 

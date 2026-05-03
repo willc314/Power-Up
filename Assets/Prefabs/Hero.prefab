@@ -2657,10 +2657,10 @@ MonoBehaviour:
   maxedWeaponBoostMode: 0
   maxHPBoostAmount: 10
   moveSpeedBoostAmount: 0.25
-  maxMoveSpeed: 10
-  healthRegenPerSecond: 0
+  maxMoveSpeed: 100
+  healthRegenPerSecond: 1
   healthRegenBoostAmount: 0.5
-  maxHealthRegenPerSecond: 10
+  maxHealthRegenPerSecond: 100
   primaryWeapon: {fileID: 0}
   secondaryWeapon: {fileID: 0}
   randomizeWeaponsOnSpawn: 1
@@ -2671,7 +2671,7 @@ MonoBehaviour:
   dashCooldown: 1
   dashInterruptsWeapons: 1
   dashInvulnerability: 1
-  dashInvulnerabilityExtension: 0.05
+  dashInvulnerabilityExtension: 0.1
   dashParticles: 1
   dashParticlesPerSecond: 80
   dashParticleColor: {r: 0.65, g: 0.55, b: 0.42, a: 1}
@@ -2725,8 +2725,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   weaponName: Sword
   hudIcon: {fileID: 21300000, guid: e72881f0e573a0545b1de9d94deae2d5, type: 3}
-  hudIconRotation: 0
-  hudIconZoom: 1
+  hudIconRotation: 45
+  hudIconZoom: 1.5
   weaponType: 1
   damage: 25
   cooldown: 0.5
@@ -2757,7 +2757,7 @@ MonoBehaviour:
   weaponName: Shield
   hudIcon: {fileID: 21300000, guid: 115e358592e7a8f47a95a553e2e6afe1, type: 3}
   hudIconRotation: 0
-  hudIconZoom: 1
+  hudIconZoom: 1.5
   weaponType: 2
   damage: 25
   cooldown: 0.5
@@ -2849,7 +2849,7 @@ MonoBehaviour:
   weaponName: Crossbow
   hudIcon: {fileID: 21300000, guid: 1794869fcf593ae46905cdc6f487fda7, type: 3}
   hudIconRotation: 0
-  hudIconZoom: 1
+  hudIconZoom: 1.5
   weaponType: 5
   damage: 25
   cooldown: 0.5
@@ -2889,7 +2889,7 @@ MonoBehaviour:
   hudIconRotation: 0
   hudIconZoom: 1
   weaponType: 6
-  damage: 25
+  damage: 40
   cooldown: 2
   enemyLayers:
     serializedVersion: 2
@@ -2898,7 +2898,7 @@ MonoBehaviour:
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
   minCooldown: 0.08
-  cooldownReductionPerBoost: 0.04
+  cooldownReductionPerBoost: 0.1
   postMaxBoostScale: 0.5
   grenadePrefab: {fileID: 5172283616525916960, guid: dea83f823520fd74198a6bfcc72b73aa, type: 3}
   throwDistance: 6
@@ -2933,8 +2933,8 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
-  minCooldown: 0.08
-  cooldownReductionPerBoost: 0.04
+  minCooldown: 0.01
+  cooldownReductionPerBoost: 0.06
   postMaxBoostScale: 0.5
   stabPrefab: {fileID: 3891962484159435510, guid: 41913b50274a244418607f629adfd3c6, type: 3}
   stabStartDistance: 0.4

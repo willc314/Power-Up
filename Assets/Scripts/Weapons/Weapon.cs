@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 
 /// <summary>
@@ -102,6 +103,14 @@ public abstract class Weapon : MonoBehaviour
     [Header("Post-Max Scaling")]
     [Tooltip("After the weapon hits its main cap, further boosts still apply but at this fraction of normal strength. 0.5 = half-strength, forever.")]
     [Range(0f, 1f)] public float postMaxBoostScale = 0.5f;
+
+    [Header("Extra Attacks (Projectile boost on melee/thrown)")]
+    [Tooltip("How many extra Fire() calls happen after each successful TryFire, spaced by extraAttackDelay seconds. Bumped by the Projectiles boost on Sword/Shield/Dagger/Grenade.")]
+    public int extraAttackCount = 0;
+    [Tooltip("Cap on extraAttackCount. Past this, Projectiles boosts fall back to scaled damage.")]
+    public int maxExtraAttackCount = 4;
+    [Tooltip("Seconds between each extra attack.")]
+    public float extraAttackDelay = 0.15f;
 
     // ---- Boost API ----
     // The picked-up weapon defines a BoostKind. The chosen slot's weapon
@@ -250,8 +259,35 @@ public abstract class Weapon : MonoBehaviour
             return false;
 
         Fire(owner);
-        cooldownTimer = cooldown;
+
+        // Cooldown extends to cover any scheduled extra attacks so the player
+        // can't queue overlapping waves by holding the fire button.
+        float extrasDuration = extraAttackCount * extraAttackDelay;
+        cooldownTimer = cooldown + extrasDuration;
+
+        if (extraAttackCount > 0)
+            StartCoroutine(FireExtras(owner));
+
         return true;
+    }
+
+    /// <summary>
+    /// Coroutine that fires extraAttackCount additional Fire(owner) calls,
+    /// spaced by extraAttackDelay seconds. Used by the Projectiles boost on
+    /// melee/thrown weapons (Sword, Shield, Dagger, Grenade) to chain a
+    /// follow-up attack after the initial one.
+    /// </summary>
+    private IEnumerator FireExtras(Hero owner)
+    {
+        // Snapshot the count so a boost taken mid-sequence doesn't extend it.
+        int n = extraAttackCount;
+        for (int i = 0; i < n; i++)
+        {
+            yield return new WaitForSeconds(extraAttackDelay);
+            // Bail out if anything has gone away mid-sequence.
+            if (this == null || owner == null || owner.IsDead) yield break;
+            Fire(owner);
+        }
     }
 
     /// <summary>

@@ -856,6 +856,59 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 50, y: -30, z: 0}
+--- !u!1 &761549799
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 761549801}
+  - component: {fileID: 761549800}
+  m_Layer: 0
+  m_Name: HealthVignette
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &761549800
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 761549799}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 178eeaa4128ede442a7e922fac62fcf2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  criticalHealth: 20
+  vignetteColor: {r: 0.85, g: 0.07, b: 0.07, a: 1}
+  maxAlpha: 0.65
+  fadeSpeed: 3.5
+  pulseSpeed: 1.6
+  pulseAmount: 0.25
+  textureSize: 256
+  innerRadius: 0.42
+  outerRadius: 1.05
+--- !u!4 &761549801
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 761549799}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 8.2127, y: 2.5505326, z: -9.937818}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &963194225
 GameObject:
   m_ObjectHideFlags: 0
@@ -972,8 +1025,8 @@ MonoBehaviour:
   maxLookAheadDistance: 4
   aimPlaneY: 0
   snapOnStart: 1
-  deathZoomFactor: 0.35
-  deathTransitionTime: 0.6
+  deathZoomFactor: 0.3
+  deathTransitionTime: 3
   deathSmoothTime: 0.25
 --- !u!114 &963194230
 MonoBehaviour:
@@ -1654,3 +1707,4 @@ SceneRoots:
   - {fileID: 1002177878}
   - {fileID: 635634192}
   - {fileID: 2054455414}
+  - {fileID: 761549801}

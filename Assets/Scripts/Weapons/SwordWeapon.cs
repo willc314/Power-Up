@@ -18,6 +18,42 @@ public class SwordWeapon : Weapon
     // Toggles each fire so successive swings come from opposite sides.
     private bool nextSwingRightToLeft = false;
 
+    // Crossbow pickup → Projectiles boost. On a Sword, this chains an extra
+    // slash after extraAttackDelay seconds (the alternating-arc logic in
+    // Fire() makes those extras swing from the opposite side automatically).
+    public override bool IsBoostMaxed(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles) return extraAttackCount >= maxExtraAttackCount;
+        return base.IsBoostMaxed(kind);
+    }
+
+    public override string DescribeBoost(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles)
+        {
+            if (IsBoostMaxed(BoostKind.Projectiles))
+                return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
+            return "+1 Extra Slash";
+        }
+        return base.DescribeBoost(kind);
+    }
+
+    public override bool TryApplyBoost(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles)
+        {
+            if (IsBoostMaxed(BoostKind.Projectiles))
+            {
+                damage     += damageIncreasePerLevel * postMaxBoostScale;
+                damageLevel++;
+                return true;
+            }
+            extraAttackCount++;
+            return true;
+        }
+        return base.TryApplyBoost(kind);
+    }
+
     protected override void Fire(Hero owner)
     {
         if (slashPrefab == null)
