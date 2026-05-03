@@ -1137,8 +1137,8 @@ MonoBehaviour:
   spawnRateRampPower: 1.6
   regularHpBonusPerMinute: 2
   regularHpMaxMultiplier: 2000
-  dropChanceMulAtStart: 2
-  dropChanceMulAtPeak: 0.4
+  dropChanceMulAtStart: 1.5
+  dropChanceMulAtPeak: 0.02
   bossFirstSpawnDelay: 60
   bossSpawnInterval: 60
   bossHpMultiplierPerSpawn: 3
