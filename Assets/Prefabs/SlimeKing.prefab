@@ -513,6 +513,19 @@ MonoBehaviour:
   aggroRange: 60
   debugShowHealth: 1
   debugLabelHeight: 2.5
+  powerUpPrefab: {fileID: 0}
+  powerUpDropChance: 1
+  dropAllWeaponPowerUps: 1
+  possiblePowerUpTypes: 010000000200000003000000040000000500000006000000
+  powerUpDropHeight: 0.1
+  useObstacleAvoidance: 1
+  obstacleMask:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  obstacleCheckDistance: 2.5
+  sideCheckDistance: 2
+  obstacleCheckRadius: 0.45
+  avoidanceStrength: 1.25
   hitParticleCount: 8
   hitParticleColor: {r: 0.7, g: 0.1, b: 0.1, a: 1}
   hitParticleSpeed: 5
