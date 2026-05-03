@@ -229,6 +229,7 @@ public class Enemy : MonoBehaviour
     private Rigidbody rb;
     private Hero player;
     private DamageFlash damageFlash;
+    private EnemyAnimator enemyAnimator;
 
     private bool aiming;
     private float telegraphTimer;
@@ -275,6 +276,8 @@ public class Enemy : MonoBehaviour
         rb.interpolation = RigidbodyInterpolation.Interpolate;
 
         damageFlash = GetComponent<DamageFlash>();
+        enemyAnimator = GetComponent<EnemyAnimator>();
+        if (enemyAnimator == null) enemyAnimator = GetComponentInChildren<EnemyAnimator>();
         currentHP = maxHP;
 
         if (behavior == Behavior.Crossbow || behavior == Behavior.SlimeKing)
@@ -647,6 +650,7 @@ public class Enemy : MonoBehaviour
         EnemyProjectile p = Instantiate(crossbowProjectile, start, rot);
         if (crossbowProjectileSpeed > 0f) p.speed = crossbowProjectileSpeed;
         p.Launch(dir, crossbowDamage);
+        if (enemyAnimator != null) enemyAnimator.OnAttack();
     }
 
     private void TickSlimeKing(Vector3 dir, float dist)
@@ -705,6 +709,7 @@ public class Enemy : MonoBehaviour
             {
                 player.TakeDamage(skMeleeDamage);
                 meleeTimer = skMeleeCooldown;
+                if (enemyAnimator != null) enemyAnimator.OnAttack();
             }
         }
 
@@ -881,6 +886,7 @@ public class Enemy : MonoBehaviour
         if (meleeTimer > 0f || player == null) return;
         player.TakeDamage(attackDamage);
         meleeTimer = attackCooldown;
+        if (enemyAnimator != null) enemyAnimator.OnAttack();
     }
 
     private void Shoot(Vector3 dir)
@@ -891,7 +897,7 @@ public class Enemy : MonoBehaviour
         Quaternion rot = Quaternion.LookRotation(dir, Vector3.up);
         EnemyProjectile p = Instantiate(projectilePrefab, spawnPos, rot);
         p.Launch(dir, attackDamage);
-        Debug.Log($"[{name}] Shoot fired. spawn={spawnPos}, dir={dir}, projectile={projectilePrefab?.name}", this);
+        if (enemyAnimator != null) enemyAnimator.OnAttack();
     }
 
     public void TakeDamage(float amount)
@@ -910,6 +916,7 @@ public class Enemy : MonoBehaviour
 
         currentHP = Mathf.Max(0f, currentHP - amount);
         if (damageFlash != null) damageFlash.Flash();
+        if (enemyAnimator != null && currentHP > 0f) enemyAnimator.OnHit();
         SpawnHitParticles();
         if (currentHP <= 0f) Die();
     }
@@ -946,6 +953,7 @@ public class Enemy : MonoBehaviour
         IsDead = true;
         StopMoving();
         if (telegraphLine != null) telegraphLine.enabled = false;
+        if (enemyAnimator != null) enemyAnimator.OnDie();
 
         if (GameManager.Instance != null) GameManager.Instance.OnEnemyKilled(this);
 

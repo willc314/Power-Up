@@ -428,6 +428,7 @@ GameObject:
   - component: {fileID: -5752662089983788859}
   - component: {fileID: 7794574661211741655}
   - component: {fileID: 341342204101478073}
+  - component: {fileID: 3858447515758934765}
   m_Layer: 7
   m_Name: SlimePBR
   m_TagString: Untagged
@@ -626,3 +627,23 @@ MonoBehaviour:
   flashColor: {r: 1, g: 0.5502355, b: 0, a: 1}
   flashDuration: 0.12
   renderers: []
+--- !u!114 &3858447515758934765
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1931298151966786}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 47400518be855cb4c843876274ae17e7, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  animator: {fileID: 0}
+  idleClip: IdleNormal
+  walkClip: WalkFWD
+  attackClip: Attack01
+  hitClip: GetHit
+  dieClip: Die
+  walkVelocityThreshold: 0.1
+  crossfadeDuration: 0.15
