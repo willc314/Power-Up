@@ -263,7 +263,7 @@ MonoBehaviour:
   projectileSpawn: {fileID: 0}
   preferredRange: 8
   retreatRange: 5
-  shootCooldown: 1.5
+  shootCooldown: 4
 --- !u!136 &-5643142030100359571
 CapsuleCollider:
   m_ObjectHideFlags: 0

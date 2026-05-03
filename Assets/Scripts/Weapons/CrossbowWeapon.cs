@@ -14,6 +14,14 @@ public class CrossbowWeapon : Weapon
     [Tooltip("Vertical offset above the hero's pivot.")]
     public float spawnHeight = 1.0f;
 
+    [Header("Power Boost (Multi-Shot)")]
+    [Tooltip("How many arrows fire per pull of the trigger. Crossbow's intrinsic upgrade adds 1 per level.")]
+    public int projectileCount = 1;
+    [Tooltip("Maximum number of arrows the crossbow can fire at once.")]
+    public int maxProjectileCount = 7;
+    [Tooltip("Total spread (degrees) the fan of arrows covers when projectileCount > 1.")]
+    public float spreadAngle = 30f;
+
     [Header("Crossbow Visual")]
     [Tooltip("Prefab shown in the hero's hands while holding the fire button (e.g. Crossbow.prefab). Despawned on release.")]
     public GameObject crossbowVisualPrefab;
@@ -50,8 +58,52 @@ public class CrossbowWeapon : Weapon
         Vector3 spawn = owner.transform.position
                       + owner.transform.forward * spawnDistance
                       + Vector3.up * spawnHeight;
-        Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
-        p.Launch(owner.transform.forward, damage, enemyLayers);
+
+        int n = Mathf.Max(1, projectileCount);
+        if (n == 1)
+        {
+            Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
+            p.Launch(owner.transform.forward, damage, enemyLayers);
+            return;
+        }
+
+        // Fan the arrows evenly across [-spread/2, +spread/2] around forward.
+        // For odd counts the middle arrow goes straight; for even counts the
+        // pair straddles the forward direction.
+        float half = spreadAngle * 0.5f;
+        for (int i = 0; i < n; i++)
+        {
+            float t = (n == 1) ? 0.5f : (float)i / (n - 1);
+            float angle = Mathf.Lerp(-half, half, t);
+            Vector3 dir = Quaternion.AngleAxis(angle, Vector3.up) * owner.transform.forward;
+            Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
+            p.Launch(dir, damage, enemyLayers);
+        }
+    }
+
+    // ---- Boost overrides ----
+
+    public override bool IsBoostMaxed(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles) return projectileCount >= maxProjectileCount;
+        return base.IsBoostMaxed(kind);
+    }
+
+    public override string DescribeBoost(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles) return "+1 Projectile";
+        return base.DescribeBoost(kind);
+    }
+
+    public override bool TryApplyBoost(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles)
+        {
+            if (IsBoostMaxed(BoostKind.Projectiles)) return false;
+            projectileCount++;
+            return true;
+        }
+        return base.TryApplyBoost(kind);
     }
 
     private void SpawnVisual(Hero owner)

@@ -58,6 +58,10 @@ public class DaggerWeapon : Weapon
     private int stabCount;
     private readonly Collider[] fallbackHitBuffer = new Collider[16];
 
+    // Boost behavior (AttackSpeed = -cooldown) is fully handled by the base
+    // Weapon class via its minCooldown / cooldownReductionPerBoost fields, so
+    // the Dagger doesn't need its own overrides.
+
     private void Reset()
     {
         weaponName = "Dagger";

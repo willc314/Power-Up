@@ -84,6 +84,115 @@ public class BowWeapon : Weapon
 
     public override bool CanFire => true; // charging weapon — always allowed to start
 
+    // ---- Boost overrides ----
+    [Header("Boost Tuning — Arrow Damage")]
+    [Tooltip("How much arrowMaxDamage grows per Damage boost.")]
+    public float maxDamageIncreasePerLevel = 10f;
+    [Tooltip("How much arrowMinDamage also grows per Damage boost.")]
+    public float minDamageIncreasePerLevel = 3f;
+
+    [Header("Boost Tuning — Charge Speed")]
+    [Tooltip("Floor for fullChargeTime when applying AttackSpeed boosts.")]
+    public float minFullChargeTime = 0.4f;
+    [Tooltip("How much fullChargeTime shrinks per AttackSpeed boost (seconds).")]
+    public float chargeTimeReductionPerBoost = 0.15f;
+    [Tooltip("Floor for overchargeTime (when the death beam triggers).")]
+    public float minOverchargeTime = 1.5f;
+    [Tooltip("How much overchargeTime shrinks per AttackSpeed boost (seconds). Lets the beam come out sooner.")]
+    public float overchargeReductionPerBoost = 0.5f;
+
+    [Header("Boost Tuning — Death Beam")]
+    [Tooltip("Total bonus DPS added to the spawned death beam from Damage boosts. Set by TryApplyBoost(Damage).")]
+    public float deathBeamDpsBonus = 0f;
+    [Tooltip("How much beam DPS grows per Damage boost.")]
+    public float deathBeamDpsPerBoost = 25f;
+    [Tooltip("Total bonus length added to the spawned death beam from Range boosts. Set by TryApplyBoost(Range).")]
+    public float deathBeamRangeBonus = 0f;
+    [Tooltip("How much beam range grows per Range boost (world units).")]
+    public float deathBeamRangePerBoost = 4f;
+    [Tooltip("Cap on deathBeamRangeBonus.")]
+    public float maxDeathBeamRangeBonus = 30f;
+
+    public override bool IsBoostMaxed(BoostKind kind)
+    {
+        switch (kind)
+        {
+            case BoostKind.AttackSpeed:
+                // Maxed only when BOTH charge and overcharge times have hit their floors.
+                bool chargeFloor = fullChargeTime  <= minFullChargeTime + 0.001f;
+                bool overFloor   = overchargeTime  <= minOverchargeTime + 0.001f;
+                return chargeFloor && overFloor;
+
+            case BoostKind.Range:
+                return deathBeamRangeBonus >= maxDeathBeamRangeBonus - 0.001f;
+
+            // Damage and Projectiles share the bow's damage path.
+            case BoostKind.Damage:
+            case BoostKind.Projectiles:
+                return IsDamageMaxed;
+        }
+        return base.IsBoostMaxed(kind);
+    }
+
+    public override string DescribeBoost(BoostKind kind)
+    {
+        switch (kind)
+        {
+            case BoostKind.Damage:
+            case BoostKind.Projectiles:
+                return $"+{maxDamageIncreasePerLevel:0.#} Max Damage  •  +{deathBeamDpsPerBoost:0.#} Beam DPS";
+
+            case BoostKind.AttackSpeed:
+                {
+                    float curC = Mathf.Max(minFullChargeTime, fullChargeTime);
+                    float nxtC = Mathf.Max(minFullChargeTime, fullChargeTime - chargeTimeReductionPerBoost);
+                    float curO = Mathf.Max(minOverchargeTime, overchargeTime);
+                    float nxtO = Mathf.Max(minOverchargeTime, overchargeTime - overchargeReductionPerBoost);
+                    bool chargeStuck = nxtC >= curC;
+                    bool overStuck   = nxtO >= curO;
+                    if (chargeStuck && overStuck) return "Charge Speed Maxed";
+                    string chargePart = chargeStuck ? "Charge maxed" : $"+{(curC / nxtC - 1f) * 100f:0}% Charge";
+                    string overPart   = overStuck   ? "Beam maxed"   : $"-{(curO - nxtO):0.0}s to Beam";
+                    return chargePart + "  •  " + overPart;
+                }
+
+            case BoostKind.Range:
+                return $"+{deathBeamRangePerBoost:0.#} Beam Range";
+        }
+        return base.DescribeBoost(kind);
+    }
+
+    public override bool TryApplyBoost(BoostKind kind)
+    {
+        switch (kind)
+        {
+            // Both Damage and Projectiles boost the bow's damage path so a
+            // Crossbow pickup applied to the Bow does something visible.
+            case BoostKind.Damage:
+            case BoostKind.Projectiles:
+                if (IsDamageMaxed) return false;
+                damageLevel++;
+                damage             += damageIncreasePerLevel;
+                arrowMinDamage     += minDamageIncreasePerLevel;
+                arrowMaxDamage     += maxDamageIncreasePerLevel;
+                deathBeamDpsBonus  += deathBeamDpsPerBoost;
+                return true;
+
+            case BoostKind.AttackSpeed:
+                if (IsBoostMaxed(BoostKind.AttackSpeed)) return false;
+                fullChargeTime = Mathf.Max(minFullChargeTime, fullChargeTime - chargeTimeReductionPerBoost);
+                overchargeTime = Mathf.Max(minOverchargeTime, overchargeTime - overchargeReductionPerBoost);
+                return true;
+
+            case BoostKind.Range:
+                if (IsBoostMaxed(BoostKind.Range)) return false;
+                deathBeamRangeBonus = Mathf.Min(maxDeathBeamRangeBonus,
+                    deathBeamRangeBonus + deathBeamRangePerBoost);
+                return true;
+        }
+        return base.TryApplyBoost(kind);
+    }
+
     public override bool OnFireDown(Hero owner)
     {
         StartCharge(owner);
@@ -232,6 +341,10 @@ public class BowWeapon : Weapon
     {
         Vector3 spawn = owner.transform.position;
         DeathBeam beam = Instantiate(deathBeamPrefab, spawn, owner.transform.rotation);
+        // Apply boost-driven bonuses to this instance before it initializes
+        // (so its damage tick and visual stretch reflect the upgrades).
+        if (deathBeamDpsBonus   > 0f) beam.damagePerSecond += deathBeamDpsBonus;
+        if (deathBeamRangeBonus > 0f) beam.range           += deathBeamRangeBonus;
         beam.Init(owner, enemyLayers);
     }
 

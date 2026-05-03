@@ -23,6 +23,12 @@ public class Grenade : MonoBehaviour
     private float duration;
     private float timer;
 
+    /// <summary>
+    /// Extra radius added to the spawned Explosion's radius. Set by
+    /// GrenadeWeapon when the grenade has been upgraded with the +range boost.
+    /// </summary>
+    [System.NonSerialized] public float radiusBonus = 0f;
+
     public void Launch(Vector3 startPos, Vector3 endPos, float arcHeight, float flightTime)
     {
         this.startPos = startPos;
@@ -54,6 +60,8 @@ public class Grenade : MonoBehaviour
         if (explosionPrefab != null)
         {
             Explosion ex = Instantiate(explosionPrefab, transform.position, Quaternion.identity);
+            // Apply the upgrade-driven radius bonus before the AOE damage pass.
+            if (radiusBonus > 0f) ex.radius += radiusBonus;
             ex.Detonate();
         }
         Destroy(gameObject);

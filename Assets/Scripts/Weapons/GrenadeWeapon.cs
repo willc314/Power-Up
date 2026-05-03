@@ -18,6 +18,14 @@ public class GrenadeWeapon : Weapon
     [Tooltip("Vertical offset for the throw release point.")]
     public float spawnHeight = 1.0f;
 
+    [Header("Power Boost (Range)")]
+    [Tooltip("Total bonus added to the explosion radius from Range boosts. Set by TryApplyBoost(Range).")]
+    public float explosionRadiusBonus = 0f;
+    [Tooltip("Radius added to the explosion per power level.")]
+    public float radiusIncreasePerLevel = 1.0f;
+    [Tooltip("Cap on explosionRadiusBonus.")]
+    public float maxExplosionRadiusBonus = 5f;
+
     protected override void Fire(Hero owner)
     {
         if (grenadePrefab == null) { Debug.LogWarning("GrenadeWeapon: Grenade Prefab not assigned."); return; }
@@ -29,6 +37,33 @@ public class GrenadeWeapon : Weapon
                          + owner.transform.forward * throwDistance;
 
         Grenade g = Instantiate(grenadePrefab, startPos, Quaternion.identity);
+        g.radiusBonus = explosionRadiusBonus;
         g.Launch(startPos, endPos, arcHeight, flightTime);
+    }
+
+    // ---- Boost overrides ----
+
+    public override bool IsBoostMaxed(BoostKind kind)
+    {
+        if (kind == BoostKind.Range) return explosionRadiusBonus >= maxExplosionRadiusBonus - 0.001f;
+        return base.IsBoostMaxed(kind);
+    }
+
+    public override string DescribeBoost(BoostKind kind)
+    {
+        if (kind == BoostKind.Range) return $"+{radiusIncreasePerLevel:0.#} Explosion Radius";
+        return base.DescribeBoost(kind);
+    }
+
+    public override bool TryApplyBoost(BoostKind kind)
+    {
+        if (kind == BoostKind.Range)
+        {
+            if (IsBoostMaxed(BoostKind.Range)) return false;
+            explosionRadiusBonus = Mathf.Min(maxExplosionRadiusBonus,
+                explosionRadiusBonus + radiusIncreasePerLevel);
+            return true;
+        }
+        return base.TryApplyBoost(kind);
     }
 }

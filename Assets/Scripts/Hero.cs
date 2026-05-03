@@ -569,7 +569,7 @@ public class Hero : MonoBehaviour
         return false;
     }
 
-    private Weapon GetWeaponComponentForType(eWeaponType type)
+    public Weapon GetWeaponComponentForType(eWeaponType type)
     {
         switch (type)
         {
@@ -593,6 +593,48 @@ public class Hero : MonoBehaviour
 
             default:
                 return null;
+        }
+    }
+
+    /// <summary>
+    /// Equip the weapon component for <paramref name="type"/> into a specific
+    /// slot. <paramref name="slotIndex"/> is 0 for primary, 1 for secondary.
+    /// Used by the powerup choice UI when a slot is empty.
+    /// </summary>
+    public void EquipWeaponInSlot(int slotIndex, eWeaponType type)
+    {
+        Weapon w = GetWeaponComponentForType(type);
+        if (w == null)
+        {
+            Debug.LogWarning("Hero: no weapon component exists for " + type + ". Taking stat boost instead.");
+            ApplyHeroStatBoost();
+            return;
+        }
+
+        if (slotIndex == 0) primaryWeapon = w;
+        else                secondaryWeapon = w;
+
+        speedMultiplier = 1f;
+        RefreshWeaponVisuals();
+    }
+
+    /// <summary>
+    /// Apply a pickup-defined boost (Damage, Projectiles, Range, AttackSpeed)
+    /// to a specific equipped weapon. Used by the powerup choice UI's Boost
+    /// button. Falls back to a Hero stat boost if the weapon is already at
+    /// the cap for that kind.
+    /// </summary>
+    public void UpgradeWeaponPower(Weapon weapon, BoostKind kind)
+    {
+        if (weapon == null) { ApplyHeroStatBoost(); return; }
+        if (!weapon.TryApplyBoost(kind))
+        {
+            Debug.Log(weapon.weaponName + " is maxed for " + kind + ". Taking Hero stat boost instead.");
+            ApplyHeroStatBoost();
+        }
+        else
+        {
+            Debug.Log("Boosted " + weapon.weaponName + ": " + weapon.DescribeBoost(kind));
         }
     }
 

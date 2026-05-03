@@ -1,151 +1,243 @@
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
-using TMPro;
 
 /// <summary>
-/// Powerup choice UI.
-/// Opens when the Hero collects a PowerUp.
+/// Power-up choice UI shown when the Hero collects a PowerUp.
+/// Built entirely from script so the scene only needs an empty GameObject
+/// with this component on it.
 ///
-/// Two choices:
-///   1. Upgrade current matching weapon.
-///      If that weapon is already maxed, the Hero gets a stat boost instead.
+/// Layout:
+///   ┌──────────────────── dim background ───────────────────────┐
+///   │                                                           │
+///   │  ┌───────┐         Picked Up:           ┌───────┐         │
+///   │  │ icon  │         [BIG icon]           │ icon  │         │
+///   │  │ name  │           name               │ name  │         │
+///   │  │       │                              │       │         │
+///   │  │ Repl. │                              │ Equip │         │
+///   │  │ Boost │                              │       │         │
+///   │  └───────┘                              └───────┘         │
+///   │   PRIMARY                                SECONDARY        │
+///   │                                                           │
+///   └───────────────────────────────────────────────────────────┘
 ///
-///   2. Replace weapon.
-///      If the powerup is already for one of the Hero's active weapons, this
-///      button changes to the same upgrade/stat-boost text so the player is
-///      not asked to replace a weapon with the same weapon they already have.
+/// Behavior per slot:
+///   * Empty slot     →  single Equip button (puts the picked-up weapon there).
+///   * Filled slot    →  Replace + Boost buttons.
+///                       - Replace swaps that slot for the picked-up weapon.
+///                       - Boost applies the slot weapon's intrinsic upgrade
+///                         (Sword/Shield/Bow → +damage, Crossbow → +projectile,
+///                         Grenade → +range, Dagger → +attack speed). The
+///                         button text spells out exactly which stat changes.
+///
+/// Setup:
+///   * Drop one GameObject named "PowerUpChoiceUI" in the scene with this component.
+///   * No other wiring needed. (Any existing UI children are auto-hidden.)
 /// </summary>
 public class PowerUpChoiceUI : MonoBehaviour
 {
     public static PowerUpChoiceUI Instance { get; private set; }
 
-    [Header("UI")]
-    public GameObject panelRoot;
-
-    public Button upgradeButton;
-    public Button replaceButton;
-
-    public TMP_Text upgradeButtonText;
-    public TMP_Text replaceButtonText;
-
-    public TMP_Text titleText;
-    public TMP_Text descriptionText;
+    [Header("Style")]
+    public Color overlayColor = new Color(0f, 0f, 0f, 0.55f);
+    public Color panelColor = new Color(0.12f, 0.12f, 0.14f, 0.95f);
+    public Color panelOutlineColor = new Color(1f, 1f, 1f, 0.18f);
+    public Color buttonColor = new Color(0.22f, 0.22f, 0.26f, 1f);
+    public Color buttonHoverColor = new Color(0.32f, 0.34f, 0.40f, 1f);
+    public Color buttonPressedColor = new Color(0.16f, 0.16f, 0.20f, 1f);
+    public Color textColor = Color.white;
+    public Color subtleTextColor = new Color(1f, 1f, 1f, 0.65f);
+    public Color emptySlotColor = new Color(0.18f, 0.18f, 0.20f, 0.85f);
 
     private Hero hero;
     private eWeaponType pendingType;
 
+    // Built UI references (rebuilt each Show so the layout matches state).
+    private Canvas canvas;
+    private GameObject panelRoot;
+    private Text titleText;
+    private Image centerIconImg;
+    private Text centerNameText;
+    private SlotWidgets primarySlot;
+    private SlotWidgets secondarySlot;
+    private Font defaultFont;
+
+    private struct SlotWidgets
+    {
+        public GameObject root;
+        public Text headerText;     // "PRIMARY" / "SECONDARY"
+        public Image iconImg;
+        public Text nameText;
+        public GameObject equipButtonGO;
+        public Button equipButton;
+        public Text equipButtonText;
+        public GameObject replaceButtonGO;
+        public Button replaceButton;
+        public Text replaceButtonText;
+        public GameObject boostButtonGO;
+        public Button boostButton;
+        public Text boostButtonText;
+    }
+
     private void Awake()
     {
         Instance = this;
+        defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
-        if (panelRoot == null)
-            panelRoot = gameObject;
+        // Hide any existing UI children left over from the previous version of
+        // this script so they don't render on top of the procedural panel.
+        for (int i = 0; i < transform.childCount; i++)
+        {
+            Transform child = transform.GetChild(i);
+            if (child != null) child.gameObject.SetActive(false);
+        }
 
+        EnsureEventSystem();
+        BuildUI();
         Hide();
     }
+
+    private static void EnsureEventSystem()
+    {
+        // Buttons need an EventSystem somewhere in the scene to receive clicks.
+        if (EventSystem.current != null) return;
+        var go = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+        go.hideFlags = HideFlags.DontSave;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
+    // -------------------- Public entry point --------------------
 
     public void Show(Hero hero, eWeaponType type)
     {
         this.hero = hero;
-        pendingType = type;
+        this.pendingType = type;
 
         Time.timeScale = 0f;
-
         panelRoot.SetActive(true);
 
-        SetupText();
-        SetupButtons();
+        Refresh();
     }
 
-    private void SetupText()
+    private void Refresh()
     {
-        string weaponName = GetWeaponName(pendingType);
-        Weapon matchingWeapon = hero.GetWeaponOfType(pendingType);
+        // --- Center: picked-up weapon name + icon ---
+        Weapon pickedUpWeapon = hero != null ? hero.GetWeaponComponentForType(pendingType) : null;
+        string pickedUpName = pickedUpWeapon != null ? pickedUpWeapon.weaponName : GetWeaponName(pendingType);
+        Sprite pickedUpIcon = pickedUpWeapon != null ? pickedUpWeapon.hudIcon : null;
 
-        if (titleText != null)
-            titleText.text = weaponName + " PowerUp";
+        if (titleText != null) titleText.text = "Picked Up:  " + pickedUpName;
 
-        if (descriptionText == null)
-            return;
-
-        if (matchingWeapon == null)
+        if (centerIconImg != null)
         {
-            descriptionText.text =
-                "You do not currently have " + weaponName + ".\n" +
-                "Choose whether to replace a weapon with it or take a Hero stat boost.";
+            centerIconImg.sprite = pickedUpIcon;
+            centerIconImg.color = pickedUpIcon != null
+                ? Color.white
+                : new Color(1f, 1f, 1f, 0.12f);
         }
-        else if (matchingWeapon.IsDamageMaxed)
+        if (centerNameText != null) centerNameText.text = pickedUpName;
+
+        // --- Slots ---
+        ConfigureSlot(primarySlot,   "PRIMARY",   0, hero != null ? hero.primaryWeapon   : null);
+        ConfigureSlot(secondarySlot, "SECONDARY", 1, hero != null ? hero.secondaryWeapon : null);
+    }
+
+    private void ConfigureSlot(SlotWidgets slot, string header, int slotIndex, Weapon equipped)
+    {
+        if (slot.headerText != null) slot.headerText.text = header;
+
+        // The picked-up weapon defines what kind of boost is on offer
+        // (Bow/Sword/Shield → Damage, Crossbow → Projectiles,
+        // Grenade → Range, Dagger → AttackSpeed). Each weapon below
+        // translates that kind into its own appropriate stat change.
+        BoostKind boostKind = Weapon.GetBoostKindForPickup(pendingType);
+
+        if (equipped == null)
         {
-            descriptionText.text =
-                matchingWeapon.weaponName + " is already maxed.\n" +
-                "Choosing either option will increase a Hero stat instead.";
+            // Empty slot: show placeholder + single Equip button.
+            if (slot.iconImg != null)
+            {
+                slot.iconImg.sprite = null;
+                slot.iconImg.color = emptySlotColor;
+            }
+            if (slot.nameText != null)
+            {
+                slot.nameText.text = "(empty)";
+                slot.nameText.color = subtleTextColor;
+            }
+
+            slot.equipButtonGO.SetActive(true);
+            slot.replaceButtonGO.SetActive(false);
+            slot.boostButtonGO.SetActive(false);
+
+            slot.equipButtonText.text = "Equip " + GetWeaponName(pendingType);
+            slot.equipButton.onClick.RemoveAllListeners();
+            slot.equipButton.onClick.AddListener(() =>
+            {
+                hero.EquipWeaponInSlot(slotIndex, pendingType);
+                Close();
+            });
         }
         else
         {
-            descriptionText.text =
-                "You already have " + matchingWeapon.weaponName + ".\n" +
-                "Choose either option to upgrade it.";
-        }
-    }
-
-    private void SetupButtons()
-    {
-        Weapon matchingWeapon = hero.GetWeaponOfType(pendingType);
-
-        string upgradeLabel = GetUpgradeLabel(matchingWeapon);
-
-        if (upgradeButtonText != null)
-            upgradeButtonText.text = upgradeLabel;
-
-        if (replaceButtonText != null)
-        {
-            if (matchingWeapon != null)
-                replaceButtonText.text = upgradeLabel;
-            else
-                replaceButtonText.text = "Replace Weapon With " + GetWeaponName(pendingType);
-        }
-
-        upgradeButton.onClick.RemoveAllListeners();
-        replaceButton.onClick.RemoveAllListeners();
-
-        upgradeButton.onClick.AddListener(() =>
-        {
-            ApplyUpgradeOrStatBoost(matchingWeapon);
-            Close();
-        });
-
-        replaceButton.onClick.AddListener(() =>
-        {
-            if (matchingWeapon != null)
+            // Filled slot: show weapon + Replace + Boost.
+            if (slot.iconImg != null)
             {
-                ApplyUpgradeOrStatBoost(matchingWeapon);
+                slot.iconImg.sprite = equipped.hudIcon;
+                slot.iconImg.color = equipped.hudIcon != null
+                    ? Color.white
+                    : new Color(1f, 1f, 1f, 0.18f);
+                slot.iconImg.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -equipped.hudIconRotation);
             }
-            else
+            if (slot.nameText != null)
             {
-                hero.BeginReplaceWeaponChoice(pendingType);
+                slot.nameText.text = equipped.weaponName;
+                slot.nameText.color = textColor;
             }
 
-            Close();
-        });
-    }
+            slot.equipButtonGO.SetActive(false);
+            slot.replaceButtonGO.SetActive(true);
+            slot.boostButtonGO.SetActive(true);
 
-    private string GetUpgradeLabel(Weapon matchingWeapon)
-    {
-        if (matchingWeapon == null)
-            return "Take Hero Stat Boost";
+            // Replace button — swap this slot's weapon for the picked-up one.
+            // If the slot already has the same type, replacing is a no-op so we
+            // gray the button out for clarity.
+            bool sameType = equipped.weaponType == pendingType;
+            slot.replaceButtonText.text = sameType
+                ? "Already " + equipped.weaponName
+                : "Replace with " + GetWeaponName(pendingType);
+            slot.replaceButton.interactable = !sameType;
+            slot.replaceButton.onClick.RemoveAllListeners();
+            slot.replaceButton.onClick.AddListener(() =>
+            {
+                hero.ReplaceWeaponSlot(slotIndex == 0, pendingType);
+                Close();
+            });
 
-        if (matchingWeapon.IsDamageMaxed)
-            return "Weapon Maxed: Boost Hero Stat";
-
-        return "Upgrade " + matchingWeapon.weaponName;
-    }
-
-    private void ApplyUpgradeOrStatBoost(Weapon matchingWeapon)
-    {
-        if (matchingWeapon != null && !matchingWeapon.IsDamageMaxed)
-            hero.UpgradeWeaponDamage(matchingWeapon);
-        else
-            hero.ApplyHeroStatBoost();
+            // Boost button — apply the pickup-defined boost to this weapon.
+            // The label spells out the actual stat change for THIS weapon
+            // ("+10 Max Damage" on a Bow, "+1 Projectile" on a Crossbow,
+            // "+1 Explosion Radius" on a Grenade, "+X% Attack Speed" on most,
+            // "+X% Charge Speed" on a Bow, "+5 Damage" otherwise).
+            bool maxed = equipped.IsBoostMaxed(boostKind);
+            slot.boostButtonText.text = maxed
+                ? equipped.weaponName + " maxed (Hero stat instead)"
+                : "Boost " + equipped.weaponName + ":  " + equipped.DescribeBoost(boostKind);
+            slot.boostButton.interactable = true; // clickable even when maxed -> falls back to Hero stat boost
+            slot.boostButton.onClick.RemoveAllListeners();
+            Weapon weaponRef = equipped;
+            BoostKind kindRef = boostKind;
+            slot.boostButton.onClick.AddListener(() =>
+            {
+                hero.UpgradeWeaponPower(weaponRef, kindRef);
+                Close();
+            });
+        }
     }
 
     private void Close()
@@ -156,34 +248,257 @@ public class PowerUpChoiceUI : MonoBehaviour
 
     private void Hide()
     {
-        if (panelRoot != null)
-            panelRoot.SetActive(false);
+        if (panelRoot != null) panelRoot.SetActive(false);
     }
 
-    private string GetWeaponName(eWeaponType type)
+    // -------------------- UI construction --------------------
+
+    private void BuildUI()
+    {
+        // Root canvas covering the screen.
+        GameObject canvasGo = new GameObject("PowerUpChoiceCanvas",
+            typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        canvasGo.transform.SetParent(transform, false);
+        canvas = canvasGo.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 200; // above the GameHUD (100)
+
+        CanvasScaler scaler = canvasGo.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920, 1080);
+        scaler.matchWidthOrHeight = 0.5f;
+
+        // Dim background that also catches clicks so the player can't
+        // accidentally interact with the world while the panel is open.
+        GameObject overlay = MakeUI("Overlay", canvasGo.transform);
+        var overlayRt = (RectTransform)overlay.transform;
+        overlayRt.anchorMin = Vector2.zero;
+        overlayRt.anchorMax = Vector2.one;
+        overlayRt.offsetMin = Vector2.zero;
+        overlayRt.offsetMax = Vector2.zero;
+        var overlayImg = overlay.AddComponent<Image>();
+        overlayImg.color = overlayColor;
+        overlayImg.raycastTarget = true;
+
+        panelRoot = overlay;
+
+        // -- Title bar at the top: "Picked Up: <Name>" --
+        GameObject titleGO = MakeUI("Title", overlay.transform);
+        var titleRt = (RectTransform)titleGO.transform;
+        titleRt.anchorMin = new Vector2(0.5f, 1f);
+        titleRt.anchorMax = new Vector2(0.5f, 1f);
+        titleRt.pivot = new Vector2(0.5f, 1f);
+        titleRt.anchoredPosition = new Vector2(0f, -40f);
+        titleRt.sizeDelta = new Vector2(900f, 60f);
+        titleText = titleGO.AddComponent<Text>();
+        titleText.font = defaultFont;
+        titleText.fontSize = 36;
+        titleText.color = textColor;
+        titleText.alignment = TextAnchor.UpperCenter;
+        titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        titleText.text = "Picked Up:";
+
+        // -- Center: big picked-up icon + name (no buttons; informational) --
+        const int slotW = 320;
+        const int slotH = 460;
+        const int gap   = 60;
+
+        // Compute three slot positions horizontally centered.
+        int totalW = slotW * 3 + gap * 2;
+        int leftX  = -totalW / 2;
+
+        GameObject centerGO = BuildSlotPanel("Center", overlay.transform,
+            new Vector2(0f, 0f), new Vector2(slotW, slotH));
+        // Center "header" stays empty (it's just the picked-up display).
+        BuildSlotHeader(centerGO.transform, "");
+        centerIconImg = BuildSlotIcon(centerGO.transform, /*topPadding*/ 60);
+        centerNameText = BuildSlotName(centerGO.transform, /*bottomPadding*/ 40, big: true);
+
+        // Place center panel
+        ((RectTransform)centerGO.transform).anchoredPosition = new Vector2(0f, 0f);
+
+        // Build slot containers and place them on either side of the center.
+        primarySlot = new SlotWidgets();
+        secondarySlot = new SlotWidgets();
+
+        primarySlot.root   = BuildSlotPanel("PrimarySlot",   overlay.transform,
+            new Vector2(-(slotW + gap), 0f), new Vector2(slotW, slotH));
+        secondarySlot.root = BuildSlotPanel("SecondarySlot", overlay.transform,
+            new Vector2( (slotW + gap), 0f), new Vector2(slotW, slotH));
+
+        // SlotWidgets is a struct, so pass by ref or the field assignments
+        // inside BuildFullSlot vanish into a copy.
+        BuildFullSlot(ref primarySlot,   primarySlot.root.transform);
+        BuildFullSlot(ref secondarySlot, secondarySlot.root.transform);
+    }
+
+    private GameObject BuildSlotPanel(string name, Transform parent, Vector2 anchoredPos, Vector2 size)
+    {
+        GameObject go = MakeUI(name, parent);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0.5f, 0.5f);
+        rt.anchoredPosition = anchoredPos;
+        rt.sizeDelta = size;
+
+        var img = go.AddComponent<Image>();
+        img.color = panelColor;
+        img.raycastTarget = true;
+        AddOutline(go, panelOutlineColor);
+        return go;
+    }
+
+    private void BuildFullSlot(ref SlotWidgets slot, Transform parent)
+    {
+        slot.headerText = BuildSlotHeader(parent, "PRIMARY");
+        slot.iconImg = BuildSlotIcon(parent, /*topPadding*/ 60);
+        slot.nameText = BuildSlotName(parent, /*bottomPadding*/ 168, big: false);
+
+        // --- Equip button (single, when slot is empty) ---
+        slot.equipButtonGO = BuildButton(parent, "EquipButton",
+            new Vector2(0f, 56f), new Vector2(280f, 56f),
+            out slot.equipButton, out slot.equipButtonText);
+        slot.equipButtonText.text = "Equip";
+
+        // --- Replace + Boost buttons (when slot is filled) ---
+        slot.replaceButtonGO = BuildButton(parent, "ReplaceButton",
+            new Vector2(0f, 84f), new Vector2(280f, 50f),
+            out slot.replaceButton, out slot.replaceButtonText);
+        slot.replaceButtonText.text = "Replace";
+
+        slot.boostButtonGO = BuildButton(parent, "BoostButton",
+            new Vector2(0f, 28f), new Vector2(280f, 50f),
+            out slot.boostButton, out slot.boostButtonText);
+        slot.boostButtonText.text = "Boost";
+    }
+
+    private Text BuildSlotHeader(Transform parent, string headerText)
+    {
+        GameObject go = MakeUI("Header", parent);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, -16f);
+        rt.sizeDelta = new Vector2(0f, 32f);
+
+        var t = go.AddComponent<Text>();
+        t.font = defaultFont;
+        t.fontSize = 22;
+        t.color = subtleTextColor;
+        t.alignment = TextAnchor.UpperCenter;
+        t.text = headerText;
+        t.raycastTarget = false;
+        return t;
+    }
+
+    private Image BuildSlotIcon(Transform parent, int topPadding)
+    {
+        GameObject go = MakeUI("Icon", parent);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = new Vector2(0.5f, 1f);
+        rt.anchorMax = new Vector2(0.5f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, -topPadding);
+        rt.sizeDelta = new Vector2(220f, 220f);
+
+        var img = go.AddComponent<Image>();
+        img.preserveAspect = true;
+        img.raycastTarget = false;
+        return img;
+    }
+
+    private Text BuildSlotName(Transform parent, int bottomPadding, bool big)
+    {
+        GameObject go = MakeUI("Name", parent);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = new Vector2(0f, 0f);
+        rt.anchorMax = new Vector2(1f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, bottomPadding);
+        rt.sizeDelta = new Vector2(0f, 36f);
+
+        var t = go.AddComponent<Text>();
+        t.font = defaultFont;
+        t.fontSize = big ? 32 : 26;
+        t.color = textColor;
+        t.alignment = TextAnchor.LowerCenter;
+        t.text = "";
+        t.raycastTarget = false;
+        return t;
+    }
+
+    private GameObject BuildButton(Transform parent, string name,
+        Vector2 anchoredPosFromBottom, Vector2 size,
+        out Button button, out Text label)
+    {
+        GameObject go = MakeUI(name, parent);
+        var rt = (RectTransform)go.transform;
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = anchoredPosFromBottom;
+        rt.sizeDelta = size;
+
+        var img = go.AddComponent<Image>();
+        img.color = buttonColor;
+        img.raycastTarget = true;
+
+        button = go.AddComponent<Button>();
+        button.targetGraphic = img;
+        var colors = button.colors;
+        colors.normalColor = buttonColor;
+        colors.highlightedColor = buttonHoverColor;
+        colors.pressedColor = buttonPressedColor;
+        colors.selectedColor = buttonHoverColor;
+        colors.disabledColor = new Color(buttonColor.r, buttonColor.g, buttonColor.b, 0.45f);
+        colors.colorMultiplier = 1f;
+        button.colors = colors;
+
+        // Label
+        GameObject labelGo = MakeUI("Label", go.transform);
+        var labelRt = (RectTransform)labelGo.transform;
+        labelRt.anchorMin = Vector2.zero;
+        labelRt.anchorMax = Vector2.one;
+        labelRt.offsetMin = new Vector2(8f, 4f);
+        labelRt.offsetMax = new Vector2(-8f, -4f);
+        label = labelGo.AddComponent<Text>();
+        label.font = defaultFont;
+        label.fontSize = 20;
+        label.color = textColor;
+        label.alignment = TextAnchor.MiddleCenter;
+        label.horizontalOverflow = HorizontalWrapMode.Overflow;
+        label.raycastTarget = false;
+
+        return go;
+    }
+
+    private GameObject MakeUI(string name, Transform parent)
+    {
+        GameObject go = new GameObject(name, typeof(RectTransform));
+        go.transform.SetParent(parent, false);
+        return go;
+    }
+
+    private void AddOutline(GameObject go, Color color)
+    {
+        var o = go.AddComponent<Outline>();
+        o.effectColor = color;
+        o.effectDistance = new Vector2(1f, -1f);
+    }
+
+    private static string GetWeaponName(eWeaponType type)
     {
         switch (type)
         {
-            case eWeaponType.sword:
-                return "Sword";
-
-            case eWeaponType.shield:
-                return "Shield";
-
-            case eWeaponType.bow:
-                return "Bow";
-
-            case eWeaponType.dagger:
-                return "Dagger";
-
-            case eWeaponType.crossbow:
-                return "Crossbow";
-
-            case eWeaponType.grenade:
-                return "Grenade";
-
-            default:
-                return "Unknown";
+            case eWeaponType.sword:    return "Sword";
+            case eWeaponType.shield:   return "Shield";
+            case eWeaponType.bow:      return "Bow";
+            case eWeaponType.dagger:   return "Dagger";
+            case eWeaponType.crossbow: return "Crossbow";
+            case eWeaponType.grenade:  return "Grenade";
+            default:                   return "Unknown";
         }
     }
 }
