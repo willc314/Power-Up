@@ -456,6 +456,7 @@ MonoBehaviour:
   attackClip: Mushroom_Attack01Angry
   hitClip: Mushroom_GetHitAngry
   dieClip: Mushroom_DieAngry
+  victoryClip: Mushroom_VictoryAngry
   walkVelocityThreshold: 0.1
   crossfadeDuration: 0.15
 --- !u!1 &5632524212304190485

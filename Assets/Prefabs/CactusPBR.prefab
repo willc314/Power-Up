@@ -328,6 +328,7 @@ MonoBehaviour:
   attackClip: Cactus_Attack01
   hitClip: Cactus_GetHit
   dieClip: Cactus_Die
+  victoryClip: Cactus_Victory
   walkVelocityThreshold: 0.1
   crossfadeDuration: 0.15
 --- !u!1 &1006438018938304421

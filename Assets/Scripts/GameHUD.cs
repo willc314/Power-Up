@@ -154,7 +154,9 @@ public class GameHUD : MonoBehaviour
 
         if (slot.root != null && !slot.root.activeSelf) slot.root.SetActive(true);
 
-        slot.nameText.text = buttonLabel + "  -  " + (string.IsNullOrEmpty(w.weaponName) ? w.GetType().Name : w.weaponName);
+        // Just the mouse-button label ("LMB" / "RMB"). The icon already
+        // identifies which weapon is in the slot, so the name was redundant.
+        slot.nameText.text = buttonLabel;
 
         // Prefer the icon the weapon itself carries so swapping/randomizing
         // weapons changes the HUD icon automatically. Fall back to the

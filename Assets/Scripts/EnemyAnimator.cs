@@ -37,6 +37,8 @@ public class EnemyAnimator : MonoBehaviour
     public string hitClip = "GetHit";
     [Tooltip("Death clip played once when the enemy dies. Animation finishes before the GameObject is destroyed.")]
     public string dieClip = "Die";
+    [Tooltip("Victory clip played (and looped) on every alive enemy when the Hero dies. Leave empty to skip.")]
+    public string victoryClip = "Victory";
 
     [Header("Tuning")]
     [Tooltip("Velocity (units/sec) above which the enemy is considered moving.")]
@@ -47,6 +49,7 @@ public class EnemyAnimator : MonoBehaviour
     private Rigidbody rb;
     private string currentLocomotionState = "";
     private bool isDead;
+    private bool celebrating;
     private float oneShotEndTime;
 
     private void Awake()
@@ -57,9 +60,21 @@ public class EnemyAnimator : MonoBehaviour
         if (rb == null) rb = GetComponentInChildren<Rigidbody>();
     }
 
+    private void OnEnable()  { Hero.OnHeroDied += HandleHeroDied; }
+    private void OnDisable() { Hero.OnHeroDied -= HandleHeroDied; }
+
+    private void HandleHeroDied()
+    {
+        if (isDead || celebrating || animator == null) return;
+        if (string.IsNullOrEmpty(victoryClip) || !HasState(victoryClip)) return;
+        celebrating = true;
+        animator.CrossFadeInFixedTime(victoryClip, crossfadeDuration);
+        currentLocomotionState = "";
+    }
+
     private void Update()
     {
-        if (isDead || animator == null) return;
+        if (isDead || celebrating || animator == null) return;
         // Don't override an attack/hit one-shot until it's done.
         if (Time.time < oneShotEndTime) return;
 

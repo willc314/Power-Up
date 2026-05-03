@@ -58,9 +58,46 @@ public class DaggerWeapon : Weapon
     private int stabCount;
     private readonly Collider[] fallbackHitBuffer = new Collider[16];
 
-    // Boost behavior (AttackSpeed = -cooldown) is fully handled by the base
-    // Weapon class via its minCooldown / cooldownReductionPerBoost fields, so
-    // the Dagger doesn't need its own overrides.
+    // Boost behavior:
+    //   * AttackSpeed (Dagger pickup) is fully handled by the base Weapon
+    //     class via minCooldown / cooldownReductionPerBoost.
+    //   * Projectiles (Crossbow pickup) chains an extra stab/throw after
+    //     extraAttackDelay seconds. Because Fire() increments stabCount on
+    //     every call, those follow-ups participate in the every-Nth-throw
+    //     logic too.
+
+    public override bool IsBoostMaxed(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles) return extraAttackCount >= maxExtraAttackCount;
+        return base.IsBoostMaxed(kind);
+    }
+
+    public override string DescribeBoost(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles)
+        {
+            if (IsBoostMaxed(BoostKind.Projectiles))
+                return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
+            return "+1 Extra Stab";
+        }
+        return base.DescribeBoost(kind);
+    }
+
+    public override bool TryApplyBoost(BoostKind kind)
+    {
+        if (kind == BoostKind.Projectiles)
+        {
+            if (IsBoostMaxed(BoostKind.Projectiles))
+            {
+                damage     += damageIncreasePerLevel * postMaxBoostScale;
+                damageLevel++;
+                return true;
+            }
+            extraAttackCount++;
+            return true;
+        }
+        return base.TryApplyBoost(kind);
+    }
 
     private void Reset()
     {
