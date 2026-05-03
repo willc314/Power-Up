@@ -2598,7 +2598,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 8189980434977739222}
   serializedVersion: 4
-  m_Mass: 1
+  m_Mass: 2
   m_Drag: 0
   m_AngularDrag: 0.05
   m_CenterOfMass: {x: 0, y: 0, z: 0}
@@ -2658,6 +2658,9 @@ MonoBehaviour:
   maxHPBoostAmount: 10
   moveSpeedBoostAmount: 0.25
   maxMoveSpeed: 10
+  healthRegenPerSecond: 0
+  healthRegenBoostAmount: 0.5
+  maxHealthRegenPerSecond: 10
   primaryWeapon: {fileID: 0}
   secondaryWeapon: {fileID: 0}
   randomizeWeaponsOnSpawn: 1
@@ -2667,6 +2670,8 @@ MonoBehaviour:
   dashDuration: 0.18
   dashCooldown: 1
   dashInterruptsWeapons: 1
+  dashInvulnerability: 1
+  dashInvulnerabilityExtension: 0.05
   dashParticles: 1
   dashParticlesPerSecond: 80
   dashParticleColor: {r: 0.65, g: 0.55, b: 0.42, a: 1}
@@ -2733,6 +2738,7 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.08
   cooldownReductionPerBoost: 0.04
+  postMaxBoostScale: 0.5
   slashPrefab: {fileID: 2526017728917958653, guid: cbc65052b92d3a245a0e616c4b3de3a3, type: 3}
   spawnDistance: 1
   spawnHeight: 1
@@ -2763,6 +2769,7 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.08
   cooldownReductionPerBoost: 0.04
+  postMaxBoostScale: 0.5
   shieldPrefab: {fileID: 6711622995299847906, guid: 28d318905bb3e5d46b0b92d326b2fc28, type: 3}
   spawnDistance: 0.8
   spawnHeight: 1
@@ -2793,6 +2800,7 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.08
   cooldownReductionPerBoost: 0.04
+  postMaxBoostScale: 0.5
   bowVisualPrefab: {fileID: 131850, guid: 8093457b576f04fbfa270bca1b2553a1, type: 3}
   bowSpawnDistance: 1.2
   bowSpawnHeight: 1
@@ -2823,9 +2831,9 @@ MonoBehaviour:
   overchargeReductionPerBoost: 0.5
   deathBeamDpsBonus: 0
   deathBeamDpsPerBoost: 25
-  deathBeamRangeBonus: 0
-  deathBeamRangePerBoost: 4
-  maxDeathBeamRangeBonus: 30
+  deathBeamRadiusBonus: 0
+  deathBeamRadiusPerBoost: 0.4
+  maxDeathBeamRadiusBonus: 3
 --- !u!114 &3670884374136682343
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2853,6 +2861,7 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.08
   cooldownReductionPerBoost: 0.04
+  postMaxBoostScale: 0.5
   arrowPrefab: {fileID: 4093347662047577129, guid: 328739536d0ead6479ec0b1d111290f5, type: 3}
   spawnDistance: 0.8
   spawnHeight: 1
@@ -2890,6 +2899,7 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.08
   cooldownReductionPerBoost: 0.04
+  postMaxBoostScale: 0.5
   grenadePrefab: {fileID: 5172283616525916960, guid: dea83f823520fd74198a6bfcc72b73aa, type: 3}
   throwDistance: 6
   arcHeight: 3
@@ -2925,6 +2935,7 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.08
   cooldownReductionPerBoost: 0.04
+  postMaxBoostScale: 0.5
   stabPrefab: {fileID: 3891962484159435510, guid: 41913b50274a244418607f629adfd3c6, type: 3}
   stabStartDistance: 0.4
   stabSpawnHeight: 1

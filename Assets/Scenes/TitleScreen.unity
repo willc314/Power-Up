@@ -516,7 +516,19 @@ MonoBehaviour:
   m_TargetGraphic: {fileID: 315042395}
   m_OnClick:
     m_PersistentCalls:
-      m_Calls: []
+      m_Calls:
+      - m_Target: {fileID: 982898419}
+        m_TargetAssemblyTypeName: MainMenu, Assembly-CSharp
+        m_MethodName: OpenOptions
+        m_Mode: 1
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &315042395
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -757,6 +769,60 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 334.75336, y: 604.9219, z: 23.743202}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1245826455
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1245826457}
+  - component: {fileID: 1245826456}
+  m_Layer: 0
+  m_Name: OptionsMenu
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &1245826456
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1245826455}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8f7445878d81c945bd85efd84567463, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  overlayColor: {r: 0, g: 0, b: 0, a: 0.65}
+  panelColor: {r: 0.12, g: 0.12, b: 0.14, a: 0.97}
+  panelOutlineColor: {r: 1, g: 1, b: 1, a: 0.18}
+  buttonColor: {r: 0.22, g: 0.22, b: 0.26, a: 1}
+  buttonHoverColor: {r: 0.32, g: 0.34, b: 0.4, a: 1}
+  buttonPressedColor: {r: 0.16, g: 0.16, b: 0.2, a: 1}
+  buttonSelectedColor: {r: 0.42, g: 0.55, b: 0.85, a: 1}
+  textColor: {r: 1, g: 1, b: 1, a: 1}
+  subtleTextColor: {r: 1, g: 1, b: 1, a: 0.7}
+  toggleKey: 27
+--- !u!4 &1245826457
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1245826455}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 8.2127, y: 2.5505326, z: -9.937818}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -1070,3 +1136,4 @@ SceneRoots:
   - {fileID: 13759827}
   - {fileID: 503069422}
   - {fileID: 982898420}
+  - {fileID: 1245826457}

@@ -972,6 +972,9 @@ MonoBehaviour:
   maxLookAheadDistance: 4
   aimPlaneY: 0
   snapOnStart: 1
+  deathZoomFactor: 0.35
+  deathTransitionTime: 0.6
+  deathSmoothTime: 0.25
 --- !u!114 &963194230
 MonoBehaviour:
   m_ObjectHideFlags: 0

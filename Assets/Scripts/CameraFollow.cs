@@ -51,6 +51,14 @@ public class CameraFollow : MonoBehaviour
     [Tooltip("If true, the camera snaps to the correct position on the first frame instead of easing in from wherever it started.")]
     public bool snapOnStart = true;
 
+    [Header("Death Cam")]
+    [Tooltip("When EnterDeathCam is called, the offset is multiplied by this factor — smaller = more zoomed in. 0.55 reads as a clear close-up without going claustrophobic.")]
+    [Range(0.1f, 1f)] public float deathZoomFactor = 0.55f;
+    [Tooltip("Seconds the camera takes to ease from its normal offset down to the zoomed offset.")]
+    public float deathTransitionTime = 0.6f;
+    [Tooltip("Smoothing time used while in death cam (overrides smoothTime). Lower = the corpse stays centered more tightly.")]
+    public float deathSmoothTime = 0.25f;
+
     private Vector3 currentVelocity; // used by SmoothDamp
     private Camera cam;
 
@@ -58,6 +66,13 @@ public class CameraFollow : MonoBehaviour
     private float shakeAmplitude;
     private float shakeTimer;
     private float shakeDuration;
+
+    // Death cam state.
+    private bool deathCam;
+    private Vector3 deathInitialOffset;
+    private float deathLerpT;
+
+    public bool IsInDeathCam => deathCam;
 
     private void Awake()
     {
@@ -81,6 +96,14 @@ public class CameraFollow : MonoBehaviour
             else return;
         }
 
+        // Death cam takes over: zoom-in lerp, no cursor lean, no shake.
+        if (deathCam)
+        {
+            UpdateDeathCam();
+            if (lookAtTarget) transform.LookAt(target);
+            return;
+        }
+
         Vector3 desired = target.position + offset + GetCursorLeanOffset();
 
         if (smoothTime <= 0f)
@@ -97,6 +120,55 @@ public class CameraFollow : MonoBehaviour
         transform.position += GetShakeOffset();
 
         if (lookAtTarget) transform.LookAt(target);
+    }
+
+    /// <summary>
+    /// Switch into a focused death cam: zoom in on <paramref name="corpse"/>,
+    /// stop tracking the cursor, and cancel any in-progress screen shake.
+    /// Called by Hero.Die so the player gets a clean focus on the dying hero.
+    /// </summary>
+    public void EnterDeathCam(Transform corpse)
+    {
+        if (corpse != null) target = corpse;
+        if (deathCam) return;
+
+        deathCam = true;
+        deathInitialOffset = offset;
+        deathLerpT = 0f;
+
+        // Cancel any pending screen shake so the focus reads cleanly.
+        shakeTimer = 0f;
+        shakeAmplitude = 0f;
+    }
+
+    /// <summary>Drop back into the normal follow behavior. Useful for restart flows.</summary>
+    public void ExitDeathCam()
+    {
+        deathCam = false;
+        deathLerpT = 0f;
+    }
+
+    private void UpdateDeathCam()
+    {
+        // Lerp 0 → 1 over deathTransitionTime, then hold.
+        if (deathTransitionTime > 0f)
+            deathLerpT = Mathf.Min(1f, deathLerpT + Time.deltaTime / deathTransitionTime);
+        else
+            deathLerpT = 1f;
+
+        Vector3 zoomedOffset = Vector3.Lerp(deathInitialOffset, deathInitialOffset * deathZoomFactor, deathLerpT);
+        Vector3 desired = target.position + zoomedOffset;
+
+        float smooth = deathSmoothTime > 0f ? deathSmoothTime : smoothTime;
+        if (smooth <= 0f)
+        {
+            transform.position = desired;
+        }
+        else
+        {
+            float maxSpd = maxSpeed > 0f ? maxSpeed : Mathf.Infinity;
+            transform.position = Vector3.SmoothDamp(transform.position, desired, ref currentVelocity, smooth, maxSpd, Time.deltaTime);
+        }
     }
 
     /// <summary>

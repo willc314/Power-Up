@@ -87,6 +87,10 @@ public class Hero : MonoBehaviour
     public float dashCooldown = 1.0f;
     [Tooltip("If true, dashing cancels in-progress weapon state (bow charge, etc.). Recommended.")]
     public bool dashInterruptsWeapons = true;
+    [Tooltip("If true, the hero takes no damage during a dash (plus the extension below).")]
+    public bool dashInvulnerability = true;
+    [Tooltip("Extra seconds of i-frames added after the dash ends, so a collision landing on the last frame of the dash doesn't slip through.")]
+    public float dashInvulnerabilityExtension = 0.05f;
 
     [Header("Dash Particles")]
     [Tooltip("Spawn dust particles flying behind the hero during the dash.")]
@@ -177,7 +181,15 @@ public class Hero : MonoBehaviour
     private float dashCooldownTimer;
     private Vector3 dashDirection;
     private float dashParticleAccumulator;
+    private float invulnerabilityTimer;
     public bool IsDashing => dashTimer > 0f;
+
+    /// <summary>
+    /// True while the hero is invulnerable to damage. Currently set by the
+    /// dash (covers the dash duration plus dashInvulnerabilityExtension).
+    /// Other code paths (Hero.TakeDamage) early-out when this is true.
+    /// </summary>
+    public bool IsInvulnerable => dashInvulnerability && invulnerabilityTimer > 0f;
 
     private void Awake()
     {
@@ -255,6 +267,8 @@ public class Hero : MonoBehaviour
 
         if (dashCooldownTimer > 0f)
             dashCooldownTimer -= Time.deltaTime;
+        if (invulnerabilityTimer > 0f)
+            invulnerabilityTimer -= Time.deltaTime;
 
         if (Input.GetKeyDown(dashKey) && dashCooldownTimer <= 0f && !IsDashing)
             StartDash();
@@ -287,6 +301,13 @@ public class Hero : MonoBehaviour
         }
         else
         {
+            // Zero residual velocity each tick so charger-style enemies (the
+            // mushroom dash) don't keep shoving the hero across the floor
+            // after the impact. Without this, the rigidbody picks up momentum
+            // from the collision and slides for several frames before drag
+            // brings it to rest.
+            rb.velocity = Vector3.zero;
+
             Vector3 target = rb.position + moveInput * moveSpeed * speedMultiplier * Time.fixedDeltaTime;
             rb.MovePosition(target);
         }
@@ -326,6 +347,8 @@ public class Hero : MonoBehaviour
         dashTimer = dashDuration;
         dashCooldownTimer = dashCooldown;
         dashParticleAccumulator = 0f;
+        // Cover the whole dash plus the small grace period afterward.
+        invulnerabilityTimer = dashDuration + Mathf.Max(0f, dashInvulnerabilityExtension);
 
         if (dashInterruptsWeapons)
         {
@@ -444,6 +467,10 @@ public class Hero : MonoBehaviour
     public void TakeDamage(float amount)
     {
         if (IsDead)
+            return;
+
+        // Dash i-frames: ignore damage while the invulnerability window is active.
+        if (IsInvulnerable)
             return;
 
         currentHP = Mathf.Max(0f, currentHP - amount);
@@ -772,6 +799,14 @@ public class Hero : MonoBehaviour
         {
             animator.SetFloat(kSpeed, 0f);
             animator.SetTrigger(kDie);
+        }
+
+        // Hand control to the death cam: focus + zoom on the corpse, ignore
+        // cursor lean and screen shake until the EndScreen loads.
+        if (Camera.main != null)
+        {
+            var follow = Camera.main.GetComponent<CameraFollow>();
+            if (follow != null) follow.EnterDeathCam(transform);
         }
 
         Invoke(nameof(LoadGameOver), 2f);

@@ -12,6 +12,19 @@ public class MainMenu : MonoBehaviour
         SceneManager.LoadScene(gameplaySceneName);
     }
 
+    /// <summary>
+    /// Wire your "Options" UI Button's OnClick to this method. It opens the
+    /// OptionsMenu singleton (created automatically when an OptionsMenu
+    /// component is present in the scene).
+    /// </summary>
+    public void OpenOptions()
+    {
+        if (OptionsMenu.Instance != null)
+            OptionsMenu.Instance.Show();
+        else
+            Debug.LogWarning("MainMenu.OpenOptions: no OptionsMenu in the scene. Add an empty GameObject with the OptionsMenu component.");
+    }
+
     public void QuitGame()
     {
         Application.Quit();
