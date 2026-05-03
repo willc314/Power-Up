@@ -1,5 +1,5 @@
 using UnityEngine;
-
+using UnityEngine.SceneManagement;
 /// <summary>
 /// Top-down hero controller for a Vampire Survivors-style roguelike.
 /// - WASD moves the hero on the XZ plane.
@@ -18,6 +18,7 @@ using UnityEngine;
 ///   * PowerUpChoiceUI opens if it exists
 ///   * Upgrade choice upgrades matching weapon damage
 ///   * Replace choice swaps the active primary or secondary weapon
+///   * If the replaced weapon was maxed, the new weapon becomes maxed too
 ///
 /// Visual weapon swapping:
 ///   The actual attack changes by assigning Primary Weapon or Secondary Weapon.
@@ -47,7 +48,7 @@ public class Hero : MonoBehaviour
     /// Bow and DeathBeam use this to slow or stop the hero while charging/firing.
     /// </summary>
     [System.NonSerialized] public float speedMultiplier = 1f;
-    
+
     [Header("Powerup Stat Boosts")]
     [Tooltip("Which Hero stat gets boosted when a weapon is already maxed.")]
     public HeroStatBoostMode maxedWeaponBoostMode = HeroStatBoostMode.Random;
@@ -165,7 +166,6 @@ public class Hero : MonoBehaviour
     private Vector3 moveInput;
     private DamageFlash damageFlash;
 
-    // Dash state
     private float dashTimer;
     private float dashCooldownTimer;
     private Vector3 dashDirection;
@@ -191,26 +191,22 @@ public class Hero : MonoBehaviour
 
         cam = Camera.main;
         currentHP = maxHP;
-        
-        
+
         if (randomizeWeaponsOnSpawn) PickRandomWeapons();
         else RefreshWeaponVisuals();
     }
 
-    /// <summary>
-    /// Replaces primaryWeapon with a random weapon drawn from randomWeaponPool
-    /// (or, if that's empty, from every Weapon component attached to this hero
-    /// or a child). The secondary slot is cleared so the hero spawns with a
-    /// single weapon.
-    /// </summary>
     private void PickRandomWeapons()
     {
-        // Build the candidate pool. Inspector-provided list wins so designers
-        // can blacklist weapons (e.g. exclude the bow if it isn't tuned yet).
         var pool = new System.Collections.Generic.List<Weapon>();
+
         if (randomWeaponPool != null && randomWeaponPool.Count > 0)
         {
-            foreach (var w in randomWeaponPool) if (w != null) pool.Add(w);
+            foreach (var w in randomWeaponPool)
+            {
+                if (w != null)
+                    pool.Add(w);
+            }
         }
         else
         {
@@ -223,8 +219,10 @@ public class Hero : MonoBehaviour
             return;
         }
 
-        primaryWeapon   = pool[Random.Range(0, pool.Count)];
+        primaryWeapon = pool[Random.Range(0, pool.Count)];
         secondaryWeapon = null;
+
+        RefreshWeaponVisuals();
     }
 
     private void OnDestroy()
@@ -248,13 +246,12 @@ public class Hero : MonoBehaviour
 
         FaceMouse();
 
-        // --- Dash ---
-        if (dashCooldownTimer > 0f) dashCooldownTimer -= Time.deltaTime;
-        if (Input.GetKeyDown(dashKey) && dashCooldownTimer <= 0f && !IsDashing) StartDash();
+        if (dashCooldownTimer > 0f)
+            dashCooldownTimer -= Time.deltaTime;
 
-        // --- Attack: dispatch press/hold/release to the weapons. Auto-repeat
-        // weapons (sword, dagger, crossbow, ...) only use OnFireHeld; the Bow
-        // uses all three to implement charging.
+        if (Input.GetKeyDown(dashKey) && dashCooldownTimer <= 0f && !IsDashing)
+            StartDash();
+
         DispatchWeaponInput(0, primaryWeapon);
         DispatchWeaponInput(1, secondaryWeapon);
 
@@ -286,10 +283,14 @@ public class Hero : MonoBehaviour
 
     private void EmitDashParticles()
     {
-        if (!dashParticles || dashParticlesPerSecond <= 0f) return;
+        if (!dashParticles || dashParticlesPerSecond <= 0f)
+            return;
+
         dashParticleAccumulator += dashParticlesPerSecond * Time.fixedDeltaTime;
+
         Vector3 origin = transform.position + Vector3.up * dashParticleHeight;
         Vector3 backward = -dashDirection;
+
         while (dashParticleAccumulator >= 1f)
         {
             HitParticles.EmitBurst(origin, backward,
@@ -300,15 +301,16 @@ public class Hero : MonoBehaviour
                 color: dashParticleColor,
                 spreadAngle: dashParticleSpread,
                 useGravity: true);
+
             dashParticleAccumulator -= 1f;
         }
     }
 
     private void StartDash()
     {
-        // Direction: WASD if held, otherwise the hero's current facing.
         Vector3 dir = moveInput.sqrMagnitude > 0.01f ? moveInput : transform.forward;
         dir.y = 0f;
+
         dashDirection = dir.sqrMagnitude > 0.0001f ? dir.normalized : transform.forward;
         dashTimer = dashDuration;
         dashCooldownTimer = dashCooldown;
@@ -316,8 +318,11 @@ public class Hero : MonoBehaviour
 
         if (dashInterruptsWeapons)
         {
-            if (primaryWeapon != null)   primaryWeapon.OnInterrupted(this);
-            if (secondaryWeapon != null) secondaryWeapon.OnInterrupted(this);
+            if (primaryWeapon != null)
+                primaryWeapon.OnInterrupted(this);
+
+            if (secondaryWeapon != null)
+                secondaryWeapon.OnInterrupted(this);
         }
     }
 
@@ -499,6 +504,7 @@ public class Hero : MonoBehaviour
 
     public void ReplaceWeaponSlot(bool replacePrimary, eWeaponType newType)
     {
+        Weapon oldWeapon = replacePrimary ? primaryWeapon : secondaryWeapon;
         Weapon newWeapon = GetWeaponComponentForType(newType);
 
         if (newWeapon == null)
@@ -507,6 +513,8 @@ public class Hero : MonoBehaviour
             ApplyHeroStatBoost();
             return;
         }
+
+        TransferMaxedWeaponStats(oldWeapon, newWeapon);
 
         if (replacePrimary)
         {
@@ -521,6 +529,26 @@ public class Hero : MonoBehaviour
 
         speedMultiplier = 1f;
         RefreshWeaponVisuals();
+    }
+
+    private void TransferMaxedWeaponStats(Weapon oldWeapon, Weapon newWeapon)
+    {
+        if (oldWeapon == null || newWeapon == null)
+            return;
+
+        if (oldWeapon == newWeapon)
+            return;
+
+        if (!oldWeapon.IsDamageMaxed)
+            return;
+
+        while (!newWeapon.IsDamageMaxed)
+        {
+            if (!newWeapon.TryUpgradeDamage())
+                break;
+        }
+
+        Debug.Log("Transferred max weapon upgrade from " + oldWeapon.weaponName + " to " + newWeapon.weaponName + ".");
     }
 
     private bool ShouldReplacePrimaryByDefault(eWeaponType newType)
@@ -626,6 +654,8 @@ public class Hero : MonoBehaviour
 
     private void Die()
     {
+        if (IsDead) return;
+
         IsDead = true;
         moveInput = Vector3.zero;
         speedMultiplier = 1f;
@@ -639,6 +669,11 @@ public class Hero : MonoBehaviour
             animator.SetTrigger(kDie);
         }
 
-        Debug.Log("Hero died.");
+        Invoke(nameof(LoadGameOver), 2f);
+    }
+
+    private void LoadGameOver()
+    {
+        SceneManager.LoadScene("EndScreen");
     }
 }
