@@ -38,6 +38,8 @@ public abstract class Weapon : MonoBehaviour
     public Sprite hudIcon;
     [Tooltip("Z-rotation applied to the HUD icon (degrees, clockwise). Use this when a rendered icon ends up sideways. Try 0, 90, 180, or -90 first.")]
     public float hudIconRotation = 0f;
+    [Tooltip("Scale multiplier applied to the HUD icon. 1 = native size, 0.7 = smaller (good for icons that fill the whole slot edge-to-edge), 1.3 = larger (good for tall thin icons that look small inside the slot).")]
+    public float hudIconZoom = 1f;
 
     [Tooltip("Weapon type used by powerups and replacement UI.")]
     public eWeaponType weaponType = eWeaponType.none;

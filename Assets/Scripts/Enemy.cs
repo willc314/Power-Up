@@ -393,10 +393,18 @@ public class Enemy : MonoBehaviour
         else
             StopMoving();
 
-        if (shootTimer <= 0f && projectilePrefab != null)
+        if (shootTimer <= 0f)
         {
-            Shoot(dir);
-            shootTimer = shootCooldown;
+            if (projectilePrefab != null)
+            {
+                Shoot(dir);
+                shootTimer = shootCooldown;
+            }
+            else
+            {
+                Debug.LogWarning($"[{name}] TickRanged: shoot timer ready but Projectile Prefab is NULL — assign one in the Inspector.", this);
+                shootTimer = shootCooldown; // throttle the warning so it doesn't spam every frame
+            }
         }
     }
 
@@ -724,6 +732,7 @@ public class Enemy : MonoBehaviour
         Quaternion rot = Quaternion.LookRotation(dir, Vector3.up);
         EnemyProjectile p = Instantiate(projectilePrefab, spawnPos, rot);
         p.Launch(dir, attackDamage);
+        Debug.Log($"[{name}] Shoot fired. spawn={spawnPos}, dir={dir}, projectile={projectilePrefab?.name}", this);
     }
 
     public void TakeDamage(float amount)

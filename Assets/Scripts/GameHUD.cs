@@ -171,6 +171,10 @@ public class GameHUD : MonoBehaviour
             // sideways from the renderer. Negate so positive values turn
             // clockwise from the user's point of view.
             slot.icon.rectTransform.localRotation = Quaternion.Euler(0f, 0f, -w.hudIconRotation);
+            // Per-weapon scale so each icon can be sized to fit the slot
+            // regardless of how cropped the source sprite was.
+            float zoom = w.hudIconZoom > 0f ? w.hudIconZoom : 1f;
+            slot.icon.rectTransform.localScale = new Vector3(zoom, zoom, 1f);
         }
 
         if (slot.cooldownOverlay != null) slot.cooldownOverlay.fillAmount = w.CooldownProgress;

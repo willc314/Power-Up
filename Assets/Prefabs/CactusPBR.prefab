@@ -259,7 +259,7 @@ MonoBehaviour:
   splitPrefab: {fileID: 0}
   splitCount: 5
   splitRadius: 1.6
-  projectilePrefab: {fileID: 0}
+  projectilePrefab: {fileID: 2241873115812845983, guid: e42e74e2f360725468bab61f4e054cc0, type: 3}
   projectileSpawn: {fileID: 0}
   preferredRange: 8
   retreatRange: 5

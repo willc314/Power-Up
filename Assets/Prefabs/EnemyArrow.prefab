@@ -15,7 +15,7 @@ GameObject:
   - component: {fileID: 2202632793970543278}
   - component: {fileID: 3988617171183088763}
   - component: {fileID: 5082396591220985723}
-  m_Layer: 0
+  m_Layer: 8
   m_Name: EnemyArrow
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -172,3 +172,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   speed: 20
   lifetime: 4
+  homing: 0
+  turnSpeed: 120
+  homingDuration: 3
+  homingMaxRange: 30
+  homingAimHeight: 0.5
