@@ -36,6 +36,7 @@ public class GameSettings : MonoBehaviour
     private const string PrefsResWidth    = "Settings.ResolutionWidth";
     private const string PrefsResHeight   = "Settings.ResolutionHeight";
     private const string PrefsFullscreen  = "Settings.Fullscreen";
+    private const string PrefsMusicVol    = "Settings.MusicVolume";
 
     /// <summary>Target framerate. 0 = uncapped.</summary>
     public int TargetFps { get; private set; } = 60;
@@ -43,6 +44,9 @@ public class GameSettings : MonoBehaviour
     public Vector2Int Resolution { get; private set; } = new Vector2Int(1920, 1080);
     /// <summary>True for fullscreen, false for windowed.</summary>
     public bool Fullscreen { get; private set; } = true;
+
+    /// <summary>Music volume from 0 (mute) to 1 (full). Applied via AudioListener.volume.</summary>
+    public float MusicVolume { get; private set; } = 0.7f;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap()
@@ -69,6 +73,7 @@ public class GameSettings : MonoBehaviour
         int h      = PlayerPrefs.GetInt(PrefsResHeight, Screen.currentResolution.height);
         Resolution = new Vector2Int(Mathf.Max(640, w), Mathf.Max(360, h));
         Fullscreen = PlayerPrefs.GetInt(PrefsFullscreen, Screen.fullScreen ? 1 : 0) != 0;
+        MusicVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(PrefsMusicVol, 0.7f));
     }
 
     public void Save()
@@ -77,6 +82,7 @@ public class GameSettings : MonoBehaviour
         PlayerPrefs.SetInt(PrefsResWidth,   Resolution.x);
         PlayerPrefs.SetInt(PrefsResHeight,  Resolution.y);
         PlayerPrefs.SetInt(PrefsFullscreen, Fullscreen ? 1 : 0);
+        PlayerPrefs.SetFloat(PrefsMusicVol, MusicVolume);
         PlayerPrefs.Save();
     }
 
@@ -84,6 +90,17 @@ public class GameSettings : MonoBehaviour
     {
         ApplyFps();
         ApplyDisplay();
+        ApplyAudio();
+    }
+
+    /// <summary>
+    /// Apply music volume — drives AudioListener.volume. If you later split
+    /// audio into music/SFX channels via an AudioMixer, route the music
+    /// channel's exposed parameter from here instead.
+    /// </summary>
+    public void ApplyAudio()
+    {
+        AudioListener.volume = Mathf.Clamp01(MusicVolume);
     }
 
     /// <summary>Apply the FPS cap only — cheap, safe to call every frame.</summary>
@@ -106,6 +123,7 @@ public class GameSettings : MonoBehaviour
     public void SetTargetFps(int fps)        { TargetFps = Mathf.Max(0, fps); ApplyFps();     Save(); }
     public void SetResolution(Vector2Int r)  { Resolution = r;                ApplyDisplay(); Save(); }
     public void SetFullscreen(bool fs)       { Fullscreen = fs;               ApplyDisplay(); Save(); }
+    public void SetMusicVolume(float v)      { MusicVolume = Mathf.Clamp01(v); ApplyAudio();  Save(); }
 
     /// <summary>Pretty label for the FPS option (e.g. "60 FPS" or "Unlimited").</summary>
     public static string FormatFps(int fps) => fps <= 0 ? "Unlimited" : fps + " FPS";

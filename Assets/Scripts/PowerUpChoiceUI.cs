@@ -132,6 +132,9 @@ public class PowerUpChoiceUI : MonoBehaviour
         Time.timeScale = 0f;
         panelRoot.SetActive(true);
 
+        // Dim the music while the player is choosing a powerup. EndDuck pairs with this in Close().
+        if (MusicManager.Instance != null) MusicManager.Instance.BeginDuck();
+
         Refresh();
     }
 
@@ -328,6 +331,9 @@ public class PowerUpChoiceUI : MonoBehaviour
     {
         Hide();
         Time.timeScale = 1f;
+
+        // Restore the music level (paired with BeginDuck in Show).
+        if (MusicManager.Instance != null) MusicManager.Instance.EndDuck();
     }
 
     private void Hide()

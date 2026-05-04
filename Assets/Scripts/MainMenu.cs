@@ -6,6 +6,12 @@ public class MainMenu : MonoBehaviour
     [Tooltip("Name of the gameplay scene to load.")]
     public string gameplaySceneName = "SampleScene";
 
+    private void Start()
+    {
+        // Start the title music if the scene has a MusicManager set up with a title clip.
+        if (MusicManager.Instance != null) MusicManager.Instance.PlayTitle();
+    }
+
     public void StartGame()
     {
         Time.timeScale = 1f;

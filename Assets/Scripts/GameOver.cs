@@ -45,6 +45,9 @@ public class GameOverMenu : MonoBehaviour
 
     private void Start()
     {
+        // Play the end-screen music if the scene has a MusicManager with one set up.
+        if (MusicManager.Instance != null) MusicManager.Instance.PlayEnd();
+
         int finalScore = GameManager.LoadLastFinalScore();
         int highScore  = GameManager.LoadStoredHighScore();
         bool newHigh   = GameManager.LoadLastRunWasNewHigh();

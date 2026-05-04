@@ -58,6 +58,8 @@ public class OptionsMenu : MonoBehaviour
     private Slider fpsSlider;
     private Text   fpsValueLabel;
     private Dropdown resolutionDropdown;
+    private Slider musicSlider;
+    private Text   musicValueLabel;
 
     /// <summary>
     /// Auto-spawn fallback: if no OptionsMenu exists in the first scene's
@@ -137,6 +139,9 @@ public class OptionsMenu : MonoBehaviour
         }
 
         panelRoot.SetActive(true);
+        // Dim the music. EndDuck pairs with this in Hide(), only fires if we were actually open.
+        if (MusicManager.Instance != null) MusicManager.Instance.BeginDuck();
+
         Refresh();
     }
 
@@ -152,6 +157,9 @@ public class OptionsMenu : MonoBehaviour
             // of another modal that had also paused).
             Time.timeScale = prePauseTimeScale > 0f ? prePauseTimeScale : 1f;
         }
+        // Restore music volume only if we were actually showing the panel,
+        // so accidental Hide() calls on an already-hidden panel don't underflow.
+        if (wasOpen && MusicManager.Instance != null) MusicManager.Instance.EndDuck();
     }
 
     /// <summary>Loads the title scene. Wired to the "Quit to Main Menu" button.</summary>
@@ -188,6 +196,12 @@ public class OptionsMenu : MonoBehaviour
                 if (GameSettings.ResolutionOptions[i] == s.Resolution) { rIdx = i; break; }
             resolutionDropdown.SetValueWithoutNotify(rIdx);
             resolutionDropdown.RefreshShownValue();
+        }
+
+        if (musicSlider != null)
+        {
+            musicSlider.SetValueWithoutNotify(s.MusicVolume);
+            if (musicValueLabel != null) musicValueLabel.text = Mathf.RoundToInt(s.MusicVolume * 100f) + "%";
         }
 
         HighlightSelection(fullscreenButtons, s.Fullscreen ? 1 : 0);
@@ -244,7 +258,7 @@ public class OptionsMenu : MonoBehaviour
         panelRt.anchorMax = new Vector2(0.5f, 0.5f);
         panelRt.pivot = new Vector2(0.5f, 0.5f);
         panelRt.anchoredPosition = Vector2.zero;
-        panelRt.sizeDelta = new Vector2(960f, 600f);
+        panelRt.sizeDelta = new Vector2(960f, 720f); // taller — fits 4 option rows + bottom buttons
         var panelImg = panel.AddComponent<Image>();
         panelImg.color = panelColor;
         panelImg.raycastTarget = true;
@@ -276,6 +290,13 @@ public class OptionsMenu : MonoBehaviour
             anchor: TextAnchor.MiddleLeft, fontSize: 26, color: subtleTextColor,
             anchorTop: true);
         BuildOptionRowFullscreen(panel.transform, /*yFromTop*/ -360f);
+
+        // --- Row: Music Volume ---
+        BuildLabel(panel.transform, "Music Volume",
+            new Vector2(40f, -480f), new Vector2(280f, 40f),
+            anchor: TextAnchor.MiddleLeft, fontSize: 26, color: subtleTextColor,
+            anchorTop: true);
+        BuildOptionRowMusicVolume(panel.transform, /*yFromTop*/ -480f);
 
         // Bottom buttons: Quit to Main Menu (left) + Close (right). Both
         // anchored to the bottom-center of the panel and offset horizontally.
@@ -339,6 +360,48 @@ public class OptionsMenu : MonoBehaviour
             int fps = GameSettings.FpsOptions[idx];
             GameSettings.Instance.SetTargetFps(fps);
             if (fpsValueLabel != null) fpsValueLabel.text = GameSettings.FormatFps(fps);
+        });
+    }
+
+    private void BuildOptionRowMusicVolume(Transform parent, float yFromTop)
+    {
+        // Music volume row: continuous slider 0..1 with a "75%" live label.
+        const float startX     = 320f;
+        const float sliderW    = 440f;
+        const float sliderH    = 30f;
+        const float labelW     = 160f;
+        const float labelGap   = 18f;
+
+        float currentVolume = GameSettings.Instance != null ? GameSettings.Instance.MusicVolume : 0.7f;
+
+        musicSlider = BuildSlider(parent,
+            new Vector2(startX, yFromTop - 10f),
+            new Vector2(sliderW, sliderH),
+            min: 0f, max: 1f, wholeNumbers: false,
+            initialValue: currentVolume);
+
+        // Live percentage label
+        GameObject labelGo = MakeUI("Music_Value", parent);
+        var lblRt = (RectTransform)labelGo.transform;
+        lblRt.anchorMin = new Vector2(0f, 1f);
+        lblRt.anchorMax = new Vector2(0f, 1f);
+        lblRt.pivot = new Vector2(0f, 1f);
+        lblRt.anchoredPosition = new Vector2(startX + sliderW + labelGap, yFromTop);
+        lblRt.sizeDelta = new Vector2(labelW, 40f);
+        musicValueLabel = labelGo.AddComponent<Text>();
+        musicValueLabel.font = defaultFont;
+        musicValueLabel.fontSize = 22;
+        musicValueLabel.color = textColor;
+        musicValueLabel.alignment = TextAnchor.MiddleLeft;
+        musicValueLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+        musicValueLabel.text = Mathf.RoundToInt(currentVolume * 100f) + "%";
+        musicValueLabel.raycastTarget = false;
+
+        musicSlider.onValueChanged.AddListener(v =>
+        {
+            float clamped = Mathf.Clamp01(v);
+            GameSettings.Instance.SetMusicVolume(clamped);
+            if (musicValueLabel != null) musicValueLabel.text = Mathf.RoundToInt(clamped * 100f) + "%";
         });
     }
 
