@@ -53,6 +53,7 @@ public class OptionsMenu : MonoBehaviour
     // Per-row state
     private struct OptionButton { public Button button; public Image image; public int valueKey; }
     private readonly List<OptionButton> fullscreenButtons = new List<OptionButton>();
+    private readonly List<OptionButton> difficultyButtons = new List<OptionButton>();
     // The FPS slider owns its own selection state; we just keep references so
     // Refresh() can pull values back in if settings change externally.
     private Slider fpsSlider;
@@ -214,6 +215,7 @@ public class OptionsMenu : MonoBehaviour
         }
 
         HighlightSelection(fullscreenButtons, s.Fullscreen ? 1 : 0);
+        HighlightSelection(difficultyButtons, (int)s.CurrentDifficulty);
     }
 
     private void HighlightSelection(List<OptionButton> row, int selectedKey)
@@ -267,7 +269,7 @@ public class OptionsMenu : MonoBehaviour
         panelRt.anchorMax = new Vector2(0.5f, 0.5f);
         panelRt.pivot = new Vector2(0.5f, 0.5f);
         panelRt.anchoredPosition = Vector2.zero;
-        panelRt.sizeDelta = new Vector2(960f, 720f); // taller — fits 4 option rows + bottom buttons
+        panelRt.sizeDelta = new Vector2(960f, 820f); // taller — fits 5 option rows, the warning, and bottom buttons
         var panelImg = panel.AddComponent<Image>();
         panelImg.color = panelColor;
         panelImg.raycastTarget = true;
@@ -306,6 +308,20 @@ public class OptionsMenu : MonoBehaviour
             anchor: TextAnchor.MiddleLeft, fontSize: 26, color: subtleTextColor,
             anchorTop: true);
         BuildOptionRowMusicVolume(panel.transform, /*yFromTop*/ -480f);
+
+        // --- Row: Difficulty ---
+        BuildLabel(panel.transform, "Difficulty",
+            new Vector2(40f, -580f), new Vector2(280f, 40f),
+            anchor: TextAnchor.MiddleLeft, fontSize: 26, color: subtleTextColor,
+            anchorTop: true);
+        BuildOptionRowDifficulty(panel.transform, /*yFromTop*/ -580f);
+
+        // Small warning text below the row — players need to know the
+        // change won't kick in until they start a fresh run.
+        BuildLabel(panel.transform, "Difficulty changes apply on the next new game.",
+            new Vector2(40f, -640f), new Vector2(880f, 26f),
+            anchor: TextAnchor.MiddleLeft, fontSize: 16, color: subtleTextColor,
+            anchorTop: true);
 
         // Bottom buttons: Quit to Main Menu (left) + Close (right). Both
         // anchored to the bottom-center of the panel and offset horizontally.
@@ -471,6 +487,44 @@ public class OptionsMenu : MonoBehaviour
                 Refresh();
             });
             fullscreenButtons.Add(new OptionButton { button = b, image = btnGo.GetComponent<Image>(), valueKey = isYes ? 1 : 0 });
+        }
+    }
+
+    private void BuildOptionRowDifficulty(Transform parent, float yFromTop)
+    {
+        difficultyButtons.Clear();
+        const float startX = 320f;
+        const float btnW   = 130f;
+        const float btnH   = 50f;
+        const float gap    = 10f;
+
+        var values = new[]
+        {
+            (label: "Easy",   diff: GameSettings.Difficulty.Easy),
+            (label: "Normal", diff: GameSettings.Difficulty.Normal),
+            (label: "Hard",   diff: GameSettings.Difficulty.Hard),
+        };
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            float x = startX + (btnW + gap) * i;
+            var btnGo = BuildButton(parent, "Diff_" + values[i].label,
+                new Vector2(x, yFromTop), new Vector2(btnW, btnH),
+                out Button b, out Text t, anchorTop: true, anchorLeft: true);
+            t.text = values[i].label;
+            t.fontSize = 22;
+
+            var captured = values[i].diff;
+            b.onClick.AddListener(() =>
+            {
+                GameSettings.Instance.SetDifficulty(captured);
+                Refresh();
+            });
+            difficultyButtons.Add(new OptionButton {
+                button = b,
+                image = btnGo.GetComponent<Image>(),
+                valueKey = (int)values[i].diff
+            });
         }
     }
 

@@ -439,22 +439,22 @@ MonoBehaviour:
   bounceShakeDuration: 0.32
   meleeHomingProjectilePrefab: {fileID: 2241873115812845983, guid: e42e74e2f360725468bab61f4e054cc0, type: 3}
   meleeHomingBarrageStartDelay: 0.5
-  meleeHomingBarrageInterval: 1.4
-  meleeHomingArrowsPerBarrage: 8
+  meleeHomingBarrageInterval: 1.5
+  meleeHomingArrowsPerBarrage: 10
   meleeHomingArrowDamage: 20
-  meleeHomingArrowSpeed: 16
+  meleeHomingArrowSpeed: 18
   meleeHomingTurnSpeed: 120
-  meleeHomingDuration: 1.5
-  meleeHomingMaxRange: 15
+  meleeHomingDuration: 2.5
+  meleeHomingMaxRange: 25
   meleeHomingArrowScale: 1
   meleeHomingSpawnHeight: 1.2
   meleeHomingAngleJitter: 20
   spamDuration: 8
-  spamArrowsPerWave: 9
+  spamArrowsPerWave: 8
   spamWaveInterval: 0.1
   spamRotationSpeed: 40
   spamChaseSpeed: 2.4
-  spamArrowDamage: 40
+  spamArrowDamage: 30
   spamArrowSpeed: 15
   spamArrowScale: 0.5
   spamArrowSpawnHeight: 0.3
@@ -470,7 +470,7 @@ MonoBehaviour:
   aerialRingRadius: 10
   aerialEdgeWaveStartIndex: 2
   aerialEdgeSpawnRadius: 22
-  aerialArrowSpawnHeight: 0.5
+  aerialArrowSpawnHeight: 0.3
   aerialLeadStep: 0.45
   spamArrowPrefab: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
   aerialArrowPrefab: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}

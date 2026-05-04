@@ -186,6 +186,17 @@ public class EnemySpawner : MonoBehaviour
         if (arenaGenerator == null) arenaGenerator = FindObjectOfType<ArenaGenerator>();
         if (hero == null) hero = Hero.Instance;
 
+        // Apply the difficulty preset before any spawning happens. This
+        // overrides the inspector defaults so Easy/Normal/Hard scale the
+        // run consistently with the player's choice.
+        if (GameSettings.Instance != null)
+        {
+            var p = GameSettings.Instance.GetActivePreset();
+            regularHpBonusPerMinute  = p.regularHpBonusPerMinute;
+            bossSpawnInterval        = p.bossSpawnInterval;
+            bossHpMultiplierPerSpawn = p.bossHpMultiplierPerSpawn;
+        }
+
         enemyRoot = new GameObject("__SpawnedEnemies").transform;
 
         elapsedTime = 0f;

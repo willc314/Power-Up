@@ -312,6 +312,19 @@ public class Enemy : MonoBehaviour
             showHealthBar = false;
         }
 
+        // Apply the difficulty preset to enemies whose stats it tunes.
+        // Crossbow-behavior enemies (and the SlimeKing's ranged phase, which
+        // uses the same crossbowDamage field) scale by the damage multiplier;
+        // SlimeKings additionally take the ranged-attack-speed multiplier.
+        if (GameSettings.Instance != null)
+        {
+            var p = GameSettings.Instance.GetActivePreset();
+            if (behavior == Behavior.Crossbow || behavior == Behavior.SlimeKing)
+                crossbowDamage *= p.crossbowDamageMultiplier;
+            if (behavior == Behavior.SlimeKing)
+                skAttackSpeedBoostMultiplier = p.slimeKingAttackSpeedBoostMultiplier;
+        }
+
         if (behavior == Behavior.Crossbow || behavior == Behavior.SlimeKing)
         {
             telegraphLine = gameObject.AddComponent<LineRenderer>();
@@ -780,6 +793,10 @@ public class Enemy : MonoBehaviour
         skPhaseTimer = 0f;
         skJumpStart = transform.position;
         skJumpEnd = new Vector3(player.transform.position.x, transform.position.y, player.transform.position.z);
+        // Keep the landing inside the arena. Without this clamp the slime can
+        // land on top of (or past) the wall when the player kites the corner.
+        if (ArenaGenerator.Instance != null)
+            skJumpEnd = ArenaGenerator.Instance.ClampToArena(skJumpEnd);
         skJumpProgress = 0f;
         rb.velocity = Vector3.zero;
     }
@@ -798,6 +815,22 @@ public class Enemy : MonoBehaviour
 
         skJumpEnd = transform.position + awayFromPlayer * skRetreatJumpDistance;
         skJumpEnd.y = transform.position.y;
+        // Same clamp as JumpToMelee — retreat jumps near the wall would otherwise
+        // launch the slime past it. Try the natural retreat first, then fall back
+        // to the player's direction if the chosen target is already at the edge.
+        if (ArenaGenerator.Instance != null)
+        {
+            Vector3 clamped = ArenaGenerator.Instance.ClampToArena(skJumpEnd);
+            // If the clamp shortened the retreat to nothing (slime was already
+            // jammed in the corner), instead jump along the wall toward the
+            // player's perpendicular so it still moves.
+            if ((clamped - transform.position).sqrMagnitude < 0.5f)
+            {
+                Vector3 perp = new Vector3(-awayFromPlayer.z, 0f, awayFromPlayer.x);
+                clamped = ArenaGenerator.Instance.ClampToArena(transform.position + perp * skRetreatJumpDistance);
+            }
+            skJumpEnd = clamped;
+        }
         skJumpProgress = 0f;
         rb.velocity = Vector3.zero;
     }

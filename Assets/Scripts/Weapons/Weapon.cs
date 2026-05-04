@@ -131,13 +131,31 @@ public abstract class Weapon : MonoBehaviour
     [Range(0f, 1f)] public float attackSpeedIncreasePercent = 0.15f;
     [Tooltip("Each AttackSpeed boost is this fraction as effective as the previous. 0.85 = boost #2 gives 85% of #1's gain, #3 gives 72%, #4 gives 61%, etc.")]
     [Range(0f, 1f)] public float attackSpeedDiminishingFactor = 0.85f;
+    [Tooltip("Floor on the diminishing curve. The per-boost attack-speed gain never shrinks below this — so a fully-stacked player still gets a small but non-zero gain per pickup. 0.01 = +1% attack speed minimum.")]
+    [Range(0f, 1f)] public float minAttackSpeedIncreasePercent = 0.01f;
 
     /// <summary>How many AttackSpeed boosts have been applied. Drives the per-boost diminishing curve.</summary>
     protected int attackSpeedBoostsTaken = 0;
 
-    /// <summary>The diminishing multiplier the next AttackSpeed boost should be scaled by, given the count so far.</summary>
+    /// <summary>
+    /// Diminishing multiplier the next AttackSpeed boost is scaled by. Floored
+    /// so the effective per-boost percent doesn't drop below
+    /// minAttackSpeedIncreasePercent — i.e. the player always gets at least
+    /// that much per pickup, no matter how stacked they are.
+    /// </summary>
     protected float AttackSpeedDiminisher
-        => Mathf.Pow(attackSpeedDiminishingFactor, attackSpeedBoostsTaken);
+    {
+        get
+        {
+            float raw = Mathf.Pow(attackSpeedDiminishingFactor, attackSpeedBoostsTaken);
+            if (attackSpeedIncreasePercent > 0.0001f)
+            {
+                float minRatio = minAttackSpeedIncreasePercent / attackSpeedIncreasePercent;
+                return Mathf.Max(minRatio, raw);
+            }
+            return raw;
+        }
+    }
 
     [Header("Post-Max Scaling")]
     [Tooltip("After the weapon hits its main cap, further boosts still apply but at this fraction of normal strength. 0.5 = half-strength, forever.")]

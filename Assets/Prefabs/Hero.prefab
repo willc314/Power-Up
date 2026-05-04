@@ -2660,7 +2660,7 @@ MonoBehaviour:
   moveSpeedBoostAmount: 0.25
   maxMoveSpeed: 100
   dashCooldownReductionPercent: 0.05
-  minDashCooldown: 0.15
+  minDashCooldown: 0.5
   healthRegenPerSecond: 1
   healthRegenBoostAmount: 0.5
   maxHealthRegenPerSecond: 100
@@ -2758,6 +2758,7 @@ MonoBehaviour:
   minCooldown: 0.01
   attackSpeedIncreasePercent: 0.15
   attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 100
@@ -2799,6 +2800,7 @@ MonoBehaviour:
   minCooldown: 0.01
   attackSpeedIncreasePercent: 0.15
   attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 200
@@ -2834,6 +2836,7 @@ MonoBehaviour:
   minCooldown: 0.001
   attackSpeedIncreasePercent: 0.15
   attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 4
@@ -2908,6 +2911,7 @@ MonoBehaviour:
   minCooldown: 0.001
   attackSpeedIncreasePercent: 0.15
   attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 100
@@ -2950,6 +2954,7 @@ MonoBehaviour:
   minCooldown: 0.001
   attackSpeedIncreasePercent: 0.15
   attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 120
@@ -2990,6 +2995,7 @@ MonoBehaviour:
   minCooldown: 0.001
   attackSpeedIncreasePercent: 0.15
   attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.4
   extraAttackCount: 0
   maxExtraAttackCount: 100
