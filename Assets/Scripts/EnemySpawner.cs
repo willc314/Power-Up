@@ -288,25 +288,29 @@ public class EnemySpawner : MonoBehaviour
         GameObject boss = Instantiate(finalBossPrefab, spawnPos, Quaternion.identity, enemyRoot);
         boss.name = finalBossPrefab.name;
         Enemy bossEnemy = boss.GetComponent<Enemy>() ?? boss.GetComponentInChildren<Enemy>();
+        // Pre-compute everything BEFORE applying so the same numbers can go
+        // both into the boss instance and the debug log below.
+        float hpMul = GetCurrentFinalBossHpMultiplier();
+        int   priorKills = finalBossesSpawned;
+        float dmgMul   = 1f + Mathf.Max(0f, finalBossDamageBonusPerKill)      * priorKills;
+        float projMul  = 1f + Mathf.Max(0f, finalBossProjectileBonusPerKill)  * priorKills;
+        float speedMul = 1f + Mathf.Max(0f, finalBossAttackSpeedBonusPerKill) * priorKills;
+
         if (bossEnemy != null)
         {
-            // Apply per-spawn HP multiplier so each successive final boss is
-            // tankier than the last. finalBossesSpawned is the count BEFORE
-            // this spawn, so spawn #1 = (base×extra)^0 = 1×, #2 = base×extra,
-            // #3 = (base×extra)^2, ...
-            float hpMul = GetCurrentFinalBossHpMultiplier();
-            if (Mathf.Abs(hpMul - 1f) > 0.001f) bossEnemy.ScaleHP(hpMul);
+            // Always call ScaleHP — the n+1 exponent guarantees the first
+            // spawn is already > 1×, and a no-op multiplier is cheap.
+            bossEnemy.ScaleHP(hpMul);
 
             // Linear damage / projectile / attack-speed multipliers stacked
-            // on top. The SlimeGod controller reads these at attack-time
+            // on top. The SlimeGod controller reads these at attack time
             // (ScaledDamage / ScaledCount / ScaledInterval).
             SlimeGod sg = bossEnemy.GetComponent<SlimeGod>();
             if (sg != null)
             {
-                int prevKills = finalBossesSpawned;
-                sg.attackDamageMultiplier    = 1f + Mathf.Max(0f, finalBossDamageBonusPerKill)      * prevKills;
-                sg.projectileCountMultiplier = 1f + Mathf.Max(0f, finalBossProjectileBonusPerKill)  * prevKills;
-                sg.attackSpeedMultiplier     = 1f + Mathf.Max(0f, finalBossAttackSpeedBonusPerKill) * prevKills;
+                sg.attackDamageMultiplier    = dmgMul;
+                sg.projectileCountMultiplier = projMul;
+                sg.attackSpeedMultiplier     = speedMul;
             }
 
             aliveEnemies.Add(bossEnemy);
@@ -315,21 +319,28 @@ public class EnemySpawner : MonoBehaviour
         finalBossActive = true;
         finalBossesSpawned++;
 
-        if (debugLogs) Debug.Log($"EnemySpawner: SlimeGod spawned at t={elapsedTime:F1}s, position={spawnPos}, HP×{GetFinalBossHpMultiplierAt(finalBossesSpawned - 1):F2}.");
+        if (debugLogs)
+            Debug.Log($"EnemySpawner: SlimeGod spawn #{finalBossesSpawned} at t={elapsedTime:F1}s, " +
+                      $"HP×{hpMul:F2}, DMG×{dmgMul:F2}, PROJ×{projMul:F2}, SPEED×{speedMul:F2}, " +
+                      $"resulting maxHP={bossEnemy?.MaxHP}.");
     }
 
     /// <summary>
     /// HP multiplier the NEXT final boss spawn will use. Stacks the regular
-    /// boss multiplier and the final-boss-only extra multiplier:
-    ///     (bossHpMultiplierPerSpawn × finalBossExtraHpMultiplierPerSpawn) ^ finalBossesSpawned
+    /// boss multiplier and the final-boss-only extra multiplier and uses the
+    /// SAME (n+1) exponent the regular SlimeKing curve uses, so the FIRST
+    /// final boss already starts at (bossMul × extraMul)^1 instead of 1×.
+    /// With defaults (boss=2, extra=1.5): 1st = 3×, 2nd = 9×, 3rd = 27×, …
     /// </summary>
     public float GetCurrentFinalBossHpMultiplier() => GetFinalBossHpMultiplierAt(finalBossesSpawned);
 
-    private float GetFinalBossHpMultiplierAt(int n)
+    private float GetFinalBossHpMultiplierAt(int priorKills)
     {
         float baseMul  = Mathf.Max(0.01f, bossHpMultiplierPerSpawn);
         float extraMul = Mathf.Max(0.01f, finalBossExtraHpMultiplierPerSpawn);
-        return Mathf.Pow(baseMul * extraMul, n);
+        // priorKills + 1 so spawn #1 already gets the full multiplier (mirrors
+        // GetCurrentBossHpMultiplier()'s bossesSpawned + 1 for SlimeKings).
+        return Mathf.Pow(baseMul * extraMul, priorKills + 1);
     }
 
     /// <summary>

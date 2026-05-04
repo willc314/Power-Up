@@ -2666,13 +2666,13 @@ MonoBehaviour:
   maxHealthRegenPerSecond: 100
   damageMultiplier: 1
   damageBoostAmount: 0.15
-  maxDamageMultiplier: 5
+  maxDamageMultiplier: 100
   critRate: 0
   critRateBoostAmount: 0.05
-  maxCritRate: 0.6
+  maxCritRate: 1
   critDamage: 2
   critDamageBoostAmount: 0.25
-  maxCritDamage: 6
+  maxCritDamage: 100
   primaryWeapon: {fileID: 0}
   secondaryWeapon: {fileID: 0}
   randomizeWeaponsOnSpawn: 1
