@@ -90,6 +90,20 @@ public class EnemySpawner : MonoBehaviour
     [Tooltip("Boss HP grows exponentially per spawn: each boss is this multiple of the previous boss's multiplier. 2 → 1st boss=2× HP, 2nd=4×, 3rd=8×, 4th=16×. 1.5 → 1.5×, 2.25×, 3.375×, 5.06×, ...")]
     public float bossHpMultiplierPerSpawn = 2f;
 
+    [Header("Final Boss (SlimeGod)")]
+    [Tooltip("Prefab spawned once at finalBossSpawnTime. Should have an Enemy component with behavior=SlimeGod and a SlimeGod component.")]
+    public GameObject finalBossPrefab;
+    [Tooltip("Seconds into the run when the final boss spawns. Default 480 = 8 minutes.")]
+    public float finalBossSpawnTime = 480f;
+    [Tooltip("Distance the final boss spawns away from the player.")]
+    public float finalBossSpawnDistance = 8f;
+    [Tooltip("Visual radius of the spawn shockwave that wipes all other enemies.")]
+    public float finalBossShockwaveRadius = 60f;
+    [Tooltip("Camera shake amplitude when the final boss spawns.")]
+    public float finalBossShockwaveShake = 0.9f;
+    [Tooltip("Camera shake duration when the final boss spawns.")]
+    public float finalBossShockwaveShakeDuration = 1.2f;
+
     [Header("Alive Limit")]
     [Tooltip("Maximum number of living spawned enemies (regular + bosses) at once.")]
     public int maxAliveEnemies = 100;
@@ -139,6 +153,8 @@ public class EnemySpawner : MonoBehaviour
     private float spawnAccumulator;   // fractional spawns banked frame-to-frame
     private float bossSpawnTimer;     // counts down to the next boss
     private int   bossesSpawned;      // how many bosses have spawned this run
+    private bool  finalBossSpawned;   // true after SlimeGod has been spawned this run
+    private bool  finalBossActive;    // true while a SlimeGod is alive
 
     private void Awake()
     {
@@ -177,6 +193,16 @@ public class EnemySpawner : MonoBehaviour
         CleanupDeadEnemies();
         elapsedTime += Time.deltaTime;
 
+        // --- Final boss (one-shot at finalBossSpawnTime) ---
+        if (!finalBossSpawned && finalBossPrefab != null && elapsedTime >= finalBossSpawnTime)
+        {
+            SpawnFinalBoss();
+        }
+
+        // The final boss takes over the arena: stop spawning anything else
+        // while it's alive (regular waves AND the timed-boss track).
+        if (finalBossActive) return;
+
         // --- Regular spawn track ---
         if (HasRegularPool())
         {
@@ -205,6 +231,54 @@ public class EnemySpawner : MonoBehaviour
                 bossSpawnTimer = bossSpawnInterval;
             }
         }
+    }
+
+    /// <summary>
+    /// Spawns the SlimeGod once 8 minutes have elapsed. Wipes every other
+    /// enemy off the arena via an expanding visual shockwave and stops further
+    /// regular/boss spawns until the boss dies.
+    /// </summary>
+    private void SpawnFinalBoss()
+    {
+        finalBossSpawned = true;
+
+        // Pick a spawn position around the player.
+        Vector2 ring = Random.insideUnitCircle.normalized;
+        if (ring.sqrMagnitude < 0.001f) ring = Vector2.right;
+        Vector3 spawnPos = hero.transform.position + new Vector3(ring.x, 0f, ring.y) * finalBossSpawnDistance;
+        spawnPos.y = hero.transform.position.y;
+        if (arenaGenerator != null)
+        {
+            float half = arenaGenerator.arenaSize * 0.5f - arenaEdgeMargin;
+            spawnPos.x = Mathf.Clamp(spawnPos.x, -half, half);
+            spawnPos.z = Mathf.Clamp(spawnPos.z, -half, half);
+        }
+
+        // Visual shockwave centered on the boss spawn point.
+        BossShockwave.Spawn(spawnPos, finalBossShockwaveRadius, new Color(1f, 0.25f, 0.25f, 1f), 0.7f);
+        if (Camera.main != null)
+        {
+            var cf = Camera.main.GetComponent<CameraFollow>();
+            if (cf != null) cf.Shake(finalBossShockwaveShake, finalBossShockwaveShakeDuration);
+        }
+
+        // Wipe every existing enemy off the arena.
+        for (int i = aliveEnemies.Count - 1; i >= 0; i--)
+        {
+            if (aliveEnemies[i] != null && !aliveEnemies[i].IsDead)
+                aliveEnemies[i].KillSilently();
+        }
+        aliveEnemies.Clear();
+
+        // Spawn the boss.
+        GameObject boss = Instantiate(finalBossPrefab, spawnPos, Quaternion.identity, enemyRoot);
+        boss.name = finalBossPrefab.name;
+        Enemy bossEnemy = boss.GetComponent<Enemy>() ?? boss.GetComponentInChildren<Enemy>();
+        if (bossEnemy != null) aliveEnemies.Add(bossEnemy);
+
+        finalBossActive = true;
+
+        if (debugLogs) Debug.Log($"EnemySpawner: SlimeGod spawned at t={elapsedTime:F1}s, position={spawnPos}.");
     }
 
     // ---------- Spawn-rate ramp ----------
@@ -393,8 +467,13 @@ public class EnemySpawner : MonoBehaviour
     {
         for (int i = aliveEnemies.Count - 1; i >= 0; i--)
         {
-            if (aliveEnemies[i] == null || aliveEnemies[i].IsDead)
+            Enemy e = aliveEnemies[i];
+            if (e == null || e.IsDead)
+            {
+                if (e != null && e.behavior == Enemy.Behavior.SlimeGod)
+                    finalBossActive = false;
                 aliveEnemies.RemoveAt(i);
+            }
         }
     }
 

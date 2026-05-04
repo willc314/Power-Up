@@ -56,6 +56,9 @@ public class ArenaGenerator : MonoBehaviour
     [Tooltip("If true, any spawned obstacle that has no Collider gets a CapsuleCollider added automatically. This is useful when obstacle prefabs ship without colliders.")]
     public bool autoAddColliders = true;
 
+    [Tooltip("Prefabs in this list spawn WITHOUT auto-added colliders, even if Auto Add Colliders is on. Use for purely cosmetic obstacles the player should walk through (e.g. small rocks, grass).")]
+    public GameObject[] noColliderPrefabs;
+
     [Tooltip("Optional layer assigned to generated obstacles. Use an Obstacle layer so enemies can detect and avoid structures.")]
     public LayerMask obstacleLayer;
 
@@ -258,11 +261,20 @@ public class ArenaGenerator : MonoBehaviour
 
             GameObject obj = Instantiate(prefab, candidate, Quaternion.Euler(0f, yaw, 0f), parent);
             obj.transform.localScale = prefab.transform.localScale * scale;
-            SetupObstacleCollision(obj);
+            if (!IsNoColliderPrefab(prefab)) SetupObstacleCollision(obj);
             placedCount++;
         }
 
         Debug.Log($"ArenaGenerator: placed {placedCount}/{obstacleCount} obstacles (rejected the rest because they couldn't find a free spot).");
+    }
+
+    /// <summary>True if the supplied prefab appears in the noColliderPrefabs list.</summary>
+    private bool IsNoColliderPrefab(GameObject prefab)
+    {
+        if (noColliderPrefabs == null || prefab == null) return false;
+        for (int i = 0; i < noColliderPrefabs.Length; i++)
+            if (noColliderPrefabs[i] == prefab) return true;
+        return false;
     }
 
     /// <summary>

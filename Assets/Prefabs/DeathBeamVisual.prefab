@@ -124,7 +124,7 @@ MonoBehaviour:
   hitRadiusMultiplier: 3
   damagePerSecond: 500
   heroSpeedDuringBeam: 0
-  shakeAmplitude: 0.5
+  shakeAmplitude: 0.25
   vfxPrefab: {fileID: 0}
   spawnHeight: 1
   beamParticlesPerSecond: 80

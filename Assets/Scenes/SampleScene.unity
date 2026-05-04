@@ -169,6 +169,8 @@ MonoBehaviour:
   scaleRange: {x: 0.8, y: 1.4}
   maxPlacementAttempts: 20
   autoAddColliders: 1
+  noColliderPrefabs:
+  - {fileID: 4140774597986965270, guid: 58cd8dc8c2359174baa15aa31e302c8b, type: 3}
   obstacleLayer:
     serializedVersion: 2
     m_Bits: 0
@@ -544,6 +546,8 @@ MonoBehaviour:
   healthColor: {r: 0.85, g: 0.2, b: 0.2, a: 1}
   healthBackgroundColor: {r: 0, g: 0, b: 0, a: 0.6}
   cooldownOverlayColor: {r: 0, g: 0, b: 0, a: 0.6}
+  bossBarColor: {r: 0.85, g: 0.15, b: 0.15, a: 1}
+  bossBarBgColor: {r: 0, g: 0, b: 0, a: 0.75}
   margin: 24
   timerFontSize: 56
   scoreFontSize: 36
@@ -553,6 +557,10 @@ MonoBehaviour:
   weaponSlotSpacing: 12
   healthBarWidth: 320
   healthBarHeight: 22
+  bossBarWidth: 1100
+  bossBarHeight: 36
+  bossBarFontSize: 24
+  bossBarBottomMargin: 28
   primaryButtonLabel: LMB
   secondaryButtonLabel: RMB
 --- !u!4 &635634192
@@ -1137,11 +1145,17 @@ MonoBehaviour:
   spawnRateRampPower: 1.6
   regularHpBonusPerMinute: 2
   regularHpMaxMultiplier: 2000
-  dropChanceMulAtStart: 1.5
-  dropChanceMulAtPeak: 0.02
+  dropChanceMulAtStart: 2
+  dropChanceMulAtPeak: 0.05
   bossFirstSpawnDelay: 60
   bossSpawnInterval: 60
-  bossHpMultiplierPerSpawn: 3
+  bossHpMultiplierPerSpawn: 2.5
+  finalBossPrefab: {fileID: 2291158632217275045, guid: e5e8818af10200740981a15cfe0bc952, type: 3}
+  finalBossSpawnTime: 480
+  finalBossSpawnDistance: 8
+  finalBossShockwaveRadius: 60
+  finalBossShockwaveShake: 0.9
+  finalBossShockwaveShakeDuration: 1.2
   maxAliveEnemies: 555
   minSpawnDistanceFromHero: 8
   maxSpawnDistanceFromHero: 15
@@ -1679,6 +1693,7 @@ MonoBehaviour:
   pointsPerKill: 10
   pointsPerBossKill: 50
   pointsPerSecond: 1
+  pointsForFinalBossKill: 1000
   stopTimerOnDeath: 1
   elapsedTime: 0
   kills: 0

@@ -40,6 +40,10 @@ public class Hero : MonoBehaviour
         CritDamage
     }
 
+    [Header("Debug")]
+    [Tooltip("Debug toggle: when true, the hero takes no damage from any source (TakeDamage and SetCurrentHP both early-return). Toggle live in the Inspector during play to test boss patterns without dying.")]
+    public bool debugInvincible = false;
+
     [Header("Stats")]
     [Tooltip("Maximum hit points.")]
     public float maxHP = 100f;
@@ -62,6 +66,10 @@ public class Hero : MonoBehaviour
     public float moveSpeedBoostAmount = 0.25f;
     [Tooltip("Optional movement speed cap so speed boosts do not get ridiculous.")]
     public float maxMoveSpeed = 10f;
+    [Tooltip("Fraction the dash cooldown shrinks per Move Speed boost. 0.05 = -5% per pickup, with diminishing returns since each step is a percentage of the current cooldown.")]
+    [Range(0f, 1f)] public float dashCooldownReductionPercent = 0.05f;
+    [Tooltip("Floor for dashCooldown when applying the Move Speed boost so the dash never becomes truly free.")]
+    public float minDashCooldown = 0.15f;
     [Tooltip("Current health regen, in HP per second. Boosts add to this.")]
     public float healthRegenPerSecond = 0f;
     [Tooltip("How much HP/sec regen increases per boost.")]
@@ -120,7 +128,7 @@ public class Hero : MonoBehaviour
     public bool dashPhasesThroughEnemies = true;
     [Tooltip("Layer name enemies live on. Used to selectively ignore collision with the hero during dash. Leave 'Enemy' unless your project uses a different name.")]
     public string enemyLayerName = "Enemy";
-    [Tooltip("Distance to keep from the arena edge during a dash. Prevents tunneling through the boundary wall when the dash speed would carry the hero past it in one physics tick.")]
+    [Tooltip("Distance to keep from the arena edge during movement. Prevents tunneling through the boundary wall when the dash or move speed would otherwise carry the hero past it in one physics tick.")]
     public float dashArenaEdgeMargin = 0.5f;
 
     [Header("Dash Particles")]
@@ -183,6 +191,16 @@ public class Hero : MonoBehaviour
     [Tooltip("Y-height of the imaginary ground plane the mouse aim is projected onto.")]
     public float aimPlaneY = 0f;
 
+    [Header("End-of-Run Scenes")]
+    [Tooltip("Scene name loaded when the hero dies normally (game over).")]
+    public string gameOverSceneName = "EndScreen";
+    [Tooltip("Scene name loaded when the hero kills the SlimeGod final boss. Defaults to 'VictoryScreen' — make sure such a scene exists and is in Build Settings.")]
+    public string victorySceneName = "VictoryScreen";
+    [Tooltip("Seconds of pause AFTER the boss dies before the end sequence (death-cam zoom + scene load) starts. Lets the kill read on screen.")]
+    public float victoryEndSequenceDelay = 3f;
+    [Tooltip("Seconds for the end-sequence camera zoom. The scene load happens at the end of this window.")]
+    public float endSequenceCameraTime = 4f;
+
     [Header("Animation")]
     [Tooltip("Optional. If empty, the script grabs the first Animator found in children.")]
     public Animator animator;
@@ -220,6 +238,9 @@ public class Hero : MonoBehaviour
     private bool  enemyCollisionIgnored;
     private ArenaGenerator cachedArena;
     public bool IsDashing => dashTimer > 0f;
+
+    /// <summary>Seconds left before the next dash is allowed. 0 = ready.</summary>
+    public float DashCooldownRemaining => Mathf.Max(0f, dashCooldownTimer);
 
     /// <summary>
     /// True while the hero is invulnerable to damage. Currently set by the
@@ -351,19 +372,7 @@ public class Hero : MonoBehaviour
         {
             dashTimer -= Time.fixedDeltaTime;
             Vector3 step = dashDirection * dashSpeed * Time.fixedDeltaTime;
-            Vector3 target = rb.position + step;
-
-            // Clamp to arena bounds so the dash can't tunnel past the wall
-            // colliders at high speed. Wall colliders still handle normal
-            // movement; this is a safety net specifically for the dash.
-            if (cachedArena == null) cachedArena = FindObjectOfType<ArenaGenerator>();
-            if (cachedArena != null)
-            {
-                float half = cachedArena.arenaSize * 0.5f - dashArenaEdgeMargin;
-                target.x = Mathf.Clamp(target.x, -half, half);
-                target.z = Mathf.Clamp(target.z, -half, half);
-            }
-
+            Vector3 target = ClampToArena(rb.position + step);
             rb.MovePosition(target);
             EmitDashParticles();
             if (dashTimer <= 0f)
@@ -383,9 +392,28 @@ public class Hero : MonoBehaviour
             // brings it to rest.
             rb.velocity = Vector3.zero;
 
-            Vector3 target = rb.position + moveInput * moveSpeed * speedMultiplier * Time.fixedDeltaTime;
+            // Clamp normal movement too — boosted moveSpeed can otherwise
+            // push past the wall colliders in a single tick the same way the
+            // dash can.
+            Vector3 target = ClampToArena(rb.position + moveInput * moveSpeed * speedMultiplier * Time.fixedDeltaTime);
             rb.MovePosition(target);
         }
+    }
+
+    /// <summary>
+    /// Clamp <paramref name="target"/> to the arena bounds (with edge margin)
+    /// so high-speed movement can't tunnel through the boundary walls in one
+    /// physics tick. Looks up the arena lazily if it wasn't cached yet.
+    /// </summary>
+    private Vector3 ClampToArena(Vector3 target)
+    {
+        if (cachedArena == null) cachedArena = FindObjectOfType<ArenaGenerator>();
+        if (cachedArena == null) return target;
+
+        float half = cachedArena.arenaSize * 0.5f - dashArenaEdgeMargin;
+        target.x = Mathf.Clamp(target.x, -half, half);
+        target.z = Mathf.Clamp(target.z, -half, half);
+        return target;
     }
 
     /// <summary>
@@ -564,6 +592,10 @@ public class Hero : MonoBehaviour
         if (IsDead)
             return;
 
+        // Debug invincibility (Inspector toggle).
+        if (debugInvincible)
+            return;
+
         // Dash i-frames: ignore damage while the invulnerability window is active.
         if (IsInvulnerable)
             return;
@@ -575,6 +607,24 @@ public class Hero : MonoBehaviour
 
         if (currentHP <= 0f)
             Die();
+    }
+
+    /// <summary>
+    /// Force the hero down to a specific HP value, bypassing dash i-frames.
+    /// Only ever LOWERS HP — calling with a target above current HP is a
+    /// no-op so this can't accidentally heal. Used by the SlimeGod's spawn
+    /// attack which is unavoidable by design — it slams the player down to
+    /// 1 HP regardless of dash state. Dies if hp ≤ 0.
+    /// </summary>
+    public void SetCurrentHP(float hp)
+    {
+        if (IsDead) return;
+        if (debugInvincible) return; // debug toggle bypasses the unavoidable spawn slam too
+        float clamped = Mathf.Clamp(hp, 0f, maxHP);
+        if (clamped >= currentHP) return; // never heal via this entry point
+        currentHP = clamped;
+        if (damageFlash != null) damageFlash.Flash();
+        if (currentHP <= 0f) Die();
     }
 
     public void Heal(float amount)
@@ -791,7 +841,10 @@ public class Hero : MonoBehaviour
 
         var candidates = new System.Collections.Generic.List<HeroStatBoostMode>();
         candidates.Add(HeroStatBoostMode.MaxHP); // MaxHP has no hard cap.
-        if (moveSpeed             < maxMoveSpeed - 0.001f)             candidates.Add(HeroStatBoostMode.MoveSpeed);
+        // MoveSpeed grants both +speed and -dash cooldown; either having room is enough.
+        bool speedRoom = moveSpeed    < maxMoveSpeed   - 0.001f;
+        bool dashRoom  = dashCooldown > minDashCooldown + 0.001f;
+        if (speedRoom || dashRoom) candidates.Add(HeroStatBoostMode.MoveSpeed);
         if (healthRegenPerSecond  < maxHealthRegenPerSecond - 0.001f)  candidates.Add(HeroStatBoostMode.HealthRegen);
         if (damageMultiplier      < maxDamageMultiplier - 0.001f)      candidates.Add(HeroStatBoostMode.DamageBoost);
         if (critRate              < maxCritRate - 0.001f)              candidates.Add(HeroStatBoostMode.CritRate);
@@ -808,9 +861,19 @@ public class Hero : MonoBehaviour
                 return $"+{maxHPBoostAmount:0.#} Max HP";
 
             case HeroStatBoostMode.MoveSpeed:
-                if (moveSpeed >= maxMoveSpeed - 0.001f) return "Move Speed Maxed";
-                float speedDelta = Mathf.Min(maxMoveSpeed, moveSpeed + moveSpeedBoostAmount) - moveSpeed;
-                return $"+{speedDelta:0.##} Move Speed";
+                {
+                    bool speedFull = moveSpeed >= maxMoveSpeed - 0.001f;
+                    bool dashFull  = dashCooldown <= minDashCooldown + 0.001f;
+                    if (speedFull && dashFull) return "Move Speed Maxed";
+
+                    string speedPart = speedFull
+                        ? "Speed maxed"
+                        : $"+{Mathf.Min(maxMoveSpeed, moveSpeed + moveSpeedBoostAmount) - moveSpeed:0.##} Move Speed";
+                    string dashPart = dashFull
+                        ? "Dash maxed"
+                        : $"-{dashCooldownReductionPercent * 100f:0}% Dash Cooldown";
+                    return speedPart + "  •  " + dashPart;
+                }
 
             case HeroStatBoostMode.HealthRegen:
                 if (healthRegenPerSecond >= maxHealthRegenPerSecond - 0.001f) return "Regen Maxed";
@@ -850,7 +913,12 @@ public class Hero : MonoBehaviour
 
             case HeroStatBoostMode.MoveSpeed:
                 moveSpeed = Mathf.Min(maxMoveSpeed, moveSpeed + moveSpeedBoostAmount);
-                Debug.Log("Hero move speed increased to " + moveSpeed + ".");
+                // Same boost also chips away at the dash cooldown with
+                // diminishing returns (each step is a percentage of the
+                // CURRENT cooldown, floored at minDashCooldown).
+                if (dashCooldownReductionPercent > 0f)
+                    dashCooldown = Mathf.Max(minDashCooldown, dashCooldown / (1f + dashCooldownReductionPercent));
+                Debug.Log($"Hero move speed → {moveSpeed}, dash cooldown → {dashCooldown}");
                 break;
 
             case HeroStatBoostMode.HealthRegen:
@@ -927,6 +995,36 @@ public class Hero : MonoBehaviour
             powerUp.Collect(this);
     }
 
+    /// <summary>
+    /// Triggered by GameManager.OnFinalBossKilled. Freezes the hero so AI / timer
+    /// stop, then waits <see cref="victoryEndSequenceDelay"/> seconds before
+    /// starting the end sequence (camera zoom + load). The end-sequence load
+    /// goes to <see cref="victorySceneName"/>, NOT the game-over scene.
+    /// </summary>
+    public void TriggerVictory()
+    {
+        if (IsDead) return;
+        IsDead = true;
+        moveInput = Vector3.zero;
+        speedMultiplier = 1f;
+        if (rb != null) rb.velocity = Vector3.zero;
+        if (animator != null) animator.SetFloat(kSpeed, 0f);
+
+        // Pause AFTER the kill before kicking off the end sequence so the
+        // boss death gets a beat on screen.
+        Invoke(nameof(BeginVictoryEndSequence), Mathf.Max(0f, victoryEndSequenceDelay));
+    }
+
+    private void BeginVictoryEndSequence()
+    {
+        if (Camera.main != null)
+        {
+            var follow = Camera.main.GetComponent<CameraFollow>();
+            if (follow != null) follow.EnterDeathCam(transform);
+        }
+        Invoke(nameof(LoadVictoryScene), Mathf.Max(0f, endSequenceCameraTime));
+    }
+
     private void Die()
     {
         if (IsDead) return;
@@ -957,11 +1055,16 @@ public class Hero : MonoBehaviour
 
         // Match the deathcam zoom duration so the camera reaches its
         // final framed position before the EndScreen loads.
-        Invoke(nameof(LoadGameOver), 4f);
+        Invoke(nameof(LoadGameOver), Mathf.Max(0f, endSequenceCameraTime));
     }
 
     private void LoadGameOver()
     {
-        SceneManager.LoadScene("EndScreen");
+        SceneManager.LoadScene(string.IsNullOrEmpty(gameOverSceneName) ? "EndScreen" : gameOverSceneName);
+    }
+
+    private void LoadVictoryScene()
+    {
+        SceneManager.LoadScene(string.IsNullOrEmpty(victorySceneName) ? "VictoryScreen" : victorySceneName);
     }
 }

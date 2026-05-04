@@ -35,25 +35,30 @@ public class GameOverMenu : MonoBehaviour
     public Color textColor      = Color.white;
     public Color subtleColor    = new Color(1f, 1f, 1f, 0.75f);
     public Color highlightColor = new Color(1f, 0.85f, 0.2f);
+    public Color victoryColor   = new Color(0.4f, 1f, 0.6f);
     public int   finalScoreFontSize = 64;
     public int   highScoreFontSize  = 36;
     public int   newHighFontSize    = 40;
+    public int   victoryFontSize    = 96;
+    [Tooltip("Vertical offset applied to the centered procedural readout. Positive = up. Use this to move the score / victory text above center so it doesn't sit on top of the menu buttons.")]
+    public float overlayVerticalOffset = 280f;
 
     private void Start()
     {
         int finalScore = GameManager.LoadLastFinalScore();
         int highScore  = GameManager.LoadStoredHighScore();
         bool newHigh   = GameManager.LoadLastRunWasNewHigh();
+        bool victory   = GameManager.LoadLastRunWasWin();
 
         // Optional inspector-wired text fields — useful if you've designed
         // your own EndScreen layout and just want the data populated.
         if (finalScoreText != null) finalScoreText.text = "Score: "       + finalScore;
         if (highScoreText  != null) highScoreText.text  = "High Score: "  + highScore;
 
-        if (buildProceduralOverlay) BuildOverlay(finalScore, highScore, newHigh);
+        if (buildProceduralOverlay) BuildOverlay(finalScore, highScore, newHigh, victory);
     }
 
-    private void BuildOverlay(int finalScore, int highScore, bool newHigh)
+    private void BuildOverlay(int finalScore, int highScore, bool newHigh, bool victory)
     {
         Font defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
@@ -73,17 +78,30 @@ public class GameOverMenu : MonoBehaviour
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.matchWidthOrHeight = 0.5f;
 
-        // Stack: (optional) NEW HIGH SCORE → Final Score → High Score.
+        // Stack: (optional) VICTORY → (optional) NEW HIGH SCORE → Final Score → High Score.
         // Centered vertically — compute the total stack height, then place
         // each line so the whole block sits in the middle of the screen.
         const float spacing = 18f;
         float totalHeight =
-              (newHigh ? newHighFontSize + spacing : 0f)
+              (victory ? victoryFontSize + spacing : 0f)
+            + (newHigh ? newHighFontSize + spacing : 0f)
             + finalScoreFontSize + spacing
             + highScoreFontSize;
 
-        // Top of the stack relative to canvas center.
-        float y = totalHeight * 0.5f;
+        // Top of the stack relative to canvas center, shifted up by the
+        // overlay vertical offset so the readout sits in the upper half of
+        // the screen instead of dead-center on top of the menu buttons.
+        float y = totalHeight * 0.5f + overlayVerticalOffset;
+
+        if (victory)
+        {
+            BuildLine(canvasGo.transform, "Victory",
+                "★ VICTORY ★",
+                anchoredY: y, height: victoryFontSize + 16,
+                color: victoryColor, fontSize: victoryFontSize,
+                font: defaultFont, bold: true);
+            y -= victoryFontSize + spacing;
+        }
 
         if (newHigh)
         {

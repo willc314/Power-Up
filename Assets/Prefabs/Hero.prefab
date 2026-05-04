@@ -2652,12 +2652,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: e829315c314ec1c44bfde3b3b93e52d9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  debugInvincible: 0
   maxHP: 100
   moveSpeed: 5
   maxedWeaponBoostMode: 0
   maxHPBoostAmount: 10
   moveSpeedBoostAmount: 0.25
   maxMoveSpeed: 100
+  dashCooldownReductionPercent: 0.05
+  minDashCooldown: 0.15
   healthRegenPerSecond: 1
   healthRegenBoostAmount: 0.5
   maxHealthRegenPerSecond: 100
@@ -2683,6 +2686,7 @@ MonoBehaviour:
   dashInvulnerabilityExtension: 0.1
   dashPhasesThroughEnemies: 1
   enemyLayerName: Enemy
+  dashArenaEdgeMargin: 0.5
   dashParticles: 1
   dashParticlesPerSecond: 80
   dashParticleColor: {r: 0.65, g: 0.55, b: 0.42, a: 1}
@@ -2704,6 +2708,10 @@ MonoBehaviour:
   crossbowHandVisual: {fileID: 6721586060920507822, guid: 8e5012eaa9daab14aa5a36ff5fb52bad, type: 3}
   grenadeHandVisual: {fileID: 6256244120178977583, guid: dea83f823520fd74198a6bfcc72b73aa, type: 3}
   aimPlaneY: 0
+  gameOverSceneName: EndScreen
+  victorySceneName: VictoryScreen
+  victoryEndSequenceDelay: 3
+  endSequenceCameraTime: 4
   animator: {fileID: 0}
   animSpeedDamping: 0.08
   currentHP: 0
@@ -2747,15 +2755,21 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
-  minCooldown: 0.08
-  cooldownReductionPerBoost: 0.04
+  minCooldown: 0.01
+  attackSpeedIncreasePercent: 0.15
   postMaxBoostScale: 0.5
   extraAttackCount: 0
-  maxExtraAttackCount: 4
-  extraAttackDelay: 0.15
+  maxExtraAttackCount: 100
+  extraAttackMinSpacing: 0.01
   slashPrefab: {fileID: 2526017728917958653, guid: cbc65052b92d3a245a0e616c4b3de3a3, type: 3}
   spawnDistance: 1
   spawnHeight: 1
+  arcDegreesBonus: 0
+  arcDegreesPerBoost: 50
+  maxSlashArcDegrees: 360
+  bladeSizeMultiplier: 1
+  bladeSizeIncreasePerBoost: 0.1
+  maxBladeSizeMultiplier: 2.5
 --- !u!114 &8888070785139311172
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2781,12 +2795,12 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
-  minCooldown: 0.08
-  cooldownReductionPerBoost: 0.04
+  minCooldown: 0.01
+  attackSpeedIncreasePercent: 0.15
   postMaxBoostScale: 0.5
   extraAttackCount: 0
-  maxExtraAttackCount: 4
-  extraAttackDelay: 0.15
+  maxExtraAttackCount: 100
+  extraAttackMinSpacing: 0.01
   shieldPrefab: {fileID: 6711622995299847906, guid: 28d318905bb3e5d46b0b92d326b2fc28, type: 3}
   spawnDistance: 0.8
   spawnHeight: 1
@@ -2816,11 +2830,11 @@ MonoBehaviour:
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
   minCooldown: 0.001
-  cooldownReductionPerBoost: 0.04
+  attackSpeedIncreasePercent: 0.15
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 4
-  extraAttackDelay: 0.15
+  extraAttackMinSpacing: 0.05
   bowVisualPrefab: {fileID: 131850, guid: 8093457b576f04fbfa270bca1b2553a1, type: 3}
   bowSpawnDistance: 1.2
   bowSpawnHeight: 1
@@ -2835,6 +2849,7 @@ MonoBehaviour:
   minReleaseTime: 0.1
   arrowPrefab: {fileID: 4620594600889568894, guid: 14c125fb9e5d3c04db5be83d0ab292d9, type: 3}
   arrowSpeed: 45
+  arrowSpawnForward: 0.2
   arrowMinDamage: 10
   arrowMaxDamage: 70
   arrowMinScale: 1
@@ -2846,17 +2861,22 @@ MonoBehaviour:
   maxDamageIncreasePerLevel: 30
   minDamageIncreasePerLevel: 4
   minFullChargeTime: 0.4
-  chargeTimeReductionPerBoost: 0.15
+  chargeSpeedIncreasePercent: 0.15
   minOverchargeTime: 1.5
-  overchargeReductionPerBoost: 0.5
+  overchargeSpeedIncreasePercent: 0.15
   arrowProjectileCount: 1
   maxArrowProjectileCount: 100
   arrowSpreadAngle: 10
+  postOverchargeDamageRate: 0.2
+  maxPostOverchargeMultiplier: 0
   deathBeamDpsBonus: 0
   deathBeamDpsPerBoost: 50
   deathBeamRadiusBonus: 0
   deathBeamRadiusPerBoost: 0.4
   maxDeathBeamRadiusBonus: 4
+  deathBeamDurationBonus: 0
+  deathBeamDurationPerBoost: 0.5
+  maxDeathBeamDurationBonus: 4
 --- !u!114 &3670884374136682343
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2883,11 +2903,11 @@ MonoBehaviour:
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
   minCooldown: 0.001
-  cooldownReductionPerBoost: 0.04
+  attackSpeedIncreasePercent: 0.15
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 100
-  extraAttackDelay: 0.15
+  extraAttackMinSpacing: 0.05
   arrowPrefab: {fileID: 4093347662047577129, guid: 328739536d0ead6479ec0b1d111290f5, type: 3}
   spawnDistance: 0.8
   spawnHeight: 1
@@ -2924,11 +2944,11 @@ MonoBehaviour:
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
   minCooldown: 0.01
-  cooldownReductionPerBoost: 0.2
+  attackSpeedIncreasePercent: 0.15
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 120
-  extraAttackDelay: 0.15
+  extraAttackMinSpacing: 0.01
   grenadePrefab: {fileID: 5172283616525916960, guid: dea83f823520fd74198a6bfcc72b73aa, type: 3}
   throwDistance: 6
   arcHeight: 3
@@ -2963,11 +2983,11 @@ MonoBehaviour:
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
   minCooldown: 0.001
-  cooldownReductionPerBoost: 0.05
+  attackSpeedIncreasePercent: 0.15
   postMaxBoostScale: 0.4
   extraAttackCount: 0
   maxExtraAttackCount: 100
-  extraAttackDelay: 0.1
+  extraAttackMinSpacing: 0.05
   stabPrefab: {fileID: 3891962484159435510, guid: 41913b50274a244418607f629adfd3c6, type: 3}
   stabStartDistance: 0.4
   stabSpawnHeight: 1
