@@ -379,6 +379,9 @@ public class SlimeGod : MonoBehaviour
         IsActive = true;
         masterRoutine = StartCoroutine(BossLifecycle());
         beamRoutine   = StartCoroutine(DeathBeamRoutine());
+
+        // Swap arena music for the boss track. Safe if no MusicManager exists.
+        if (MusicManager.Instance != null) MusicManager.Instance.PlayBoss();
     }
 
     private void Update()

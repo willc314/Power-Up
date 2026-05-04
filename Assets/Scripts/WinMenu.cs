@@ -82,6 +82,9 @@ public class WinMenu : MonoBehaviour
         RefreshScoreText();
         root.SetActive(true);
         Time.timeScale = 0f;
+
+        // Swap to the victory track. Crossfades cleanly from boss music.
+        if (MusicManager.Instance != null) MusicManager.Instance.PlayVictory();
     }
 
     public void Hide()
@@ -105,6 +108,10 @@ public class WinMenu : MonoBehaviour
 
         // EnemySpawner: schedule the next final boss with a new HP scale.
         if (EnemySpawner.Instance != null) EnemySpawner.Instance.ScheduleNextFinalBoss();
+
+        // Resume normal arena music. (PlayBoss will be called again when the
+        // next boss begins.)
+        if (MusicManager.Instance != null) MusicManager.Instance.PlayBackground();
     }
 
     private void OnRestart()
