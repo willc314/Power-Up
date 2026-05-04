@@ -112,6 +112,11 @@ public class CrossbowWeapon : Weapon
         return base.DescribeBoost(kind);
     }
 
+    public override string GetExtraStatsBlock()
+    {
+        return $"Projectiles / Shot: {projectileCount}\nSpread: {spreadAngle:0}°";
+    }
+
     public override bool TryApplyBoost(BoostKind kind)
     {
         if (kind == BoostKind.Projectiles)

@@ -99,6 +99,17 @@ public class SwordWeapon : Weapon
         return base.DescribeBoost(kind);
     }
 
+    public override string GetExtraStatsBlock()
+    {
+        // Show the upgrade-driven values that the player has banked.
+        float arc = CurrentSlashArc();
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"Slash Arc:  {arc:0}°");
+        if (bladeSizeMultiplier > 1.0001f)   sb.Append($"\nBlade Size: {bladeSizeMultiplier:0.##}×");
+        if (extraAttackCount > 0)            sb.Append($"\nExtra Slashes: {extraAttackCount}");
+        return sb.ToString();
+    }
+
     public override bool TryApplyBoost(BoostKind kind)
     {
         if (kind == BoostKind.Projectiles)

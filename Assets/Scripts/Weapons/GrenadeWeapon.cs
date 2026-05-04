@@ -74,6 +74,14 @@ public class GrenadeWeapon : Weapon
         return base.DescribeBoost(kind);
     }
 
+    public override string GetExtraStatsBlock()
+    {
+        var sb = new System.Text.StringBuilder();
+        if (explosionRadiusBonus > 0f) sb.Append($"Explosion Radius +{explosionRadiusBonus:0.##}");
+        if (extraAttackCount > 0)      { if (sb.Length > 0) sb.Append('\n'); sb.Append($"Extra Grenades: {extraAttackCount}"); }
+        return sb.ToString();
+    }
+
     public override bool TryApplyBoost(BoostKind kind)
     {
         if (kind == BoostKind.Range)

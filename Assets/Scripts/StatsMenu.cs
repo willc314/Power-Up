@@ -35,6 +35,20 @@ public class StatsMenu : MonoBehaviour
     private struct Row { public Text current; public Text delta; }
     private Row rowMaxHP, rowMove, rowRegen, rowDamageMul, rowCritRate, rowCritDmg, rowDashCd, rowIFrames;
 
+    // Weapon side-panel widgets. One block per slot (primary / secondary).
+    private struct WeaponBlock
+    {
+        public GameObject root;     // toggled off when no weapon equipped in this slot
+        public Text       header;   // "PRIMARY  ·  Sword"
+        public Row        damage;   // current + delta
+        public Row        cooldown; // current + delta
+        public Text       extras;   // weapon-specific multi-line block
+    }
+    private WeaponBlock primaryBlock;
+    private WeaponBlock secondaryBlock;
+    private GameObject  weaponPanel;
+    private Text        weaponPanelEmptyHint; // shown when both slots are empty
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
@@ -76,14 +90,15 @@ public class StatsMenu : MonoBehaviour
 
     public void Show()
     {
-        if (panelRoot == null) return;
-        if (!panelRoot.activeSelf) panelRoot.SetActive(true);
+        if (panelRoot != null && !panelRoot.activeSelf) panelRoot.SetActive(true);
+        if (weaponPanel != null && !weaponPanel.activeSelf) weaponPanel.SetActive(true);
         Refresh();
     }
 
     public void Hide()
     {
         if (panelRoot != null) panelRoot.SetActive(false);
+        if (weaponPanel != null) weaponPanel.SetActive(false);
     }
 
     // -------------------- Refresh values --------------------
@@ -107,6 +122,29 @@ public class StatsMenu : MonoBehaviour
         float currentWindow  = baseWindow * h.DashIFrameMultiplier;
         float originalWindow = baseWindow * h.OriginalDashIFrameMultiplier;
         SetRow(rowIFrames, currentWindow, originalWindow, "{0:0.000}s", "");
+
+        // ---- Right panel: weapons ----
+        bool anyEquipped = false;
+        anyEquipped |= RefreshWeaponBlock(primaryBlock,   "PRIMARY",   h.primaryWeapon);
+        anyEquipped |= RefreshWeaponBlock(secondaryBlock, "SECONDARY", h.secondaryWeapon);
+        if (weaponPanelEmptyHint != null && weaponPanelEmptyHint.gameObject.activeSelf != !anyEquipped)
+            weaponPanelEmptyHint.gameObject.SetActive(!anyEquipped);
+    }
+
+    /// <summary>Returns true if a weapon was displayed in this block.</summary>
+    private bool RefreshWeaponBlock(WeaponBlock wb, string slotLabel, Weapon w)
+    {
+        if (wb.root == null) return false;
+        bool show = w != null;
+        if (wb.root.activeSelf != show) wb.root.SetActive(show);
+        if (!show) return false;
+
+        wb.header.text = slotLabel + "  ·  " + (string.IsNullOrEmpty(w.weaponName) ? w.GetType().Name : w.weaponName);
+        SetRow(wb.damage,   w.damage,   w.OriginalDamage,   "{0:0.#}",    "");
+        SetRow(wb.cooldown, w.cooldown, w.OriginalCooldown, "{0:0.##}s",  "", invertDelta: true);
+
+        wb.extras.text = w.GetExtraStatsBlock();
+        return true;
     }
 
     private void SetRow(Row row, float current, float original, string fmt, string suffix, bool invertDelta = false)
@@ -198,6 +236,106 @@ public class StatsMenu : MonoBehaviour
         rowCritDmg   = BuildStatRow(panel.transform, "Crit Damage",   ref y, rowH);
         rowDashCd    = BuildStatRow(panel.transform, "Dash Cooldown", ref y, rowH);
         rowIFrames   = BuildStatRow(panel.transform, "Dash i-frames", ref y, rowH);
+
+        BuildWeaponPanel(canvasGo.transform);
+    }
+
+    /// <summary>
+    /// Build the right-side weapon stats panel mirroring the left hero panel.
+    /// Two stacked blocks (primary / secondary), each with damage + cooldown
+    /// rows and a free-form extras text block fed by Weapon.GetExtraStatsBlock.
+    /// </summary>
+    private void BuildWeaponPanel(Transform canvasParent)
+    {
+        weaponPanel = MakeUI("WeaponPanel", canvasParent);
+        var rt = (RectTransform)weaponPanel.transform;
+        rt.anchorMin = new Vector2(1f, 0.5f);
+        rt.anchorMax = new Vector2(1f, 0.5f);
+        rt.pivot     = new Vector2(1f, 0.5f);
+        rt.anchoredPosition = new Vector2(-40f, 0f); // 40 px from the right edge
+        rt.sizeDelta = new Vector2(420f, 600f);
+        var img = weaponPanel.AddComponent<Image>();
+        img.color = panelColor;
+        img.raycastTarget = false;
+        AddOutline(weaponPanel, panelOutlineColor);
+
+        // Title
+        BuildText(weaponPanel.transform, "Title", "Weapons",
+            anchorTop: true, x: 0f, y: -24f, width: 420f, height: 48f,
+            fontSize: 30, color: textColor, align: TextAnchor.UpperCenter);
+
+        // Primary block top half, secondary bottom half.
+        primaryBlock   = BuildWeaponBlock(weaponPanel.transform, "Primary",   yStart: -84f);
+        secondaryBlock = BuildWeaponBlock(weaponPanel.transform, "Secondary", yStart: -334f);
+
+        // Empty-loadout hint (shown when both slots are empty — rare but
+        // possible if the player runs around without weapons).
+        weaponPanelEmptyHint = BuildText(weaponPanel.transform, "EmptyHint",
+            "(no weapons equipped)",
+            anchorTop: true, x: 0f, y: -200f, width: 420f, height: 32f,
+            fontSize: 20, color: subtleColor, align: TextAnchor.UpperCenter);
+        weaponPanelEmptyHint.gameObject.SetActive(false);
+    }
+
+    private WeaponBlock BuildWeaponBlock(Transform parent, string slotLabel, float yStart)
+    {
+        WeaponBlock wb = new WeaponBlock();
+
+        // Block container so we can hide/show together.
+        GameObject root = MakeUI("Block_" + slotLabel, parent);
+        var rt = (RectTransform)root.transform;
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(1f, 1f);
+        rt.pivot = new Vector2(0.5f, 1f);
+        rt.anchoredPosition = new Vector2(0f, yStart);
+        rt.sizeDelta = new Vector2(0f, 240f);
+        wb.root = root;
+
+        // Header: "PRIMARY  ·  Sword"
+        wb.header = BuildText(root.transform, "Header_" + slotLabel,
+            slotLabel.ToUpper() + "  ·  —",
+            anchorTop: true, x: 16f, y: 0f, width: 388f, height: 32f,
+            fontSize: 22, color: subtleColor, align: TextAnchor.MiddleLeft);
+
+        // Damage + Cooldown rows
+        const float rowH = 30f;
+        const float colName    = 16f;
+        const float colCurrent = 220f;
+        const float colDelta   = 330f;
+        const float colCurW    = 100f;
+        const float colDeltaW  = 80f;
+        const float colNameW   = 200f;
+
+        float y = -38f;
+        BuildText(root.transform, "DmgLbl_" + slotLabel, "Damage",
+            anchorTop: true, x: colName, y: y, width: colNameW, height: rowH,
+            fontSize: 18, color: textColor, align: TextAnchor.MiddleLeft);
+        wb.damage.current = BuildText(root.transform, "DmgCur_" + slotLabel, "—",
+            anchorTop: true, x: colCurrent, y: y, width: colCurW, height: rowH,
+            fontSize: 18, color: textColor, align: TextAnchor.MiddleRight);
+        wb.damage.delta = BuildText(root.transform, "DmgDlt_" + slotLabel, "—",
+            anchorTop: true, x: colDelta, y: y, width: colDeltaW, height: rowH,
+            fontSize: 18, color: neutralDeltaColor, align: TextAnchor.MiddleRight);
+
+        y -= rowH + 2f;
+        BuildText(root.transform, "CdLbl_" + slotLabel, "Cooldown",
+            anchorTop: true, x: colName, y: y, width: colNameW, height: rowH,
+            fontSize: 18, color: textColor, align: TextAnchor.MiddleLeft);
+        wb.cooldown.current = BuildText(root.transform, "CdCur_" + slotLabel, "—",
+            anchorTop: true, x: colCurrent, y: y, width: colCurW, height: rowH,
+            fontSize: 18, color: textColor, align: TextAnchor.MiddleRight);
+        wb.cooldown.delta = BuildText(root.transform, "CdDlt_" + slotLabel, "—",
+            anchorTop: true, x: colDelta, y: y, width: colDeltaW, height: rowH,
+            fontSize: 18, color: neutralDeltaColor, align: TextAnchor.MiddleRight);
+
+        // Extras text block — multi-line, weapon-specific.
+        y -= rowH + 6f;
+        wb.extras = BuildText(root.transform, "Extras_" + slotLabel, "",
+            anchorTop: true, x: colName, y: y, width: 388f, height: 130f,
+            fontSize: 16, color: subtleColor, align: TextAnchor.UpperLeft);
+        wb.extras.verticalOverflow = VerticalWrapMode.Overflow;
+
+        return wb;
     }
 
     /// <summary>Build a label in the Stat column and two values in Current/Δ columns.</summary>

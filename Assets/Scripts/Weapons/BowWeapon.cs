@@ -224,6 +224,20 @@ public class BowWeapon : Weapon
         return base.DescribeBoost(kind);
     }
 
+    public override string GetExtraStatsBlock()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"Arrow Dmg: {arrowMinDamage:0.#}–{arrowMaxDamage:0.#}");
+        sb.Append($"\nArrows / Shot: {arrowProjectileCount}");
+        sb.Append($"\nFull Charge: {fullChargeTime:0.##}s");
+        sb.Append($"\nTime to Beam: {overchargeTime:0.##}s");
+        if (deathBeamDpsBonus > 0f)      sb.Append($"\nBeam DPS Bonus: +{deathBeamDpsBonus:0.#}");
+        if (deathBeamRadiusBonus > 0f)   sb.Append($"\nBeam Radius +{deathBeamRadiusBonus:0.##}");
+        if (deathBeamDurationBonus > 0f) sb.Append($"\nBeam Duration +{deathBeamDurationBonus:0.##}s");
+        sb.Append($"\nOvercharge Rate: +{postOverchargeDamageRate * 100f:0}%/s");
+        return sb.ToString();
+    }
+
     public override bool TryApplyBoost(BoostKind kind)
     {
         switch (kind)

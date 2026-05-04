@@ -94,6 +94,36 @@ public abstract class Weapon : MonoBehaviour
 
     public bool IsDamageMaxed => damageLevel >= maxDamageLevel;
 
+    /// <summary>Damage value at scene start, captured by Start(). Used by the StatsMenu for original-vs-current display.</summary>
+    public float OriginalDamage   { get; private set; }
+    /// <summary>Cooldown value at scene start, captured by Start(). Used by the StatsMenu.</summary>
+    public float OriginalCooldown { get; private set; }
+
+    private bool originalsCaptured;
+    /// <summary>
+    /// Snapshot the inspector-provided damage and cooldown so the StatsMenu
+    /// can show what the player started with versus where they are now.
+    /// Uses Start() instead of Awake() so any subclass tweaks during Awake
+    /// (e.g. DaggerWeapon's setting weaponName/type) are already in effect.
+    /// </summary>
+    private void Start()
+    {
+        if (originalsCaptured) return;
+        originalsCaptured = true;
+        OriginalDamage   = damage;
+        OriginalCooldown = cooldown;
+    }
+
+    /// <summary>
+    /// Override per weapon to expose upgrade-tracked stats (multi-arrow,
+    /// blade size, beam bonuses, etc.) as a multi-line string the StatsMenu
+    /// renders verbatim. Default: empty (no extras).
+    /// </summary>
+    public virtual string GetExtraStatsBlock()
+    {
+        return "";
+    }
+
     [Header("Attack-Speed Boost")]
     [Tooltip("Floor for cooldown when applying AttackSpeed boosts.")]
     public float minCooldown = 0.08f;
