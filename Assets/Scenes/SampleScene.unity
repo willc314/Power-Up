@@ -1096,6 +1096,71 @@ MonoBehaviour:
   m_BeforeTransparentBundles: []
   m_BeforeStackBundles: []
   m_AfterStackBundles: []
+--- !u!1 &965924271
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 965924273}
+  - component: {fileID: 965924272}
+  m_Layer: 0
+  m_Name: WinMenu
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &965924272
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 965924271}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 130befbec01f51b408281bf598557d7d, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  gameplaySceneName: SampleScene
+  titleSceneName: TitleScreen
+  overlayColor: {r: 0, g: 0, b: 0, a: 0.6}
+  panelColor: {r: 0.1, g: 0.12, b: 0.1, a: 0.96}
+  panelOutlineColor: {r: 0.5, g: 1, b: 0.7, a: 0.45}
+  titleColor: {r: 0.5, g: 1, b: 0.7, a: 1}
+  textColor: {r: 1, g: 1, b: 1, a: 1}
+  subtleColor: {r: 1, g: 1, b: 1, a: 0.78}
+  highlightColor: {r: 1, g: 0.85, b: 0.2, a: 1}
+  buttonColor: {r: 0.2, g: 0.28, b: 0.22, a: 1}
+  buttonHoverColor: {r: 0.3, g: 0.42, b: 0.34, a: 1}
+  buttonPressedColor: {r: 0.14, g: 0.2, b: 0.16, a: 1}
+  continueButtonColor: {r: 0.18, g: 0.55, b: 0.3, a: 1}
+  titleFontSize: 84
+  finalScoreFontSize: 56
+  highScoreFontSize: 32
+  newHighFontSize: 36
+  buttonFontSize: 30
+  panelSize: {x: 720, y: 620}
+  buttonSize: {x: 280, y: 70}
+  buttonSpacing: 16
+--- !u!4 &965924273
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 965924271}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 587, y: 330, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1002177876
 GameObject:
   m_ObjectHideFlags: 0
@@ -1143,19 +1208,25 @@ MonoBehaviour:
   maxSpawnsPerSecond: 12
   timeToReachMaxSpawnRate: 600
   spawnRateRampPower: 1.6
-  regularHpBonusPerMinute: 2
+  regularHpBonusPerMinute: 3
+  regularHpExponentialPerMinute: 1.5
   regularHpMaxMultiplier: 2000
-  dropChanceMulAtStart: 2
-  dropChanceMulAtPeak: 0.05
+  dropChanceMulAtStart: 1.75
+  dropChanceMulAtPeak: 0.02
   bossFirstSpawnDelay: 60
   bossSpawnInterval: 60
-  bossHpMultiplierPerSpawn: 2.5
+  bossHpMultiplierPerSpawn: 6
   finalBossPrefab: {fileID: 2291158632217275045, guid: e5e8818af10200740981a15cfe0bc952, type: 3}
   finalBossSpawnTime: 480
   finalBossSpawnDistance: 8
   finalBossShockwaveRadius: 60
   finalBossShockwaveShake: 0.9
   finalBossShockwaveShakeDuration: 1.2
+  finalBossRespawnDelayMinutes: 4
+  finalBossExtraHpMultiplierPerSpawn: 4
+  finalBossDamageBonusPerKill: 1
+  finalBossProjectileBonusPerKill: 1
+  finalBossAttackSpeedBonusPerKill: 1
   maxAliveEnemies: 555
   minSpawnDistanceFromHero: 8
   maxSpawnDistanceFromHero: 15
@@ -1727,3 +1798,4 @@ SceneRoots:
   - {fileID: 635634192}
   - {fileID: 2054455414}
   - {fileID: 761549801}
+  - {fileID: 965924273}

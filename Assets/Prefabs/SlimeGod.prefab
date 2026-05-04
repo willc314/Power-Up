@@ -409,6 +409,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   startDamageReduction: 0.99
   endDamageReduction: 0
+  damageReductionGracePeriod: 40
   damageReductionDecayTime: 120
   spawnTelegraphTime: 2.5
   spawnTelegraphRadius: 6
@@ -419,7 +420,7 @@ MonoBehaviour:
   dashCount: 10
   dashOvershoot: 4
   dashGap: 0.2
-  dashLockOnDelay: 0.9
+  dashLockOnDelay: 0.75
   dashDuration: 0.18
   dashHitRadius: 2.2
   dashDamage: 90
@@ -427,8 +428,8 @@ MonoBehaviour:
   dashShakeDuration: 0.18
   dashFootstepShakeAmplitude: 0.08
   dashFootstepShakeDuration: 0.05
-  bounceCount: 8
-  bounceTelegraphTime: 0.65
+  bounceCount: 10
+  bounceTelegraphTime: 0.4
   bounceArcTime: 0.7
   bounceArcHeight: 12
   bounceImpactRadius: 3.6
@@ -439,31 +440,31 @@ MonoBehaviour:
   meleeHomingProjectilePrefab: {fileID: 2241873115812845983, guid: e42e74e2f360725468bab61f4e054cc0, type: 3}
   meleeHomingBarrageStartDelay: 0.5
   meleeHomingBarrageInterval: 1.4
-  meleeHomingArrowsPerBarrage: 5
-  meleeHomingArrowDamage: 15
-  meleeHomingArrowSpeed: 8
-  meleeHomingTurnSpeed: 100
+  meleeHomingArrowsPerBarrage: 8
+  meleeHomingArrowDamage: 20
+  meleeHomingArrowSpeed: 16
+  meleeHomingTurnSpeed: 120
   meleeHomingDuration: 1.5
   meleeHomingMaxRange: 15
   meleeHomingArrowScale: 1
   meleeHomingSpawnHeight: 1.2
-  meleeHomingAngleJitter: 12
-  spamDuration: 7
-  spamArrowsPerWave: 8
+  meleeHomingAngleJitter: 20
+  spamDuration: 8
+  spamArrowsPerWave: 9
   spamWaveInterval: 0.1
-  spamRotationSpeed: 35
+  spamRotationSpeed: 40
   spamChaseSpeed: 2.4
   spamArrowDamage: 40
-  spamArrowSpeed: 14
+  spamArrowSpeed: 15
   spamArrowScale: 0.5
   spamArrowSpawnHeight: 0.3
   aerialWaveCount: 7
   aerialFlyUpHeight: 18
   aerialFlyUpTime: 0.9
   aerialWaveInterval: 1
-  aerialTelegraphTime: 0.95
-  aerialArrowsPerWave: 10
-  aerialArrowDamage: 20
+  aerialTelegraphTime: 0.8
+  aerialArrowsPerWave: 15
+  aerialArrowDamage: 25
   aerialArrowSpeed: 22
   aerialArrowScale: 0.55
   aerialRingRadius: 10
@@ -511,7 +512,7 @@ MonoBehaviour:
   sweepingBeamFarDistance: 25
   sweepingBeamCloseTrackMultiplier: 0.15
   sweepingBeamFarTrackMultiplier: 4
-  sweepingBeamDamagePerSecond: 60
+  sweepingBeamDamagePerSecond: 100
   sweepingBeamHitRadius: 1.6
   sweepingBeamTelegraphColor: {r: 1, g: 0.2, b: 0.2, a: 1}
   sweepingBeamFireColor: {r: 1, g: 0.85, b: 0.4, a: 1}

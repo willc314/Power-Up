@@ -284,9 +284,11 @@ public class GameHUD : MonoBehaviour
         if (bossBarRoot.activeSelf != show) bossBarRoot.SetActive(show);
         if (!show) return;
 
-        float cur = be.CurrentHP;
-        float max = Mathf.Max(1f, be.MaxHP);
-        float ratio = Mathf.Clamp01(cur / max);
+        long cur = be.CurrentHP;
+        long max = System.Math.Max(1L, be.MaxHP);
+        // Compute ratio as float through double so very large long HP values
+        // don't lose precision when converted directly to float.
+        float ratio = Mathf.Clamp01((float)((double)cur / (double)max));
 
         if (bossBarFillRect != null)
         {
@@ -296,7 +298,7 @@ public class GameHUD : MonoBehaviour
         }
 
         if (bossBarText != null)
-            bossBarText.text = Mathf.CeilToInt(cur) + " / " + Mathf.CeilToInt(max);
+            bossBarText.text = cur + " / " + max;
 
         if (bossBarLabel != null)
         {

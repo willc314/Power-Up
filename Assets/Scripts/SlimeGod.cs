@@ -29,11 +29,13 @@ public class SlimeGod : MonoBehaviour
     // -------------------- Tunables --------------------
 
     [Header("Damage Reduction")]
-    [Tooltip("Damage reduction at spawn (0..1). 0.99 means hits deal 1% damage.")]
-    [Range(0f, 0.999f)] public float startDamageReduction = 0.99f;
+    [Tooltip("Damage reduction at spawn AND throughout the grace period (0..1). 0.999 = essentially invincible.")]
+    [Range(0f, 0.999f)] public float startDamageReduction = 0.999f;
     [Tooltip("Damage reduction once the decay finishes (0..1). 0 = no reduction.")]
     [Range(0f, 0.999f)] public float endDamageReduction = 0f;
-    [Tooltip("Seconds for damage reduction to lerp from start to end.")]
+    [Tooltip("Seconds at the START of the fight where damage reduction stays locked at startDamageReduction (boss can barely be hurt). The lerp toward endDamageReduction only begins AFTER this grace period elapses.")]
+    public float damageReductionGracePeriod = 40f;
+    [Tooltip("Seconds for damage reduction to lerp from startDamageReduction to endDamageReduction once the grace period ends. Total time from spawn until full damage = grace + decay.")]
     public float damageReductionDecayTime = 120f;
 
     [Header("Spawn Attack")]
@@ -281,6 +283,34 @@ public class SlimeGod : MonoBehaviour
 
     // -------------------- Runtime state --------------------
 
+    // ---- Per-spawn stat multipliers (set by EnemySpawner just after Instantiate) ----
+    // These scale linearly with finalBossesSpawned and stack on top of the
+    // exponential HP scaling. They're NonSerialized so the prefab values stay
+    // 1× and the spawner is the only thing that changes them at runtime.
+
+    [System.NonSerialized] public float attackDamageMultiplier   = 1f;
+    [System.NonSerialized] public float projectileCountMultiplier = 1f;
+    [System.NonSerialized] public float attackSpeedMultiplier    = 1f;
+
+    /// <summary>Multiplies a base damage by the per-spawn damage multiplier.</summary>
+    private float ScaledDamage(float baseDamage) => baseDamage * Mathf.Max(0f, attackDamageMultiplier);
+
+    /// <summary>
+    /// Rounds a base projectile count by the per-spawn projectile multiplier.
+    /// Always returns at least 1 so a degenerate multiplier doesn't silently
+    /// turn off an attack.
+    /// </summary>
+    private int ScaledCount(int baseCount)
+        => Mathf.Max(1, Mathf.RoundToInt(baseCount * Mathf.Max(0.01f, projectileCountMultiplier)));
+
+    /// <summary>
+    /// Returns a base interval / cooldown shortened by the per-spawn attack
+    /// speed multiplier. attackSpeedMultiplier = 2 ⇒ intervals halved ⇒
+    /// twice as many attacks per second.
+    /// </summary>
+    private float ScaledInterval(float baseInterval)
+        => baseInterval / Mathf.Max(0.01f, attackSpeedMultiplier);
+
     /// <summary>True from the moment <see cref="Begin"/> runs until the boss dies or the scene unloads.</summary>
     public bool IsActive { get; private set; }
     /// <summary>The signed-up-to-date damage reduction multiplier currently in effect.</summary>
@@ -357,11 +387,19 @@ public class SlimeGod : MonoBehaviour
 
         lifeTimer += Time.deltaTime;
 
-        // Damage reduction lerp.
-        if (damageReductionDecayTime > 0.01f)
+        // Damage reduction curve:
+        //   * Hold at startDamageReduction for damageReductionGracePeriod seconds
+        //     (99.9% by default — the boss can barely be hurt during this window).
+        //   * After the grace period, lerp from startDamageReduction down to
+        //     endDamageReduction over damageReductionDecayTime seconds.
+        if (damageReductionGracePeriod > 0f && lifeTimer < damageReductionGracePeriod)
         {
-            float t = Mathf.Clamp01(lifeTimer / damageReductionDecayTime);
-            damageReduction = Mathf.Lerp(startDamageReduction, endDamageReduction, t);
+            damageReduction = startDamageReduction;
+        }
+        else if (damageReductionDecayTime > 0.01f)
+        {
+            float decayT = Mathf.Clamp01((lifeTimer - damageReductionGracePeriod) / damageReductionDecayTime);
+            damageReduction = Mathf.Lerp(startDamageReduction, endDamageReduction, decayT);
         }
         else
         {
@@ -533,7 +571,7 @@ public class SlimeGod : MonoBehaviour
         while (IsActive)
         {
             FireHomingBarrage();
-            yield return new WaitForSeconds(Mathf.Max(0.05f, meleeHomingBarrageInterval));
+            yield return new WaitForSeconds(Mathf.Max(0.05f, ScaledInterval(meleeHomingBarrageInterval)));
         }
     }
 
@@ -541,7 +579,7 @@ public class SlimeGod : MonoBehaviour
     {
         if (meleeHomingProjectilePrefab == null) return;
         Vector3 origin = transform.position + Vector3.up * meleeHomingSpawnHeight;
-        int count = Mathf.Max(1, meleeHomingArrowsPerBarrage);
+        int count = ScaledCount(meleeHomingArrowsPerBarrage);
         // Random ring offset so consecutive barrages don't overlap directions.
         float offsetDeg = Random.Range(0f, 360f);
         for (int i = 0; i < count; i++)
@@ -557,7 +595,7 @@ public class SlimeGod : MonoBehaviour
             p.homingDuration = meleeHomingDuration;
             p.homingMaxRange = meleeHomingMaxRange;
             ApplyArrowScale(p, meleeHomingArrowScale);
-            p.Launch(dir, meleeHomingArrowDamage);
+            p.Launch(dir, ScaledDamage(meleeHomingArrowDamage));
         }
     }
 
@@ -587,13 +625,15 @@ public class SlimeGod : MonoBehaviour
             target.y = from.y;
 
             // (2) Lock-on delay. Boss stands still and faces the snapshot so
-            // the player can read where the dash is about to go.
-            if (dashLockOnDelay > 0f)
+            // the player can read where the dash is about to go. Shortened
+            // by attackSpeedMultiplier so faster final-boss spawns react quicker.
+            float lockDelay = ScaledInterval(dashLockOnDelay);
+            if (lockDelay > 0f)
             {
                 rb.velocity = Vector3.zero;
                 if (dirN.sqrMagnitude > 0.0001f)
                     transform.rotation = Quaternion.LookRotation(dirN, Vector3.up);
-                yield return new WaitForSeconds(dashLockOnDelay);
+                yield return new WaitForSeconds(lockDelay);
             }
 
             // (3) Dash to the (frozen) snapshot.
@@ -603,7 +643,7 @@ public class SlimeGod : MonoBehaviour
             shieldStacks++;
             EnsureShieldVisual();
 
-            yield return new WaitForSeconds(dashGap);
+            yield return new WaitForSeconds(ScaledInterval(dashGap));
         }
     }
 
@@ -629,7 +669,7 @@ public class SlimeGod : MonoBehaviour
                 d.y = 0f;
                 if (d.sqrMagnitude <= dashHitRadius * dashHitRadius)
                 {
-                    player.TakeDamage(dashDamage);
+                    player.TakeDamage(ScaledDamage(dashDamage));
                     hitPlayer = true;
                     // Heavy shake on a hit; lighter footstep shake handled below.
                     ShakeCamera(dashShakeAmplitude, dashShakeDuration);
@@ -686,7 +726,7 @@ public class SlimeGod : MonoBehaviour
             {
                 Vector3 d = player.transform.position - land; d.y = 0f;
                 if (d.sqrMagnitude <= bounceImpactRadius * bounceImpactRadius)
-                    player.TakeDamage(bounceImpactDamage);
+                    player.TakeDamage(ScaledDamage(bounceImpactDamage));
             }
 
             // Smash particles + heavy slam shake.
@@ -755,7 +795,7 @@ public class SlimeGod : MonoBehaviour
             if (waveTimer <= 0f)
             {
                 FireSpamWave(fanAngle);
-                waveTimer = spamWaveInterval;
+                waveTimer = ScaledInterval(spamWaveInterval);
             }
             yield return null;
         }
@@ -771,15 +811,16 @@ public class SlimeGod : MonoBehaviour
         // boss is. spamGroundY is set at the start of SpamPattern.
         Vector3 origin = transform.position;
         origin.y = spamGroundY + spamArrowSpawnHeight;
-        for (int i = 0; i < spamArrowsPerWave; i++)
+        int count = ScaledCount(spamArrowsPerWave);
+        for (int i = 0; i < count; i++)
         {
-            float a = (360f / spamArrowsPerWave) * i + angleDeg;
+            float a = (360f / count) * i + angleDeg;
             float rad = a * Mathf.Deg2Rad;
             Vector3 dir = new Vector3(Mathf.Cos(rad), 0f, Mathf.Sin(rad));
             EnemyProjectile p = Instantiate(spamArrowPrefab, origin, Quaternion.LookRotation(dir, Vector3.up));
             if (spamArrowSpeed > 0f) p.speed = spamArrowSpeed;
             ApplyArrowScale(p, spamArrowScale);
-            p.Launch(dir, spamArrowDamage);
+            p.Launch(dir, ScaledDamage(spamArrowDamage));
         }
     }
 
@@ -820,9 +861,10 @@ public class SlimeGod : MonoBehaviour
             List<LineRenderer> tels = new List<LineRenderer>();
             float arrowY = ground.y + aerialArrowSpawnHeight;
             Vector3 predictedAtArrowY = new Vector3(predicted.x, arrowY, predicted.z);
-            for (int a = 0; a < aerialArrowsPerWave; a++)
+            int waveCount = ScaledCount(aerialArrowsPerWave);
+            for (int a = 0; a < waveCount; a++)
             {
-                float angle = (360f / aerialArrowsPerWave) * a;
+                float angle = (360f / waveCount) * a;
                 Vector3 from;
                 if (fromBoss)
                 {
@@ -861,13 +903,13 @@ public class SlimeGod : MonoBehaviour
                     EnemyProjectile p = Instantiate(aerialArrowPrefab, from, Quaternion.LookRotation(dir, Vector3.up));
                     if (aerialArrowSpeed > 0f) p.speed = aerialArrowSpeed;
                     ApplyArrowScale(p, aerialArrowScale);
-                    p.Launch(dir, aerialArrowDamage);
+                    p.Launch(dir, ScaledDamage(aerialArrowDamage));
                 }
             }
 
             for (int k = 0; k < tels.Count; k++) if (tels[k] != null) Destroy(tels[k].gameObject);
 
-            yield return new WaitForSeconds(aerialWaveInterval - aerialTelegraphTime);
+            yield return new WaitForSeconds(Mathf.Max(0.05f, ScaledInterval(aerialWaveInterval - aerialTelegraphTime)));
         }
 
         // Drop back down.
@@ -1071,7 +1113,7 @@ public class SlimeGod : MonoBehaviour
                     Vector3 closest = origin + lineNorm * along;
                     float perpDist = Vector3.Distance(closest, player.transform.position + Vector3.up * beamTargetHeight);
                     if (perpDist <= sweepingBeamHitRadius)
-                        player.TakeDamage(sweepingBeamDamagePerSecond * damageTimer);
+                        player.TakeDamage(ScaledDamage(sweepingBeamDamagePerSecond) * damageTimer);
                 }
                 damageTimer = 0f;
             }
@@ -1125,7 +1167,7 @@ public class SlimeGod : MonoBehaviour
 
             // -- Cooldown (telegraph hidden) --
             if (beamLine != null) beamLine.enabled = false;
-            yield return new WaitForSeconds(beamCooldown);
+            yield return new WaitForSeconds(ScaledInterval(beamCooldown));
             if (!IsActive) yield break;
 
             if (player == null) player = Hero.Instance;
@@ -1274,7 +1316,7 @@ public class SlimeGod : MonoBehaviour
                     Vector3 closest = origin + fireDir * along;
                     float perpDist = Vector3.Distance(closest, player.transform.position + Vector3.up * beamTargetHeight);
                     if (perpDist <= beamHitRadius)
-                        player.TakeDamage(beamDamagePerSecond * damageTickT);
+                        player.TakeDamage(ScaledDamage(beamDamagePerSecond) * damageTickT);
                     damageTickT = 0f;
                 }
 

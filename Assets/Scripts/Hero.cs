@@ -66,10 +66,10 @@ public class Hero : MonoBehaviour
     public float moveSpeedBoostAmount = 0.25f;
     [Tooltip("Optional movement speed cap so speed boosts do not get ridiculous.")]
     public float maxMoveSpeed = 10f;
-    [Tooltip("Fraction the dash cooldown shrinks per Move Speed boost. 0.05 = -5% per pickup, with diminishing returns since each step is a percentage of the current cooldown.")]
-    [Range(0f, 1f)] public float dashCooldownReductionPercent = 0.05f;
+    [Tooltip("Fraction the dash cooldown shrinks per Move Speed boost. 0.02 = -2% per pickup, with diminishing returns since each step is a percentage of the current cooldown.")]
+    [Range(0f, 1f)] public float dashCooldownReductionPercent = 0.02f;
     [Tooltip("Floor for dashCooldown when applying the Move Speed boost so the dash never becomes truly free.")]
-    public float minDashCooldown = 0.15f;
+    public float minDashCooldown = 0.5f;
     [Tooltip("Current health regen, in HP per second. Boosts add to this.")]
     public float healthRegenPerSecond = 0f;
     [Tooltip("How much HP/sec regen increases per boost.")]
@@ -234,6 +234,12 @@ public class Hero : MonoBehaviour
     private Vector3 dashDirection;
     private float dashParticleAccumulator;
     private float invulnerabilityTimer;
+    /// <summary>
+    /// Multiplier on the dash i-frame window. Shrinks per MoveSpeed boost in
+    /// lockstep with the dashCooldown reduction so faster dashing also means
+    /// shorter invulnerability per dash.
+    /// </summary>
+    private float dashIFrameMultiplier = 1f;
     private int   cachedEnemyLayer = -1;
     private bool  enemyCollisionIgnored;
     private ArenaGenerator cachedArena;
@@ -331,6 +337,9 @@ public class Hero : MonoBehaviour
         if (IsDead)
             return;
 
+        if (IsFrozenForVictory)
+            return;
+
         if (Time.timeScale == 0f)
             return;
 
@@ -365,7 +374,7 @@ public class Hero : MonoBehaviour
 
     private void FixedUpdate()
     {
-        if (IsDead || Time.timeScale == 0f)
+        if (IsDead || IsFrozenForVictory || Time.timeScale == 0f)
             return;
 
         if (IsDashing)
@@ -465,8 +474,11 @@ public class Hero : MonoBehaviour
         dashTimer = dashDuration;
         dashCooldownTimer = dashCooldown;
         dashParticleAccumulator = 0f;
-        // Cover the whole dash plus the small grace period afterward.
-        invulnerabilityTimer = dashDuration + Mathf.Max(0f, dashInvulnerabilityExtension);
+        // Cover the whole dash plus the small grace period afterward, then
+        // scale by the cumulative MoveSpeed-boost shrinkage so faster dashing
+        // = shorter invulnerability per dash.
+        float baseWindow = dashDuration + Mathf.Max(0f, dashInvulnerabilityExtension);
+        invulnerabilityTimer = baseWindow * dashIFrameMultiplier;
 
         // Phase through enemies for the duration of the dash. This is restored
         // when dashTimer hits zero in FixedUpdate (and defensively in
@@ -594,6 +606,10 @@ public class Hero : MonoBehaviour
 
         // Debug invincibility (Inspector toggle).
         if (debugInvincible)
+            return;
+
+        // Frozen during victory pause / win menu — don't take damage either.
+        if (IsFrozenForVictory)
             return;
 
         // Dash i-frames: ignore damage while the invulnerability window is active.
@@ -915,10 +931,17 @@ public class Hero : MonoBehaviour
                 moveSpeed = Mathf.Min(maxMoveSpeed, moveSpeed + moveSpeedBoostAmount);
                 // Same boost also chips away at the dash cooldown with
                 // diminishing returns (each step is a percentage of the
-                // CURRENT cooldown, floored at minDashCooldown).
+                // CURRENT cooldown, floored at minDashCooldown). The dash
+                // i-frame window shrinks by the SAME ratio so faster dashing
+                // costs the player some invulnerability per dash.
                 if (dashCooldownReductionPercent > 0f)
+                {
+                    float oldCooldown = dashCooldown;
                     dashCooldown = Mathf.Max(minDashCooldown, dashCooldown / (1f + dashCooldownReductionPercent));
-                Debug.Log($"Hero move speed → {moveSpeed}, dash cooldown → {dashCooldown}");
+                    if (dashCooldown < oldCooldown - 0.0001f && oldCooldown > 0f)
+                        dashIFrameMultiplier *= dashCooldown / oldCooldown;
+                }
+                Debug.Log($"Hero move speed → {moveSpeed}, dash cooldown → {dashCooldown}, i-frame ×{dashIFrameMultiplier:F2}");
                 break;
 
             case HeroStatBoostMode.HealthRegen:
@@ -996,23 +1019,55 @@ public class Hero : MonoBehaviour
     }
 
     /// <summary>
-    /// Triggered by GameManager.OnFinalBossKilled. Freezes the hero so AI / timer
-    /// stop, then waits <see cref="victoryEndSequenceDelay"/> seconds before
-    /// starting the end sequence (camera zoom + load). The end-sequence load
-    /// goes to <see cref="victorySceneName"/>, NOT the game-over scene.
+    /// Frozen-but-not-dead state set by <see cref="TriggerVictory"/>. While
+    /// true the hero ignores input/movement and isn't damageable, but unlike
+    /// IsDead it can be cleared by <see cref="ResumeFromVictoryPause"/> so
+    /// the WinMenu's Continue button can put the player back in the run.
+    /// </summary>
+    public bool IsFrozenForVictory { get; private set; }
+
+    /// <summary>
+    /// Triggered by GameManager.OnFinalBossKilled. Freezes the hero (input
+    /// off, no damage), waits <see cref="victoryEndSequenceDelay"/> seconds
+    /// so the boss kill reads on screen, then opens the in-game WinMenu
+    /// (which pauses Time.timeScale until the player picks a button).
     /// </summary>
     public void TriggerVictory()
     {
-        if (IsDead) return;
-        IsDead = true;
+        if (IsFrozenForVictory || IsDead) return;
+        IsFrozenForVictory = true;
         moveInput = Vector3.zero;
         speedMultiplier = 1f;
         if (rb != null) rb.velocity = Vector3.zero;
         if (animator != null) animator.SetFloat(kSpeed, 0f);
 
-        // Pause AFTER the kill before kicking off the end sequence so the
-        // boss death gets a beat on screen.
-        Invoke(nameof(BeginVictoryEndSequence), Mathf.Max(0f, victoryEndSequenceDelay));
+        // Pause AFTER the kill before opening the menu so the boss death
+        // gets a beat on screen.
+        Invoke(nameof(OpenWinMenu), Mathf.Max(0f, victoryEndSequenceDelay));
+    }
+
+    private void OpenWinMenu()
+    {
+        if (WinMenu.Instance != null) WinMenu.Instance.Show();
+        else
+        {
+            // Fallback if no WinMenu was placed in the scene: behave like
+            // the old flow and load the victory scene after the camera zoom.
+            Debug.LogWarning("[Hero] No WinMenu in scene; falling back to victory-scene load.");
+            BeginVictoryEndSequence();
+        }
+    }
+
+    /// <summary>
+    /// Called by the WinMenu's Continue button. Clears the frozen state so
+    /// input/movement come back online and the hero can take damage again.
+    /// </summary>
+    public void ResumeFromVictoryPause()
+    {
+        IsFrozenForVictory = false;
+        // Cancel the OpenWinMenu invoke just in case Continue is somehow
+        // pressed before the delay elapsed (shouldn't happen but safe).
+        CancelInvoke(nameof(OpenWinMenu));
     }
 
     private void BeginVictoryEndSequence()

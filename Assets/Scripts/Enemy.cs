@@ -34,7 +34,8 @@ public class Enemy : MonoBehaviour
     public Behavior behavior = Behavior.Chaser;
 
     [Header("Stats")]
-    public float maxHP = 30f;
+    [Tooltip("Maximum hit points. Stored as long so very large scaled values keep integer precision (a float starts losing accuracy past ~16M, which matters once boss HP scaling stacks).")]
+    public long maxHP = 30L;
     public float attackDamage = 8f;
     public float moveSpeed = 3.5f;
 
@@ -223,7 +224,7 @@ public class Enemy : MonoBehaviour
     [Tooltip("Seconds between shots.")]
     public float shootCooldown = 1.5f;
 
-    private float currentHP;
+    private long currentHP;
     private float meleeTimer;
     private float shootTimer;
     private Rigidbody rb;
@@ -267,8 +268,8 @@ public class Enemy : MonoBehaviour
     private float chargerPhaseTimer;
     private Vector3 dashDirection;
 
-    public float CurrentHP => currentHP;
-    public float MaxHP => maxHP;
+    public long CurrentHP => currentHP;
+    public long MaxHP => maxHP;
     public bool IsDead { get; private set; }
 
     /// <summary>
@@ -276,12 +277,20 @@ public class Enemy : MonoBehaviour
     /// Call right after Instantiate so the spawner can scale HP with elapsed
     /// game time. Awake() runs synchronously inside Instantiate and sets
     /// currentHP = maxHP, so multiplying both here keeps them in sync.
+    /// HP is long but the multiplier is float; the result is rounded back to
+    /// long, so very small multipliers may collapse to 0 — guard with a
+    /// minimum of 1.
     /// </summary>
     public void ScaleHP(float multiplier)
     {
         if (multiplier <= 0f) return;
-        maxHP     *= multiplier;
-        currentHP *= multiplier;
+        // Use double precision intermediate so big-number boss HP stays
+        // accurate when multiplied by exponential per-spawn factors.
+        double scaledMax = (double)maxHP     * multiplier;
+        double scaledCur = (double)currentHP * multiplier;
+        // Clamp to long range and floor at 1 so an enemy can't spawn dead.
+        maxHP     = (long)System.Math.Max(1.0, System.Math.Min(scaledMax, (double)long.MaxValue));
+        currentHP = (long)System.Math.Max(1.0, System.Math.Min(scaledCur, (double)long.MaxValue));
     }
 
     private void Awake()
@@ -433,10 +442,11 @@ public class Enemy : MonoBehaviour
             healthBarRoot.rotation = cam.transform.rotation;
 
         // Update fill ratio by resizing the rect's width — robust, doesn't
-        // require a sprite the way Image.Type.Filled does.
+        // require a sprite the way Image.Type.Filled does. Cast through
+        // double so massive long HP values don't lose precision.
         if (healthBarFill != null)
         {
-            float ratio = maxHP > 0f ? Mathf.Clamp01(currentHP / maxHP) : 0f;
+            float ratio = maxHP > 0L ? (float)Mathf.Clamp01((float)((double)currentHP / (double)maxHP)) : 0f;
             var rt = healthBarFill.rectTransform;
             Vector2 sd = rt.sizeDelta;
             sd.x = healthBarMaxWidthPx * ratio;
@@ -445,7 +455,7 @@ public class Enemy : MonoBehaviour
 
         // Update HP numbers (bosses only).
         if (healthBarText != null)
-            healthBarText.text = $"{Mathf.CeilToInt(currentHP)} / {Mathf.CeilToInt(maxHP)}";
+            healthBarText.text = $"{currentHP} / {maxHP}";
     }
 
     private static Material cachedTelegraphMat;
@@ -951,11 +961,15 @@ public class Enemy : MonoBehaviour
             return;
         }
 
-        currentHP = Mathf.Max(0f, currentHP - amount);
+        // Convert float damage to a long delta. Round so fractional damage
+        // (e.g. 1.5) doesn't truncate to 1 every hit; floor at 0 so a 0.4
+        // hit still does nothing instead of negative.
+        long longDamage = amount > 0f ? (long)System.Math.Max(0L, System.Math.Round((double)amount)) : 0L;
+        currentHP = System.Math.Max(0L, currentHP - longDamage);
         if (damageFlash != null) damageFlash.Flash();
-        if (enemyAnimator != null && currentHP > 0f) enemyAnimator.OnHit();
+        if (enemyAnimator != null && currentHP > 0L) enemyAnimator.OnHit();
         SpawnHitParticles();
-        if (currentHP <= 0f) Die();
+        if (currentHP <= 0L) Die();
     }
 
     /// <summary>
@@ -967,7 +981,7 @@ public class Enemy : MonoBehaviour
     {
         if (IsDead) return;
         IsDead = true;
-        currentHP = 0f;
+        currentHP = 0L;
         StopMoving();
         if (telegraphLine != null) telegraphLine.enabled = false;
         if (enemyAnimator != null) enemyAnimator.OnDie();
@@ -1141,7 +1155,7 @@ public class Enemy : MonoBehaviour
         Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
         if (screenPos.z < 0f) return;
 
-        string text = $"{currentHP:F0} / {maxHP:F0}";
+        string text = $"{currentHP} / {maxHP}";
         GUIStyle style = GUI.skin.label;
         Vector2 size = style.CalcSize(new GUIContent(text));
         Rect r = new Rect(
@@ -1153,7 +1167,7 @@ public class Enemy : MonoBehaviour
         Color prev = GUI.color;
         GUI.color = new Color(0f, 0f, 0f, 0.65f);
         GUI.DrawTexture(r, Texture2D.whiteTexture);
-        GUI.color = currentHP <= maxHP * 0.33f ? new Color(1f, 0.4f, 0.4f) : Color.white;
+        GUI.color = currentHP <= (long)(maxHP * 0.33) ? new Color(1f, 0.4f, 0.4f) : Color.white;
         GUI.Label(new Rect(r.x + 4f, r.y + 2f, r.width, r.height), text);
         GUI.color = prev;
     }
@@ -1164,7 +1178,7 @@ public class Enemy : MonoBehaviour
         if (!debugShowHealth || !Application.isPlaying || IsDead) return;
         UnityEditor.Handles.Label(
             transform.position + Vector3.up * debugLabelHeight,
-            $"HP: {currentHP:F0}/{maxHP:F0}");
+            $"HP: {currentHP}/{maxHP}");
     }
 #endif
 }

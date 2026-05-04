@@ -97,8 +97,17 @@ public abstract class Weapon : MonoBehaviour
     [Header("Attack-Speed Boost")]
     [Tooltip("Floor for cooldown when applying AttackSpeed boosts.")]
     public float minCooldown = 0.08f;
-    [Tooltip("Attack speed gained per AttackSpeed boost, as a fraction. 0.15 = +15% attack speed per pickup (cooldown shrinks accordingly, with diminishing returns as it approaches minCooldown).")]
+    [Tooltip("Attack speed gained on the FIRST AttackSpeed boost, as a fraction. 0.15 = +15% attack speed for boost #1; subsequent boosts are scaled down by attackSpeedDiminishingFactor each.")]
     [Range(0f, 1f)] public float attackSpeedIncreasePercent = 0.15f;
+    [Tooltip("Each AttackSpeed boost is this fraction as effective as the previous. 0.85 = boost #2 gives 85% of #1's gain, #3 gives 72%, #4 gives 61%, etc.")]
+    [Range(0f, 1f)] public float attackSpeedDiminishingFactor = 0.85f;
+
+    /// <summary>How many AttackSpeed boosts have been applied. Drives the per-boost diminishing curve.</summary>
+    protected int attackSpeedBoostsTaken = 0;
+
+    /// <summary>The diminishing multiplier the next AttackSpeed boost should be scaled by, given the count so far.</summary>
+    protected float AttackSpeedDiminisher
+        => Mathf.Pow(attackSpeedDiminishingFactor, attackSpeedBoostsTaken);
 
     [Header("Post-Max Scaling")]
     [Tooltip("After the weapon hits its main cap, further boosts still apply but at this fraction of normal strength. 0.5 = half-strength, forever.")]
@@ -170,8 +179,11 @@ public abstract class Weapon : MonoBehaviour
                     return $"+{damageIncreasePerLevel * scale:0.#} Damage";
                 }
                 float cur = Mathf.Max(minCooldown, cooldown);
-                // % attack speed → cooldown shrinks by 1/(1+pct).
-                float nxt = Mathf.Max(minCooldown, cooldown / (1f + attackSpeedIncreasePercent * scale));
+                // % attack speed → cooldown shrinks by 1/(1+pct), with the
+                // current diminisher applied so the player sees the actual
+                // gain (which decreases each pickup).
+                float effPct = attackSpeedIncreasePercent * AttackSpeedDiminisher * scale;
+                float nxt = Mathf.Max(minCooldown, cooldown / (1f + effPct));
                 if (nxt >= cur) return "Attack Speed Maxed";
                 return $"+{(cur / nxt - 1f) * 100f:0}% Attack Speed";
 
@@ -198,10 +210,13 @@ public abstract class Weapon : MonoBehaviour
                     damageLevel++;
                     return true;
                 }
-                // % reduction in cooldown → cooldown / (1 + pct). After enough
-                // boosts the floor takes over (Mathf.Max), giving diminishing
-                // returns as attack speed approaches the cap.
-                cooldown = Mathf.Max(minCooldown, cooldown / (1f + attackSpeedIncreasePercent * scale));
+                // % reduction in cooldown → cooldown / (1 + pct), with the
+                // diminisher applied so each subsequent boost is weaker.
+                {
+                    float pct = attackSpeedIncreasePercent * AttackSpeedDiminisher * scale;
+                    cooldown = Mathf.Max(minCooldown, cooldown / (1f + pct));
+                    attackSpeedBoostsTaken++;
+                }
                 return true;
 
             default:

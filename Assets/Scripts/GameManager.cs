@@ -178,7 +178,8 @@ public class GameManager : MonoBehaviour
 
     /// <summary>
     /// Called by SlimeGod.OnBossKilled when the player kills the final boss.
-    /// Awards the lump-sum bonus and triggers the win flow.
+    /// Awards the lump-sum bonus and triggers the in-game Win Menu (which
+    /// pauses time and lets the player pick Continue / Restart / Title).
     /// </summary>
     public void OnFinalBossKilled()
     {
@@ -187,11 +188,28 @@ public class GameManager : MonoBehaviour
         bonusPoints += pointsForFinalBossKill;
         activeFinalBoss = null;
 
-        // Wave the win flag through PlayerPrefs so the EndScreen can read it.
+        // Wave the win flag through PlayerPrefs so a fallback EndScreen
+        // load (no WinMenu in the scene) reads correctly.
         PlayerPrefs.SetInt(PrefsLastWasWin, 1);
-        SaveScores();
 
         if (Hero.Instance != null) Hero.Instance.TriggerVictory();
+    }
+
+    /// <summary>
+    /// Called by the Win Menu's Continue button. Clears the per-cycle "boss
+    /// killed" flag and unfreezes survival-time scoring so the run keeps
+    /// going. Bonus points already awarded persist; high score & elapsed
+    /// time keep climbing as before. EnemySpawner.ScheduleNextFinalBoss is
+    /// what actually queues the next SlimeGod spawn.
+    /// </summary>
+    public void ContinueAfterVictory()
+    {
+        finalBossKilled = false;
+        activeFinalBoss = null;
+        survivalTimeFrozenSet = false;
+        survivalTimeFrozen = 0f;
+        // Clear the persisted win flag so a later death doesn't show as a win.
+        PlayerPrefs.SetInt(PrefsLastWasWin, 0);
     }
 
     /// <summary>Resets the run. Call from a "restart" button.</summary>

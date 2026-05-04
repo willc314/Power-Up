@@ -67,12 +67,15 @@ public class EnemySpawner : MonoBehaviour
     [Tooltip("Curve shape for the ramp. 1 = linear, 2 = slow start then accelerate, 0.5 = fast start then plateau.")]
     public float spawnRateRampPower = 1.5f;
 
-    [Header("Regular Enemy HP Scaling (linear)")]
-    [Tooltip("Extra HP multiplier added per minute. 0.5 means HP is 1.5x at t=1min, 2x at t=2min, etc.")]
-    public float regularHpBonusPerMinute = 0.5f;
+    [Header("Regular Enemy HP Scaling")]
+    [Tooltip("Extra HP multiplier added per minute (linear part). 3 means HP gets +3× base every minute, so at 1 min the linear factor is 4, at 2 min it's 7, at 3 min it's 10.")]
+    public float regularHpBonusPerMinute = 3f;
 
-    [Tooltip("Cap on the HP multiplier so regular enemies don't become unkillable.")]
-    public float regularHpMaxMultiplier = 20f;
+    [Tooltip("Exponential multiplier compounded per minute. 1.5 means HP gets ×1.5 every minute on top of the linear part. At 2 min that's ×2.25 on top of the linear factor; at 5 min that's ×7.59.")]
+    public float regularHpExponentialPerMinute = 1.5f;
+
+    [Tooltip("Cap on the total HP multiplier so regular enemies don't become unkillable. Set high (e.g. 1000+) if you want the aggressive scaling to run uncapped.")]
+    public float regularHpMaxMultiplier = 1000f;
 
     [Header("Powerup Drop Scaling")]
     [Tooltip("Multiplier on each enemy's powerUpDropChance when the spawn rate is at startSpawnsPerSecond. Higher = more powerups early in the run.")]
@@ -103,6 +106,16 @@ public class EnemySpawner : MonoBehaviour
     public float finalBossShockwaveShake = 0.9f;
     [Tooltip("Camera shake duration when the final boss spawns.")]
     public float finalBossShockwaveShakeDuration = 1.2f;
+    [Tooltip("After the player picks Continue on the Win Menu, this many minutes from the moment of the previous boss kill before the next final boss spawns.")]
+    public float finalBossRespawnDelayMinutes = 4f;
+    [Tooltip("EXTRA exponential HP multiplier applied to the final boss on top of bossHpMultiplierPerSpawn. Effective HP scale = (bossMul × extraMul)^finalBossesSpawned. Defaults to 1.5 so endless mode ramps faster than the regular boss curve. Set to 1 to disable the extra stack.")]
+    public float finalBossExtraHpMultiplierPerSpawn = 1.5f;
+    [Tooltip("Linear ATTACK-DAMAGE bonus added per previous final boss kill. Effective dmg multiplier = 1 + bonus × finalBossesSpawned. Default +0.5 → 1×, 1.5×, 2×, 2.5×, …")]
+    public float finalBossDamageBonusPerKill = 0.5f;
+    [Tooltip("Linear PROJECTILE-COUNT bonus added per previous final boss kill. Effective count multiplier = 1 + bonus × finalBossesSpawned. Spam / aerial / homing fans all get this many extra arrows.")]
+    public float finalBossProjectileBonusPerKill = 0.5f;
+    [Tooltip("Linear ATTACK-SPEED bonus added per previous final boss kill. Effective rate multiplier = 1 + bonus × finalBossesSpawned. Higher = shorter cooldowns / intervals between attacks. Default +0.3 → 1×, 1.3×, 1.6×, …")]
+    public float finalBossAttackSpeedBonusPerKill = 0.3f;
 
     [Header("Alive Limit")]
     [Tooltip("Maximum number of living spawned enemies (regular + bosses) at once.")]
@@ -153,8 +166,9 @@ public class EnemySpawner : MonoBehaviour
     private float spawnAccumulator;   // fractional spawns banked frame-to-frame
     private float bossSpawnTimer;     // counts down to the next boss
     private int   bossesSpawned;      // how many bosses have spawned this run
-    private bool  finalBossSpawned;   // true after SlimeGod has been spawned this run
+    private bool  finalBossSpawned;   // true after the next-scheduled SlimeGod has been spawned (reset on Continue)
     private bool  finalBossActive;    // true while a SlimeGod is alive
+    private int   finalBossesSpawned; // running count for HP scaling — never resets on Continue
 
     private void Awake()
     {
@@ -274,11 +288,64 @@ public class EnemySpawner : MonoBehaviour
         GameObject boss = Instantiate(finalBossPrefab, spawnPos, Quaternion.identity, enemyRoot);
         boss.name = finalBossPrefab.name;
         Enemy bossEnemy = boss.GetComponent<Enemy>() ?? boss.GetComponentInChildren<Enemy>();
-        if (bossEnemy != null) aliveEnemies.Add(bossEnemy);
+        if (bossEnemy != null)
+        {
+            // Apply per-spawn HP multiplier so each successive final boss is
+            // tankier than the last. finalBossesSpawned is the count BEFORE
+            // this spawn, so spawn #1 = (base×extra)^0 = 1×, #2 = base×extra,
+            // #3 = (base×extra)^2, ...
+            float hpMul = GetCurrentFinalBossHpMultiplier();
+            if (Mathf.Abs(hpMul - 1f) > 0.001f) bossEnemy.ScaleHP(hpMul);
+
+            // Linear damage / projectile / attack-speed multipliers stacked
+            // on top. The SlimeGod controller reads these at attack-time
+            // (ScaledDamage / ScaledCount / ScaledInterval).
+            SlimeGod sg = bossEnemy.GetComponent<SlimeGod>();
+            if (sg != null)
+            {
+                int prevKills = finalBossesSpawned;
+                sg.attackDamageMultiplier    = 1f + Mathf.Max(0f, finalBossDamageBonusPerKill)      * prevKills;
+                sg.projectileCountMultiplier = 1f + Mathf.Max(0f, finalBossProjectileBonusPerKill)  * prevKills;
+                sg.attackSpeedMultiplier     = 1f + Mathf.Max(0f, finalBossAttackSpeedBonusPerKill) * prevKills;
+            }
+
+            aliveEnemies.Add(bossEnemy);
+        }
 
         finalBossActive = true;
+        finalBossesSpawned++;
 
-        if (debugLogs) Debug.Log($"EnemySpawner: SlimeGod spawned at t={elapsedTime:F1}s, position={spawnPos}.");
+        if (debugLogs) Debug.Log($"EnemySpawner: SlimeGod spawned at t={elapsedTime:F1}s, position={spawnPos}, HP×{GetFinalBossHpMultiplierAt(finalBossesSpawned - 1):F2}.");
+    }
+
+    /// <summary>
+    /// HP multiplier the NEXT final boss spawn will use. Stacks the regular
+    /// boss multiplier and the final-boss-only extra multiplier:
+    ///     (bossHpMultiplierPerSpawn × finalBossExtraHpMultiplierPerSpawn) ^ finalBossesSpawned
+    /// </summary>
+    public float GetCurrentFinalBossHpMultiplier() => GetFinalBossHpMultiplierAt(finalBossesSpawned);
+
+    private float GetFinalBossHpMultiplierAt(int n)
+    {
+        float baseMul  = Mathf.Max(0.01f, bossHpMultiplierPerSpawn);
+        float extraMul = Mathf.Max(0.01f, finalBossExtraHpMultiplierPerSpawn);
+        return Mathf.Pow(baseMul * extraMul, n);
+    }
+
+    /// <summary>
+    /// Called by the Win Menu's Continue button. Resets the one-shot final
+    /// boss flags and pushes the next spawn time out by
+    /// finalBossRespawnDelayMinutes minutes from now. The HP-scale counter
+    /// is NOT reset — each subsequent boss keeps stacking finalBossHpMultiplier.
+    /// Regular enemy spawning resumes automatically (since finalBossActive is
+    /// already false once the boss died).
+    /// </summary>
+    public void ScheduleNextFinalBoss()
+    {
+        finalBossSpawned = false;
+        finalBossActive  = false;
+        finalBossSpawnTime = elapsedTime + Mathf.Max(0f, finalBossRespawnDelayMinutes) * 60f;
+        if (debugLogs) Debug.Log($"EnemySpawner: next SlimeGod scheduled for t={finalBossSpawnTime:F1}s (HP will be ×{GetCurrentFinalBossHpMultiplier():F2}).");
     }
 
     // ---------- Spawn-rate ramp ----------
@@ -297,11 +364,20 @@ public class EnemySpawner : MonoBehaviour
         return Mathf.Lerp(startSpawnsPerSecond, maxSpawnsPerSecond, curved);
     }
 
-    /// <summary>HP multiplier applied to regular-enemy spawns at the current time.</summary>
+    /// <summary>
+    /// HP multiplier applied to regular-enemy spawns at the current time.
+    /// Combines a linear ramp (1 + bonusPerMinute × minutes) with an exponential
+    /// ramp (exponentialPerMinute ^ minutes), capped by regularHpMaxMultiplier.
+    /// At t=0 both factors are 1, so spawns use base HP at game start.
+    /// </summary>
     public float GetCurrentRegularHpMultiplier()
     {
         float minutes = elapsedTime / 60f;
-        float mul = 1f + regularHpBonusPerMinute * minutes;
+        float linear = 1f + regularHpBonusPerMinute * minutes;
+        float expo = (regularHpExponentialPerMinute > 0f)
+            ? Mathf.Pow(regularHpExponentialPerMinute, minutes)
+            : 1f;
+        float mul = linear * expo;
         return Mathf.Min(regularHpMaxMultiplier, mul);
     }
 
