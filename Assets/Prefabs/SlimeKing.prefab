@@ -569,7 +569,7 @@ MonoBehaviour:
   skSpeedBoostMultiplier: 1.8
   skSpeedBoostDuration: 4
   skShieldHits: 3
-  skAttackSpeedBoostMultiplier: 0.1
+  skAttackSpeedBoostMultiplier: 0.15
   skAttackSpeedBoostDuration: 5
   skKiteRange: 7
   splitOnDeath: 1

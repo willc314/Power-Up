@@ -221,6 +221,19 @@ public class Hero : MonoBehaviour
 
     public static Hero Instance { get; private set; }
 
+    // ---- Snapshot of starting stats ----
+    // Captured in Awake so the StatsMenu can show "original → current" for
+    // every value the powerup boosts modify. These are read-only after Awake.
+    public float OriginalMaxHP                { get; private set; }
+    public float OriginalMoveSpeed            { get; private set; }
+    public float OriginalHealthRegen          { get; private set; }
+    public float OriginalDamageMultiplier     { get; private set; }
+    public float OriginalCritRate             { get; private set; }
+    public float OriginalCritDamage           { get; private set; }
+    public float OriginalDashCooldown         { get; private set; }
+    public float OriginalDashIFrameMultiplier { get; private set; }
+    public float DashIFrameMultiplier => dashIFrameMultiplier;
+
     /// <summary>Fires once when the hero dies. Subscribers (e.g. EnemyAnimator) can react globally.</summary>
     public static event System.Action OnHeroDied;
 
@@ -284,6 +297,16 @@ public class Hero : MonoBehaviour
 
         cam = Camera.main;
         currentHP = maxHP;
+
+        // Snapshot starting stats so the StatsMenu can show original → current.
+        OriginalMaxHP                = maxHP;
+        OriginalMoveSpeed            = moveSpeed;
+        OriginalHealthRegen          = healthRegenPerSecond;
+        OriginalDamageMultiplier     = damageMultiplier;
+        OriginalCritRate             = critRate;
+        OriginalCritDamage           = critDamage;
+        OriginalDashCooldown         = dashCooldown;
+        OriginalDashIFrameMultiplier = dashIFrameMultiplier;
 
         if (randomizeWeaponsOnSpawn) PickRandomWeapons();
         else RefreshWeaponVisuals();

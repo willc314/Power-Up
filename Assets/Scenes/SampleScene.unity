@@ -1215,7 +1215,7 @@ MonoBehaviour:
   dropChanceMulAtPeak: 0.02
   bossFirstSpawnDelay: 60
   bossSpawnInterval: 60
-  bossHpMultiplierPerSpawn: 6
+  bossHpMultiplierPerSpawn: 5
   finalBossPrefab: {fileID: 2291158632217275045, guid: e5e8818af10200740981a15cfe0bc952, type: 3}
   finalBossSpawnTime: 480
   finalBossSpawnDistance: 8

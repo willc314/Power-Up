@@ -142,6 +142,10 @@ public class OptionsMenu : MonoBehaviour
         // Dim the music. EndDuck pairs with this in Hide(), only fires if we were actually open.
         if (MusicManager.Instance != null) MusicManager.Instance.BeginDuck();
 
+        // Show the stats side-panel alongside us so the player can see their
+        // accumulated boosts at a glance.
+        if (StatsMenu.Instance != null) StatsMenu.Instance.Show();
+
         Refresh();
     }
 
@@ -150,6 +154,11 @@ public class OptionsMenu : MonoBehaviour
         if (panelRoot == null) return;
         bool wasOpen = panelRoot.activeSelf;
         panelRoot.SetActive(false);
+
+        // Hide the stats side-panel together — it's only meaningful while
+        // the options panel is open.
+        if (StatsMenu.Instance != null) StatsMenu.Instance.Hide();
+
         if (wasOpen && pauseGameWhileOpen)
         {
             // Resume gameplay (or whatever timeScale the player was at before
