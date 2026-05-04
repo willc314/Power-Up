@@ -1211,7 +1211,7 @@ MonoBehaviour:
   regularHpBonusPerMinute: 3
   regularHpExponentialPerMinute: 1.5
   regularHpMaxMultiplier: 2000
-  dropChanceMulAtStart: 1.75
+  dropChanceMulAtStart: 2
   dropChanceMulAtPeak: 0.02
   bossFirstSpawnDelay: 60
   bossSpawnInterval: 60
