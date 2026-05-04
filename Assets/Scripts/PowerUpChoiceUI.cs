@@ -39,6 +39,14 @@ public class PowerUpChoiceUI : MonoBehaviour
 {
     public static PowerUpChoiceUI Instance { get; private set; }
 
+    /// <summary>
+    /// The picked-up weapon type for the panel currently being shown (or
+    /// last shown). Lets weapon overrides differentiate boost behavior by
+    /// pickup source — e.g. SwordWeapon only grows its arc when the pickup
+    /// was a Sword, falling back to standard +damage for Bow / Shield.
+    /// </summary>
+    public static eWeaponType LastPickupType { get; private set; } = eWeaponType.none;
+
     [Header("Style")]
     public Color overlayColor = new Color(0f, 0f, 0f, 0.55f);
     public Color panelColor = new Color(0.12f, 0.12f, 0.14f, 0.95f);
@@ -129,6 +137,10 @@ public class PowerUpChoiceUI : MonoBehaviour
 
     private void Refresh()
     {
+        // Publish which pickup type is currently being offered so weapon
+        // overrides (e.g. SwordWeapon's arc growth) can read it.
+        LastPickupType = pendingType;
+
         // --- Center: picked-up weapon name + icon ---
         Weapon pickedUpWeapon = hero != null ? hero.GetWeaponComponentForType(pendingType) : null;
         string pickedUpName = pickedUpWeapon != null ? pickedUpWeapon.weaponName : GetWeaponName(pendingType);
@@ -365,7 +377,9 @@ public class PowerUpChoiceUI : MonoBehaviour
         titleText = titleGO.AddComponent<Text>();
         titleText.font = defaultFont;
         titleText.fontSize = 36;
-        titleText.color = textColor;
+        // Explicitly white so the "Picked Up:" header pops on the dim panel
+        // regardless of how the serialized textColor has been tweaked.
+        titleText.color = Color.white;
         titleText.alignment = TextAnchor.UpperCenter;
         titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
         titleText.text = "Picked Up:";

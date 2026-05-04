@@ -207,6 +207,10 @@ public class CameraFollow : MonoBehaviour
     private Vector3 GetShakeOffset()
     {
         if (shakeTimer <= 0f) return Vector3.zero;
+        // Hold the shake while gameplay is paused (e.g. the powerup choice
+        // panel sets Time.timeScale = 0). Otherwise the noise keeps shaking
+        // the camera visually even though the world is frozen.
+        if (Time.timeScale <= 0f) return Vector3.zero;
         shakeTimer -= Time.deltaTime;
         // Fall off linearly so the shake settles smoothly.
         float falloff = shakeDuration > 0f ? Mathf.Clamp01(shakeTimer / shakeDuration) : 0f;

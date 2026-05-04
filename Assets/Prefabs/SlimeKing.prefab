@@ -506,7 +506,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   behavior: 5
-  maxHP: 750
+  maxHP: 1000
   attackDamage: 12
   moveSpeed: 1.2
   attackRange: 1.4

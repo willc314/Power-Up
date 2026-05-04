@@ -44,7 +44,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3cb5c75b512f76840b11edefbcfce672, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  radius: 5
+  radius: 3
   damage: 60
   hitLayers:
     serializedVersion: 2
@@ -60,6 +60,6 @@ MonoBehaviour:
   debrisLifetime: 2
   debrisSpread: 90
   debrisHeight: 0.3
-  shakeAmplitude: 0.4
-  shakeDuration: 0.25
+  shakeAmplitude: 0.1
+  shakeDuration: 0.1
   debugLog: 1

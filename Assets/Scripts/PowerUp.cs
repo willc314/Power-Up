@@ -41,7 +41,7 @@ public class PowerUp : MonoBehaviour
     public TextMesh letterText;
 
     [Header("Behavior")]
-    public float lifeTime = 12f;
+    public float lifeTime = 17f;
     public Vector3 rotateSpeed = new Vector3(0f, 120f, 0f);
     public float bobHeight = 0.25f;
     public float bobSpeed = 3f;
@@ -153,8 +153,11 @@ public class PowerUp : MonoBehaviour
         Hero hero = Hero.Instance;
         if (hero == null || hero.IsDead) return;
 
-        float dist = Vector3.Distance(transform.position, hero.transform.position);
-        if (dist <= pickupRadius) Collect(hero);
+        // Horizontal distance only — the powerup's height doesn't matter,
+        // so the player can grab it without waiting for the bob to dip down.
+        Vector3 toHero = hero.transform.position - transform.position;
+        toHero.y = 0f;
+        if (toHero.sqrMagnitude <= pickupRadius * pickupRadius) Collect(hero);
     }
 
     public void SetType(eWeaponType newType)

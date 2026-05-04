@@ -36,6 +36,8 @@ public class GameHUD : MonoBehaviour
     public Color healthColor = new Color(0.85f, 0.2f, 0.2f);
     public Color healthBackgroundColor = new Color(0f, 0f, 0f, 0.6f);
     public Color cooldownOverlayColor = new Color(0f, 0f, 0f, 0.6f);
+    public Color bossBarColor = new Color(0.85f, 0.15f, 0.15f);
+    public Color bossBarBgColor = new Color(0f, 0f, 0f, 0.75f);
     public int margin = 24;
     public int timerFontSize = 56;
     public int scoreFontSize = 36;
@@ -45,6 +47,11 @@ public class GameHUD : MonoBehaviour
     public int weaponSlotSpacing = 12;
     public int healthBarWidth = 320;
     public int healthBarHeight = 22;
+    [Header("Boss Bar")]
+    public int bossBarWidth = 1100;
+    public int bossBarHeight = 36;
+    public int bossBarFontSize = 24;
+    public int bossBarBottomMargin = 28;
 
     [Header("Mouse-button labels")]
     public string primaryButtonLabel = "LMB";
@@ -71,6 +78,23 @@ public class GameHUD : MonoBehaviour
     }
     private Slot primarySlot;
     private Slot secondarySlot;
+
+    // Dash slot widgets (square next to the weapon slots).
+    private struct DashWidgets
+    {
+        public GameObject root;
+        public Image cooldownOverlay;
+        public Text labelText;          // "DASH" when ready, "0.5" when on cooldown
+    }
+    private DashWidgets dashSlot;
+
+    // Boss HP bar (bottom-center; only shown while a SlimeGod is alive).
+    private GameObject bossBarRoot;
+    private RectTransform bossBarFillRect;
+    private Image bossBarFillImg;
+    private Text bossBarText;
+    private Text bossBarLabel;
+    private float bossBarMaxWidth;
 
     // Cached default font.
     private Font defaultFont;
@@ -99,6 +123,8 @@ public class GameHUD : MonoBehaviour
         UpdateScore();
         UpdateHealth();
         UpdateWeaponSlots();
+        UpdateDashSlot();
+        UpdateBossBar();
     }
 
     // -------------------- Per-frame updates --------------------
@@ -154,6 +180,28 @@ public class GameHUD : MonoBehaviour
         healthText.text = Mathf.CeilToInt(cur) + " / " + Mathf.CeilToInt(max);
     }
 
+    private void UpdateDashSlot()
+    {
+        if (dashSlot.labelText == null || hero == null) return;
+
+        float remaining = hero.DashCooldownRemaining;
+        float total = Mathf.Max(0.001f, hero.dashCooldown);
+
+        if (remaining > 0.05f)
+        {
+            // On cooldown: show remaining seconds and drain the overlay.
+            dashSlot.labelText.text = remaining.ToString("0.0");
+            if (dashSlot.cooldownOverlay != null)
+                dashSlot.cooldownOverlay.fillAmount = Mathf.Clamp01(remaining / total);
+        }
+        else
+        {
+            // Ready: show the keybind label and clear the overlay.
+            dashSlot.labelText.text = "DASH";
+            if (dashSlot.cooldownOverlay != null) dashSlot.cooldownOverlay.fillAmount = 0f;
+        }
+    }
+
     private void UpdateWeaponSlots()
     {
         Weapon p = hero != null ? hero.primaryWeapon   : null;
@@ -203,6 +251,152 @@ public class GameHUD : MonoBehaviour
         if (slot.cooldownOverlay != null) slot.cooldownOverlay.fillAmount = w.CooldownProgress;
     }
 
+    private static Enemy cachedBossEnemy;
+    private static SlimeGod cachedBoss;
+
+    private static SlimeGod FindActiveFinalBoss()
+    {
+        // Skip the FindObjectOfType scan during the first 8 minutes of a run
+        // when no boss is alive yet — GameManager.IsFinalBossAlive flips true
+        // the moment SlimeGod.OnEnable runs.
+        if (GameManager.Instance == null || !GameManager.Instance.IsFinalBossAlive)
+        {
+            cachedBoss = null;
+            cachedBossEnemy = null;
+            return null;
+        }
+        if (cachedBoss == null || cachedBossEnemy == null)
+        {
+            cachedBoss = UnityEngine.Object.FindObjectOfType<SlimeGod>();
+            cachedBossEnemy = cachedBoss != null ? cachedBoss.GetComponent<Enemy>() : null;
+        }
+        return cachedBoss;
+    }
+
+    private void UpdateBossBar()
+    {
+        if (bossBarRoot == null) return;
+
+        SlimeGod boss = FindActiveFinalBoss();
+        Enemy be = cachedBossEnemy;
+        bool show = boss != null && be != null && !be.IsDead;
+
+        if (bossBarRoot.activeSelf != show) bossBarRoot.SetActive(show);
+        if (!show) return;
+
+        long cur = be.CurrentHP;
+        long max = System.Math.Max(1L, be.MaxHP);
+        // Compute ratio as float through double so very large long HP values
+        // don't lose precision when converted directly to float.
+        float ratio = Mathf.Clamp01((float)((double)cur / (double)max));
+
+        if (bossBarFillRect != null)
+        {
+            Vector2 sd = bossBarFillRect.sizeDelta;
+            sd.x = bossBarMaxWidth * ratio;
+            bossBarFillRect.sizeDelta = sd;
+        }
+
+        if (bossBarText != null)
+            bossBarText.text = cur + " / " + max;
+
+        if (bossBarLabel != null)
+        {
+            int dr = Mathf.RoundToInt(boss.CurrentDamageReduction * 100f);
+            string shieldStr = boss.ShieldStacks > 0 ? "  •  Shield ×" + boss.ShieldStacks : "";
+            bossBarLabel.text = dr > 0
+                ? "SLIME GOD  •  " + dr + "% DMG REDUCTION" + shieldStr
+                : "SLIME GOD" + shieldStr;
+        }
+    }
+
+    private void BuildBossBar(Transform parent)
+    {
+        // Bottom-center container, centered horizontally with a fixed width.
+        GameObject root = MakeUIObject("BossBar", parent);
+        bossBarRoot = root;
+        RectTransform rt = (RectTransform)root.transform;
+        rt.anchorMin = new Vector2(0.5f, 0f);
+        rt.anchorMax = new Vector2(0.5f, 0f);
+        rt.pivot = new Vector2(0.5f, 0f);
+        rt.anchoredPosition = new Vector2(0f, bossBarBottomMargin);
+        rt.sizeDelta = new Vector2(bossBarWidth, bossBarHeight + bossBarFontSize + 6);
+
+        // Label (boss name + damage reduction %, sits ABOVE the bar).
+        GameObject lblGo = MakeUIObject("BossLabel", root.transform);
+        RectTransform lblRt = (RectTransform)lblGo.transform;
+        lblRt.anchorMin = new Vector2(0f, 1f);
+        lblRt.anchorMax = new Vector2(1f, 1f);
+        lblRt.pivot = new Vector2(0.5f, 1f);
+        lblRt.anchoredPosition = new Vector2(0f, 0f);
+        lblRt.sizeDelta = new Vector2(0f, bossBarFontSize + 4f);
+
+        bossBarLabel = lblGo.AddComponent<Text>();
+        bossBarLabel.font = defaultFont;
+        bossBarLabel.fontSize = bossBarFontSize;
+        bossBarLabel.color = new Color(1f, 0.92f, 0.6f);
+        bossBarLabel.alignment = TextAnchor.LowerCenter;
+        bossBarLabel.fontStyle = FontStyle.Bold;
+        bossBarLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+        bossBarLabel.verticalOverflow = VerticalWrapMode.Overflow;
+        bossBarLabel.raycastTarget = false;
+        bossBarLabel.text = "SLIME GOD";
+        AddTextOutline(lblGo);
+
+        // Bar background, anchored to the bottom of the container.
+        GameObject bgGo = MakeUIObject("BossBarBG", root.transform);
+        RectTransform bgRt = (RectTransform)bgGo.transform;
+        bgRt.anchorMin = new Vector2(0f, 0f);
+        bgRt.anchorMax = new Vector2(1f, 0f);
+        bgRt.pivot = new Vector2(0.5f, 0f);
+        bgRt.anchoredPosition = Vector2.zero;
+        bgRt.sizeDelta = new Vector2(0f, bossBarHeight);
+
+        Image bgImg = bgGo.AddComponent<Image>();
+        bgImg.color = bossBarBgColor;
+        bgImg.raycastTarget = false;
+        AddOutline(bgGo);
+
+        // Fill — left-anchored, growing rightward via sizeDelta (matches the
+        // pattern used for the player HP bar, which avoids Image.Type.Filled
+        // needing a sprite).
+        GameObject fillGo = MakeUIObject("BossBarFill", bgGo.transform);
+        bossBarFillRect = (RectTransform)fillGo.transform;
+        bossBarFillRect.anchorMin = new Vector2(0f, 0f);
+        bossBarFillRect.anchorMax = new Vector2(0f, 1f);
+        bossBarFillRect.pivot = new Vector2(0f, 0.5f);
+        bossBarFillRect.anchoredPosition = new Vector2(0f, 0f);
+        bossBarFillRect.sizeDelta = new Vector2(bossBarWidth, 0f);
+
+        bossBarFillImg = fillGo.AddComponent<Image>();
+        bossBarFillImg.color = bossBarColor;
+        bossBarFillImg.raycastTarget = false;
+
+        bossBarMaxWidth = bossBarWidth;
+
+        // HP text on top of the bar.
+        GameObject txtGo = MakeUIObject("BossBarText", bgGo.transform);
+        RectTransform txtRt = (RectTransform)txtGo.transform;
+        txtRt.anchorMin = new Vector2(0f, 0f);
+        txtRt.anchorMax = new Vector2(1f, 1f);
+        txtRt.offsetMin = Vector2.zero;
+        txtRt.offsetMax = Vector2.zero;
+
+        bossBarText = txtGo.AddComponent<Text>();
+        bossBarText.font = defaultFont;
+        bossBarText.fontSize = Mathf.Max(14, bossBarHeight - 8);
+        bossBarText.color = Color.white;
+        bossBarText.alignment = TextAnchor.MiddleCenter;
+        bossBarText.fontStyle = FontStyle.Bold;
+        bossBarText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        bossBarText.verticalOverflow = VerticalWrapMode.Overflow;
+        bossBarText.raycastTarget = false;
+        bossBarText.text = "0 / 0";
+        AddTextOutline(txtGo);
+
+        bossBarRoot.SetActive(false);
+    }
+
     // -------------------- UI construction --------------------
 
     private void BuildHUD()
@@ -224,6 +418,7 @@ public class GameHUD : MonoBehaviour
         BuildScore(canvasGo.transform);
         BuildHealth(canvasGo.transform);
         BuildWeaponSlots(canvasGo.transform);
+        BuildBossBar(canvasGo.transform);
     }
 
     private void BuildTimer(Transform parent)
@@ -358,16 +553,96 @@ public class GameHUD : MonoBehaviour
 
     private void BuildWeaponSlots(Transform parent)
     {
-        // Container at bottom-right with two square slots laid out horizontally.
+        // Container at bottom-right. Three square slots laid out horizontally:
+        //   [DASH]  [PRIMARY (LMB)]  [SECONDARY (RMB)]
         GameObject container = MakeUIObject("WeaponSlots", parent);
         RectTransform crt = (RectTransform)container.transform;
-        int totalWidth = weaponSlotSize * 2 + weaponSlotSpacing;
+        int totalWidth = weaponSlotSize * 3 + weaponSlotSpacing * 2;
         int totalHeight = weaponSlotSize + weaponNameFontSize + 8;
         AnchorBottomRight(crt, margin, margin, totalWidth, totalHeight);
 
-        // Build secondary on the right, primary on the left.
-        primarySlot   = BuildSlot(container.transform, 0,                         "PrimarySlot");
-        secondarySlot = BuildSlot(container.transform, weaponSlotSize + weaponSlotSpacing, "SecondarySlot");
+        int x = 0;
+        dashSlot      = BuildDashSlot(container.transform, x);
+        x += weaponSlotSize + weaponSlotSpacing;
+        primarySlot   = BuildSlot(container.transform, x, "PrimarySlot");
+        x += weaponSlotSize + weaponSlotSpacing;
+        secondarySlot = BuildSlot(container.transform, x, "SecondarySlot");
+    }
+
+    private DashWidgets BuildDashSlot(Transform parent, int xOffset)
+    {
+        DashWidgets ds = new DashWidgets();
+
+        // Square slot background
+        GameObject slotGo = MakeUIObject("DashSlot", parent);
+        RectTransform rt = (RectTransform)slotGo.transform;
+        rt.anchorMin = new Vector2(0f, 1f);
+        rt.anchorMax = new Vector2(0f, 1f);
+        rt.pivot = new Vector2(0f, 1f);
+        rt.anchoredPosition = new Vector2(xOffset, 0f);
+        rt.sizeDelta = new Vector2(weaponSlotSize, weaponSlotSize);
+
+        Image bgImg = slotGo.AddComponent<Image>();
+        bgImg.color = panelColor;
+        bgImg.raycastTarget = false;
+        AddOutline(slotGo);
+        ds.root = slotGo;
+
+        // Cooldown overlay drains top-down (matches the weapon slots).
+        GameObject cdGo = MakeUIObject("Cooldown", slotGo.transform);
+        RectTransform cdRt = (RectTransform)cdGo.transform;
+        cdRt.anchorMin = Vector2.zero;
+        cdRt.anchorMax = Vector2.one;
+        cdRt.offsetMin = Vector2.zero;
+        cdRt.offsetMax = Vector2.zero;
+
+        ds.cooldownOverlay = cdGo.AddComponent<Image>();
+        ds.cooldownOverlay.color = cooldownOverlayColor;
+        ds.cooldownOverlay.type = Image.Type.Filled;
+        ds.cooldownOverlay.fillMethod = Image.FillMethod.Vertical;
+        ds.cooldownOverlay.fillOrigin = (int)Image.OriginVertical.Top;
+        ds.cooldownOverlay.fillAmount = 0f;
+        ds.cooldownOverlay.raycastTarget = false;
+
+        // Big centered label — shows "DASH" when ready, "0.5" (seconds) when
+        // on cooldown. Renders above the overlay so the number stays readable
+        // through the dim mask.
+        GameObject labelGo = MakeUIObject("Label", slotGo.transform);
+        RectTransform lblRt = (RectTransform)labelGo.transform;
+        lblRt.anchorMin = Vector2.zero;
+        lblRt.anchorMax = Vector2.one;
+        lblRt.offsetMin = Vector2.zero;
+        lblRt.offsetMax = Vector2.zero;
+
+        ds.labelText = labelGo.AddComponent<Text>();
+        ds.labelText.font = defaultFont;
+        ds.labelText.fontSize = 28;
+        ds.labelText.color = textColor;
+        ds.labelText.alignment = TextAnchor.MiddleCenter;
+        ds.labelText.fontStyle = FontStyle.Bold;
+        ds.labelText.text = "DASH";
+        ds.labelText.raycastTarget = false;
+        AddTextOutline(labelGo);
+
+        // Caption underneath: "Space" so the player learns the keybind.
+        GameObject captionGo = MakeUIObject("Caption", slotGo.transform);
+        RectTransform capRt = (RectTransform)captionGo.transform;
+        capRt.anchorMin = new Vector2(0f, 0f);
+        capRt.anchorMax = new Vector2(1f, 0f);
+        capRt.pivot = new Vector2(0.5f, 1f);
+        capRt.anchoredPosition = new Vector2(0f, -4f);
+        capRt.sizeDelta = new Vector2(0f, weaponNameFontSize + 4f);
+
+        Text caption = captionGo.AddComponent<Text>();
+        caption.font = defaultFont;
+        caption.fontSize = weaponNameFontSize;
+        caption.color = textColor;
+        caption.alignment = TextAnchor.UpperCenter;
+        caption.text = "Space";
+        caption.raycastTarget = false;
+        AddTextOutline(captionGo);
+
+        return ds;
     }
 
     private Slot BuildSlot(Transform parent, int xOffset, string slotName)

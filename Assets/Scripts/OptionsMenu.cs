@@ -38,8 +38,17 @@ public class OptionsMenu : MonoBehaviour
     [Tooltip("Key that toggles the options panel from anywhere.")]
     public KeyCode toggleKey = KeyCode.Escape;
 
+    [Header("In-Game Pause")]
+    [Tooltip("If true, opening the panel sets Time.timeScale = 0 (pauses gameplay) and closing it restores the previous timeScale. Disable for menu scenes that don't have any time-based logic.")]
+    public bool pauseGameWhileOpen = true;
+
+    [Header("Quit to Main Menu")]
+    [Tooltip("Scene name to load when the player clicks 'Quit to Main Menu'. Should match MainMenu's titleSceneName.")]
+    public string titleSceneName = "TitleScreen";
+
     private GameObject panelRoot;
     private Font defaultFont;
+    private float prePauseTimeScale = 1f;
 
     // Per-row state
     private struct OptionButton { public Button button; public Image image; public int valueKey; }
@@ -50,9 +59,33 @@ public class OptionsMenu : MonoBehaviour
     private Text   fpsValueLabel;
     private Dropdown resolutionDropdown;
 
+    /// <summary>
+    /// Auto-spawn fallback: if no OptionsMenu exists in the first scene's
+    /// Awake pass, create one ourselves so ESC works everywhere without the
+    /// developer having to remember to drop the GameObject in each scene.
+    /// User-placed instances run first (their Awake sets Instance) and this
+    /// no-ops, preserving any inspector tweaks they made.
+    /// </summary>
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
+    private static void Bootstrap()
+    {
+        if (Instance != null) return;
+        var go = new GameObject("OptionsMenu (auto-spawned)");
+        go.AddComponent<OptionsMenu>();
+    }
+
     private void Awake()
     {
+        // Defensive: if a duplicate exists (user has OptionsMenu in multiple
+        // scenes, or scene-placed + auto-spawn collide), keep the first one.
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
         Instance = this;
+        DontDestroyOnLoad(gameObject); // persist ESC + options across scene loads
+
         defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
         // Hide any leftover children from earlier scene-side wiring.
@@ -95,13 +128,44 @@ public class OptionsMenu : MonoBehaviour
     public void Show()
     {
         if (panelRoot == null) return;
+        if (panelRoot.activeSelf) return; // already visible — don't double-pause
+
+        if (pauseGameWhileOpen)
+        {
+            prePauseTimeScale = Time.timeScale;
+            Time.timeScale = 0f;
+        }
+
         panelRoot.SetActive(true);
         Refresh();
     }
 
     public void Hide()
     {
-        if (panelRoot != null) panelRoot.SetActive(false);
+        if (panelRoot == null) return;
+        bool wasOpen = panelRoot.activeSelf;
+        panelRoot.SetActive(false);
+        if (wasOpen && pauseGameWhileOpen)
+        {
+            // Resume gameplay (or whatever timeScale the player was at before
+            // we opened — handles the case where the panel was opened on top
+            // of another modal that had also paused).
+            Time.timeScale = prePauseTimeScale > 0f ? prePauseTimeScale : 1f;
+        }
+    }
+
+    /// <summary>Loads the title scene. Wired to the "Quit to Main Menu" button.</summary>
+    public void QuitToTitle()
+    {
+        // Close the panel first so it doesn't sit open on top of the title
+        // scene (the OptionsMenu is DontDestroyOnLoad so it survives the
+        // scene change). Hide() also handles unpausing.
+        Hide();
+        // Belt-and-suspenders: Unity carries timeScale across scene loads, and
+        // Hide should already have set this back, but pin it just in case the
+        // panel was somehow not flagged as open.
+        Time.timeScale = 1f;
+        UnityEngine.SceneManagement.SceneManager.LoadScene(titleSceneName);
     }
 
     private void Refresh()
@@ -213,9 +277,17 @@ public class OptionsMenu : MonoBehaviour
             anchorTop: true);
         BuildOptionRowFullscreen(panel.transform, /*yFromTop*/ -360f);
 
-        // Close button at the bottom
+        // Bottom buttons: Quit to Main Menu (left) + Close (right). Both
+        // anchored to the bottom-center of the panel and offset horizontally.
+        var quitGo = BuildButton(panel.transform, "QuitToMenu",
+            new Vector2(-160f, 40f), new Vector2(280f, 60f),
+            out Button quitBtn, out Text quitText, anchorBottom: true);
+        quitText.text = "Quit to Main Menu";
+        quitText.fontSize = 22;
+        quitBtn.onClick.AddListener(QuitToTitle);
+
         var closeGo = BuildButton(panel.transform, "Close",
-            new Vector2(0f, 40f), new Vector2(220f, 60f),
+            new Vector2(160f, 40f), new Vector2(220f, 60f),
             out Button closeBtn, out Text closeText, anchorBottom: true);
         closeText.text = "Close";
         closeText.fontSize = 24;

@@ -200,10 +200,15 @@ public class BowWeapon : Weapon
                     if (chargeFloor && overFloor)
                         return $"+{damageIncreasePerLevel * scale:0.#} Damage";
 
+                    // Apply diminishing returns so the displayed gain shrinks per pickup.
+                    float diminish = AttackSpeedDiminisher;
+                    float effChargePct = chargeSpeedIncreasePercent     * diminish * scale;
+                    float effOverPct   = overchargeSpeedIncreasePercent * diminish * scale;
+
                     float curC = Mathf.Max(minFullChargeTime, fullChargeTime);
-                    float nxtC = Mathf.Max(minFullChargeTime, fullChargeTime / (1f + chargeSpeedIncreasePercent * scale));
+                    float nxtC = Mathf.Max(minFullChargeTime, fullChargeTime / (1f + effChargePct));
                     float curO = Mathf.Max(minOverchargeTime, overchargeTime);
-                    float nxtO = Mathf.Max(minOverchargeTime, overchargeTime / (1f + overchargeSpeedIncreasePercent * scale));
+                    float nxtO = Mathf.Max(minOverchargeTime, overchargeTime / (1f + effOverPct));
                     bool chargeStuck = nxtC >= curC;
                     bool overStuck   = nxtO >= curO;
                     string chargePart = chargeStuck ? "Charge maxed" : $"+{(curC / nxtC - 1f) * 100f:0}% Charge";
@@ -266,12 +271,23 @@ public class BowWeapon : Weapon
                         damageLevel++;
                         return true;
                     }
-                    fullChargeTime = Mathf.Max(minFullChargeTime, fullChargeTime / (1f + chargeSpeedIncreasePercent * scale));
-                    overchargeTime = Mathf.Max(minOverchargeTime, overchargeTime / (1f + overchargeSpeedIncreasePercent * scale));
+
+                    // Apply diminishing returns: each subsequent AttackSpeed
+                    // boost is weaker than the last (shared counter with the
+                    // base class so weapon swaps don't reset the curve).
+                    float diminish = AttackSpeedDiminisher;
+                    float effChargePct = chargeSpeedIncreasePercent     * diminish * scale;
+                    float effOverPct   = overchargeSpeedIncreasePercent * diminish * scale;
+
+                    fullChargeTime = Mathf.Max(minFullChargeTime, fullChargeTime / (1f + effChargePct));
+                    overchargeTime = Mathf.Max(minOverchargeTime, overchargeTime / (1f + effOverPct));
                     // Faster charging also stacks the post-overcharge damage
                     // rate, so upgrades let the player accumulate beam damage
-                    // faster while held past the death-beam threshold.
-                    postOverchargeDamageRate *= (1f + chargeSpeedIncreasePercent * scale);
+                    // faster while held past the death-beam threshold (also
+                    // diminished so it doesn't run away).
+                    postOverchargeDamageRate *= (1f + effChargePct);
+
+                    attackSpeedBoostsTaken++;
                     return true;
                 }
 

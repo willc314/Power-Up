@@ -28,13 +28,14 @@ using UnityEngine.UI;
 [RequireComponent(typeof(Rigidbody))]
 public class Enemy : MonoBehaviour
 {
-    public enum Behavior { Chaser, Charger, Tank, Ranged, Crossbow, SlimeKing }
+    public enum Behavior { Chaser, Charger, Tank, Ranged, Crossbow, SlimeKing, SlimeGod }
 
     [Header("Behavior")]
     public Behavior behavior = Behavior.Chaser;
 
     [Header("Stats")]
-    public float maxHP = 30f;
+    [Tooltip("Maximum hit points. Stored as long so very large scaled values keep integer precision (a float starts losing accuracy past ~16M, which matters once boss HP scaling stacks).")]
+    public long maxHP = 30L;
     public float attackDamage = 8f;
     public float moveSpeed = 3.5f;
 
@@ -91,8 +92,8 @@ public class Enemy : MonoBehaviour
         eWeaponType.grenade
     };
 
-    [Tooltip("How high above the enemy position the powerup spawns.")]
-    public float powerUpDropHeight = 0.6f;
+    [Tooltip("Y position the powerup root spawns at, in world space. Assumes the floor is at Y=0; the X/Z come from the enemy's position so the drop lands where it died. Keep small (0–0.25) so the player can walk up to it.")]
+    public float powerUpDropHeight = 0f;
 
     [Header("Obstacle Avoidance")]
     [Tooltip("If true, enemy tries to steer around obstacles instead of walking straight into them.")]
@@ -223,13 +224,28 @@ public class Enemy : MonoBehaviour
     [Tooltip("Seconds between shots.")]
     public float shootCooldown = 1.5f;
 
-    private float currentHP;
+    private long currentHP;
     private float meleeTimer;
     private float shootTimer;
     private Rigidbody rb;
     private Hero player;
     private DamageFlash damageFlash;
     private EnemyAnimator enemyAnimator;
+
+    // Optional final-boss controller. Awake on Enemy runs first; SlimeGod is
+    // looked up lazily because RequireComponent can't enforce a nullable add-on.
+    private SlimeGod slimeGod;
+    private bool slimeGodLookedUp;
+
+    private SlimeGod GetSlimeGod()
+    {
+        if (!slimeGodLookedUp)
+        {
+            slimeGod = GetComponent<SlimeGod>();
+            slimeGodLookedUp = true;
+        }
+        return slimeGod;
+    }
 
     private bool aiming;
     private float telegraphTimer;
@@ -252,8 +268,8 @@ public class Enemy : MonoBehaviour
     private float chargerPhaseTimer;
     private Vector3 dashDirection;
 
-    public float CurrentHP => currentHP;
-    public float MaxHP => maxHP;
+    public long CurrentHP => currentHP;
+    public long MaxHP => maxHP;
     public bool IsDead { get; private set; }
 
     /// <summary>
@@ -261,12 +277,20 @@ public class Enemy : MonoBehaviour
     /// Call right after Instantiate so the spawner can scale HP with elapsed
     /// game time. Awake() runs synchronously inside Instantiate and sets
     /// currentHP = maxHP, so multiplying both here keeps them in sync.
+    /// HP is long but the multiplier is float; the result is rounded back to
+    /// long, so very small multipliers may collapse to 0 — guard with a
+    /// minimum of 1.
     /// </summary>
     public void ScaleHP(float multiplier)
     {
         if (multiplier <= 0f) return;
-        maxHP     *= multiplier;
-        currentHP *= multiplier;
+        // Use double precision intermediate so big-number boss HP stays
+        // accurate when multiplied by exponential per-spawn factors.
+        double scaledMax = (double)maxHP     * multiplier;
+        double scaledCur = (double)currentHP * multiplier;
+        // Clamp to long range and floor at 1 so an enemy can't spawn dead.
+        maxHP     = (long)System.Math.Max(1.0, System.Math.Min(scaledMax, (double)long.MaxValue));
+        currentHP = (long)System.Math.Max(1.0, System.Math.Min(scaledCur, (double)long.MaxValue));
     }
 
     private void Awake()
@@ -279,6 +303,14 @@ public class Enemy : MonoBehaviour
         enemyAnimator = GetComponent<EnemyAnimator>();
         if (enemyAnimator == null) enemyAnimator = GetComponentInChildren<EnemyAnimator>();
         currentHP = maxHP;
+
+        // The final-boss controller (SlimeGod component) renders its own
+        // telegraphs and replaces the world-space HP bar with a screen-bottom
+        // bar built by GameHUD, so skip both setups for that behavior.
+        if (behavior == Behavior.SlimeGod)
+        {
+            showHealthBar = false;
+        }
 
         if (behavior == Behavior.Crossbow || behavior == Behavior.SlimeKing)
         {
@@ -410,10 +442,11 @@ public class Enemy : MonoBehaviour
             healthBarRoot.rotation = cam.transform.rotation;
 
         // Update fill ratio by resizing the rect's width — robust, doesn't
-        // require a sprite the way Image.Type.Filled does.
+        // require a sprite the way Image.Type.Filled does. Cast through
+        // double so massive long HP values don't lose precision.
         if (healthBarFill != null)
         {
-            float ratio = maxHP > 0f ? Mathf.Clamp01(currentHP / maxHP) : 0f;
+            float ratio = maxHP > 0L ? (float)Mathf.Clamp01((float)((double)currentHP / (double)maxHP)) : 0f;
             var rt = healthBarFill.rectTransform;
             Vector2 sd = rt.sizeDelta;
             sd.x = healthBarMaxWidthPx * ratio;
@@ -422,7 +455,7 @@ public class Enemy : MonoBehaviour
 
         // Update HP numbers (bosses only).
         if (healthBarText != null)
-            healthBarText.text = $"{Mathf.CeilToInt(currentHP)} / {Mathf.CeilToInt(maxHP)}";
+            healthBarText.text = $"{currentHP} / {maxHP}";
     }
 
     private static Material cachedTelegraphMat;
@@ -474,6 +507,11 @@ public class Enemy : MonoBehaviour
             case Behavior.Ranged: TickRanged(dir, dist); break;
             case Behavior.Crossbow: TickCrossbow(dir, dist); break;
             case Behavior.SlimeKing: TickSlimeKing(dir, dist); break;
+            case Behavior.SlimeGod:
+                // The SlimeGod component drives its own movement and attack
+                // logic (coroutines + transform writes). Enemy.cs just sits
+                // here as the HP/damage/death surface.
+                break;
         }
     }
 
@@ -904,6 +942,15 @@ public class Enemy : MonoBehaviour
     {
         if (IsDead) return;
 
+        // SlimeGod hook: damage reduction lerp + shield-stack absorber lives in
+        // the SlimeGod component. Returns 0 if the hit was absorbed by a shield.
+        if (behavior == Behavior.SlimeGod)
+        {
+            SlimeGod sg = GetSlimeGod();
+            if (sg != null) amount = sg.ModifyIncomingDamage(amount);
+            if (amount <= 0f) return;
+        }
+
         if (skCurrentShieldHits > 0)
         {
             skCurrentShieldHits--;
@@ -914,11 +961,35 @@ public class Enemy : MonoBehaviour
             return;
         }
 
-        currentHP = Mathf.Max(0f, currentHP - amount);
+        // Convert float damage to a long delta. Round so fractional damage
+        // (e.g. 1.5) doesn't truncate to 1 every hit; floor at 0 so a 0.4
+        // hit still does nothing instead of negative.
+        long longDamage = amount > 0f ? (long)System.Math.Max(0L, System.Math.Round((double)amount)) : 0L;
+        currentHP = System.Math.Max(0L, currentHP - longDamage);
         if (damageFlash != null) damageFlash.Flash();
-        if (enemyAnimator != null && currentHP > 0f) enemyAnimator.OnHit();
+        if (enemyAnimator != null && currentHP > 0L) enemyAnimator.OnHit();
         SpawnHitParticles();
-        if (currentHP <= 0f) Die();
+        if (currentHP <= 0L) Die();
+    }
+
+    /// <summary>
+    /// Force this enemy to die NOW with no powerup drop and no boss-kill
+    /// credit. Used by the EnemySpawner's final-boss shockwave to wipe every
+    /// regular enemy off the arena when SlimeGod spawns.
+    /// </summary>
+    public void KillSilently()
+    {
+        if (IsDead) return;
+        IsDead = true;
+        currentHP = 0L;
+        StopMoving();
+        if (telegraphLine != null) telegraphLine.enabled = false;
+        if (enemyAnimator != null) enemyAnimator.OnDie();
+        // Spawn a small visual burst so the wipe reads on screen.
+        HitParticles.EmitBurst(transform.position + Vector3.up * 0.6f, Vector3.up,
+            count: 12, speed: 4f, lifetime: 0.4f, size: 0.14f,
+            color: hitParticleColor, spreadAngle: 90f, useGravity: true);
+        Destroy(gameObject, 0.2f);
     }
 
     private void SpawnHitParticles()
@@ -955,7 +1026,18 @@ public class Enemy : MonoBehaviour
         if (telegraphLine != null) telegraphLine.enabled = false;
         if (enemyAnimator != null) enemyAnimator.OnDie();
 
-        if (GameManager.Instance != null) GameManager.Instance.OnEnemyKilled(this);
+        // Notify the SlimeGod controller BEFORE GameManager.OnEnemyKilled so
+        // the controller can stop its coroutines and trigger the win flow
+        // (which awards 1000 points instead of the regular boss credit).
+        if (behavior == Behavior.SlimeGod)
+        {
+            SlimeGod sg = GetSlimeGod();
+            if (sg != null) sg.OnBossKilled();
+        }
+        else if (GameManager.Instance != null)
+        {
+            GameManager.Instance.OnEnemyKilled(this);
+        }
 
         if (splitOnDeath && splitPrefab != null && splitCount > 0)
         {
@@ -990,7 +1072,12 @@ public class Enemy : MonoBehaviour
         eWeaponType dropType = PickRandomPowerUpType();
         if (dropType == eWeaponType.none) return;
 
-        Vector3 spawnPos = transform.position + Vector3.up * powerUpDropHeight;
+        // Take the enemy's XZ but force Y to powerUpDropHeight (assumes the
+        // floor is at world Y=0). Simpler than raycasting — and combined with
+        // PowerUp's XZ-only pickup distance, the player can walk up to and
+        // grab the powerup regardless of any prefab-side visual offset.
+        Vector3 spawnPos = new Vector3(transform.position.x, powerUpDropHeight, transform.position.z);
+
         PowerUp powerUp = Instantiate(powerUpPrefab, spawnPos, Quaternion.identity);
         powerUp.SetType(dropType);
     }
@@ -1068,7 +1155,7 @@ public class Enemy : MonoBehaviour
         Vector3 screenPos = cam.WorldToScreenPoint(worldPos);
         if (screenPos.z < 0f) return;
 
-        string text = $"{currentHP:F0} / {maxHP:F0}";
+        string text = $"{currentHP} / {maxHP}";
         GUIStyle style = GUI.skin.label;
         Vector2 size = style.CalcSize(new GUIContent(text));
         Rect r = new Rect(
@@ -1080,7 +1167,7 @@ public class Enemy : MonoBehaviour
         Color prev = GUI.color;
         GUI.color = new Color(0f, 0f, 0f, 0.65f);
         GUI.DrawTexture(r, Texture2D.whiteTexture);
-        GUI.color = currentHP <= maxHP * 0.33f ? new Color(1f, 0.4f, 0.4f) : Color.white;
+        GUI.color = currentHP <= (long)(maxHP * 0.33) ? new Color(1f, 0.4f, 0.4f) : Color.white;
         GUI.Label(new Rect(r.x + 4f, r.y + 2f, r.width, r.height), text);
         GUI.color = prev;
     }
@@ -1091,7 +1178,7 @@ public class Enemy : MonoBehaviour
         if (!debugShowHealth || !Application.isPlaying || IsDead) return;
         UnityEditor.Handles.Label(
             transform.position + Vector3.up * debugLabelHeight,
-            $"HP: {currentHP:F0}/{maxHP:F0}");
+            $"HP: {currentHP}/{maxHP}");
     }
 #endif
 }
