@@ -17,6 +17,13 @@ public class BossShockwave : MonoBehaviour
     public float lineWidth = 0.5f;
     public int segments = 64;
 
+    [Header("Damage (optional)")]
+    [Tooltip("Damage applied to the Hero ONCE when the wavefront passes through their position. 0 = pure visual.")]
+    public float damage = 0f;
+    [Tooltip("Half-thickness of the damaging ring, in world units. The hit registers when the player is within ±band of the current radius.")]
+    public float damageBandWidth = 1.5f;
+    private bool damageApplied;
+
     public static BossShockwave Spawn(Vector3 center, float maxRadius = 30f, Color? color = null, float duration = 0.6f)
     {
         GameObject go = new GameObject("BossShockwave");
@@ -25,6 +32,21 @@ public class BossShockwave : MonoBehaviour
         sw.maxRadius = maxRadius;
         sw.duration = duration;
         sw.color = color ?? new Color(1f, 0.3f, 0.3f, 0.95f);
+        return sw;
+    }
+
+    /// <summary>
+    /// Damaging variant. The shockwave looks the same but deals
+    /// <paramref name="damage"/> to the hero exactly once, when the expanding
+    /// ring's radius matches the hero's distance from the center (within
+    /// <paramref name="damageBandWidth"/>).
+    /// </summary>
+    public static BossShockwave SpawnDamaging(Vector3 center, float maxRadius, Color color, float duration,
+                                              float damage, float damageBandWidth = 1.5f)
+    {
+        BossShockwave sw = Spawn(center, maxRadius, color, duration);
+        sw.damage = damage;
+        sw.damageBandWidth = damageBandWidth;
         return sw;
     }
 
@@ -64,6 +86,27 @@ public class BossShockwave : MonoBehaviour
                 float a = (360f / segments) * i * Mathf.Deg2Rad;
                 lr.SetPosition(i, new Vector3(Mathf.Cos(a) * r, 0f, Mathf.Sin(a) * r));
             }
+
+            // Damaging mode: hit the hero once, when the expanding ring's
+            // radius sweeps past their XZ distance from the center.
+            if (damage > 0f && !damageApplied && Hero.Instance != null && !Hero.Instance.IsDead)
+            {
+                Vector3 toHero = Hero.Instance.transform.position - transform.position;
+                toHero.y = 0f;
+                float dist = toHero.magnitude;
+                if (dist >= r - damageBandWidth && dist <= r + damageBandWidth)
+                {
+                    Hero.Instance.TakeDamage(damage);
+                    damageApplied = true;
+                }
+                // Edge case: if the player is INSIDE the inner radius and the
+                // ring already swept past them (their distance < r-band) we
+                // still don't want to trigger, because the wavefront hasn't
+                // hit them this frame. They were already inside the explosion.
+                // damageApplied stays false; if the player ever lines up with
+                // the ring later, the standard band check above catches it.
+            }
+
             yield return null;
         }
         Destroy(gameObject);

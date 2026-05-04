@@ -149,7 +149,9 @@ public class PowerUpChoiceUI : MonoBehaviour
         string pickedUpName = pickedUpWeapon != null ? pickedUpWeapon.weaponName : GetWeaponName(pendingType);
         Sprite pickedUpIcon = pickedUpWeapon != null ? pickedUpWeapon.hudIcon : null;
 
-        if (titleText != null) titleText.text = "Picked Up:  " + pickedUpName;
+        // Stack on two lines so longer weapon names don't push past the
+        // panel edges. Header on top, name centered underneath.
+        if (titleText != null) titleText.text = "Picked Up:\n" + pickedUpName;
 
         if (centerIconImg != null)
         {
@@ -378,8 +380,8 @@ public class PowerUpChoiceUI : MonoBehaviour
         titleRt.anchorMin = new Vector2(0.5f, 1f);
         titleRt.anchorMax = new Vector2(0.5f, 1f);
         titleRt.pivot = new Vector2(0.5f, 1f);
-        titleRt.anchoredPosition = new Vector2(0f, -40f);
-        titleRt.sizeDelta = new Vector2(900f, 60f);
+        titleRt.anchoredPosition = new Vector2(0f, -30f);
+        titleRt.sizeDelta = new Vector2(900f, 120f); // tall enough for two lines
         titleText = titleGO.AddComponent<Text>();
         titleText.font = defaultFont;
         titleText.fontSize = 36;
@@ -387,8 +389,9 @@ public class PowerUpChoiceUI : MonoBehaviour
         // regardless of how the serialized textColor has been tweaked.
         titleText.color = Color.white;
         titleText.alignment = TextAnchor.UpperCenter;
+        titleText.verticalOverflow = VerticalWrapMode.Overflow;
         titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        titleText.text = "Picked Up:";
+        titleText.text = "Picked Up:\n";
 
         // -- Center: big picked-up icon + name (no buttons; informational) --
         // slotH grew from 460 → 540 to leave room for the 3rd button (Hero
@@ -425,6 +428,12 @@ public class PowerUpChoiceUI : MonoBehaviour
         // inside BuildFullSlot vanish into a copy.
         BuildFullSlot(ref primarySlot,   primarySlot.root.transform);
         BuildFullSlot(ref secondarySlot, secondarySlot.root.transform);
+
+        // Force the title bar to render last among the overlay's children so
+        // it always sits in front of every slot panel regardless of which
+        // siblings get added or rearranged later.
+        if (titleText != null)
+            titleText.transform.SetAsLastSibling();
     }
 
     private GameObject BuildSlotPanel(string name, Transform parent, Vector2 anchoredPos, Vector2 size)

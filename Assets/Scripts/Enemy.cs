@@ -313,9 +313,13 @@ public class Enemy : MonoBehaviour
         }
 
         // Apply the difficulty preset to enemies whose stats it tunes.
-        // Crossbow-behavior enemies (and the SlimeKing's ranged phase, which
-        // uses the same crossbowDamage field) scale by the damage multiplier;
-        // SlimeKings additionally take the ranged-attack-speed multiplier.
+        //   * Crossbow-behavior enemies (and the SlimeKing's ranged phase,
+        //     which uses the same crossbowDamage field) scale by
+        //     crossbowDamageMultiplier.
+        //   * SlimeKings additionally take slimeKingAttackSpeedBoostMultiplier
+        //     for the ranged-mode attack-speed boost.
+        //   * SlimeGod (final boss) scales ALL of its damage moves through
+        //     its own attackDamageMultiplier — set here from the preset.
         if (GameSettings.Instance != null)
         {
             var p = GameSettings.Instance.GetActivePreset();
@@ -323,6 +327,11 @@ public class Enemy : MonoBehaviour
                 crossbowDamage *= p.crossbowDamageMultiplier;
             if (behavior == Behavior.SlimeKing)
                 skAttackSpeedBoostMultiplier = p.slimeKingAttackSpeedBoostMultiplier;
+            if (behavior == Behavior.SlimeGod)
+            {
+                SlimeGod sg = GetSlimeGod();
+                if (sg != null) sg.attackDamageMultiplier *= p.finalBossDamageMultiplier;
+            }
         }
 
         if (behavior == Behavior.Crossbow || behavior == Behavior.SlimeKing)
@@ -1010,7 +1019,7 @@ public class Enemy : MonoBehaviour
     /// credit. Used by the EnemySpawner's final-boss shockwave to wipe every
     /// regular enemy off the arena when SlimeGod spawns.
     /// </summary>
-    public void KillSilently()
+    public void KillSilently(bool emitParticles = true)
     {
         if (IsDead) return;
         IsDead = true;
@@ -1018,10 +1027,15 @@ public class Enemy : MonoBehaviour
         StopMoving();
         if (telegraphLine != null) telegraphLine.enabled = false;
         if (enemyAnimator != null) enemyAnimator.OnDie();
-        // Spawn a small visual burst so the wipe reads on screen.
-        HitParticles.EmitBurst(transform.position + Vector3.up * 0.6f, Vector3.up,
-            count: 12, speed: 4f, lifetime: 0.4f, size: 0.14f,
-            color: hitParticleColor, spreadAngle: 90f, useGravity: true);
+        if (emitParticles)
+        {
+            // Tiny burst so the wipe still reads on screen — but small enough
+            // that 100 simultaneous KillSilently calls don't spawn 1200+
+            // rigidbody-particle GameObjects in a single frame.
+            HitParticles.EmitBurst(transform.position + Vector3.up * 0.6f, Vector3.up,
+                count: 3, speed: 4f, lifetime: 0.35f, size: 0.14f,
+                color: hitParticleColor, spreadAngle: 90f, useGravity: true);
+        }
         Destroy(gameObject, 0.2f);
     }
 

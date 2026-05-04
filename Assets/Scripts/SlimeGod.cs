@@ -55,6 +55,10 @@ public class SlimeGod : MonoBehaviour
     [Header("Movement")]
     [Tooltip("Default cruising speed in units/sec.")]
     public float baseMoveSpeed = 3f;
+    [Tooltip("How far inside the arena edge the boss must stay. Dash overshoots, bounce landings, and aerial drops are all clamped to ±(arenaSize/2 − margin) so the boss can't tunnel through walls or jump off the map.")]
+    public float arenaEdgeMargin = 1.5f;
+    [Tooltip("The boss's estimated player-velocity (used by dash / bounce / aerial predictions) is capped at player.moveSpeed × this. Keep at 1.0 so a dash spike (~22 u/s) doesn't flatten the prediction off-screen — the prediction only takes the player's natural walk speed into account. Bump above 1 if you DO want the boss to react to dashes.")]
+    public float playerSpeedPredictionCap = 1.0f;
 
     // ---- Melee: 10-dash pattern ----
 
@@ -80,6 +84,36 @@ public class SlimeGod : MonoBehaviour
     public float dashFootstepShakeAmplitude = 0.08f;
     [Tooltip("Lighter screen-shake duration for every dash.")]
     public float dashFootstepShakeDuration = 0.05f;
+    [Tooltip("If true, every dash also spits aerial arrows out to its left AND right at evenly-spaced points along the dash path. Uses the aerialArrowPrefab + aerial damage / speed / scale tunables. Set count to 0 to disable.")]
+    public bool dashSideArrowsEnabled = true;
+    [Tooltip("Number of arrow PAIRS (one left + one right) fired per dash, distributed evenly along the dash duration. 3 → arrows at 25 %, 50 %, 75 % of the dash.")]
+    public int dashSideArrowCount = 3;
+    [Tooltip("If true, every dash ends with a quick UN-telegraphed death beam swept in front of the boss along the dash direction. Runs in parallel so the next dash isn't delayed.")]
+    public bool dashEndBeamEnabled = true;
+    [Tooltip("How long the post-dash sweep beam stays alive. Short = the player can dodge by sidestepping; long = a bigger trailing slash.")]
+    public float dashEndBeamDuration = 0.18f;
+    [Tooltip("Total arc swept by the post-dash beam, in degrees. Sweeps from -half to +half centered on the dash direction.")]
+    public float dashEndBeamSweepDegrees = 70f;
+    [Tooltip("DPS of the post-dash sweep beam while the player is on its line.")]
+    public float dashEndBeamDamagePerSecond = 80f;
+    [Tooltip("Hit radius around the post-dash beam line for damage detection.")]
+    public float dashEndBeamHitRadius = 1.0f;
+    [Tooltip("Visual width (LineRenderer fallback only — the bow visual prefab uses beamFireVisualRadius). Same units as beamFireWidth.")]
+    public float dashEndBeamWidth = 0.6f;
+    [Tooltip("Color of the post-dash sweep beam fallback line.")]
+    public Color dashEndBeamColor = new Color(1f, 0.65f, 0.25f, 1f);
+    [Tooltip("If true, every dash drops a trail of red 'burn' patches under the dash path that linger and damage the player while standing on them.")]
+    public bool dashBurnEnabled = true;
+    [Tooltip("Seconds each burn patch lasts before fading away. Patches DON'T despawn when the boss dies — the trail keeps burning until each patch ages out.")]
+    public float dashBurnDuration = 3f;
+    [Tooltip("Radius of each burn patch on the ground.")]
+    public float dashBurnRadius = 1.5f;
+    [Tooltip("Damage-per-second the hero takes while standing on any burn patch. Routed through ScaledDamage.")]
+    public float dashBurnDamagePerSecond = 25f;
+    [Tooltip("Seconds between burn-patch drops while the boss is mid-dash. With dashDuration ~0.16, an interval of 0.04 lays ~4 overlapping patches per dash for a continuous trail.")]
+    public float dashBurnSpawnInterval = 0.04f;
+    [Tooltip("Color of the burn-patch disc. Alpha drives how visible the patch is at peak.")]
+    public Color dashBurnColor = new Color(1f, 0.18f, 0.12f, 0.85f);
 
     // ---- Melee: bounce pattern ----
 
@@ -101,6 +135,18 @@ public class SlimeGod : MonoBehaviour
     public float bounceShakeAmplitude = 0.45f;
     [Tooltip("Screen-shake duration when the boss slams down at the end of a bounce.")]
     public float bounceShakeDuration = 0.32f;
+    [Tooltip("If true, every bounce landing also fires an expanding ring shockwave that deals delayed AOE damage to the player as the wavefront passes through them.")]
+    public bool bounceShockwaveEnabled = true;
+    [Tooltip("How far the bounce shockwave expands before fading. Should usually be larger than bounceImpactRadius so the wave continues past the immediate slam.")]
+    public float bounceShockwaveMaxRadius = 12f;
+    [Tooltip("Seconds the bounce shockwave takes to expand to its max radius. Determines how long the player has to escape before the wavefront catches up.")]
+    public float bounceShockwaveDuration = 0.7f;
+    [Tooltip("Damage dealt once when the shockwave's expanding ring sweeps over the player's position.")]
+    public float bounceShockwaveDamage = 18f;
+    [Tooltip("Half-thickness of the damaging ring (in world units). The wave hits when the player is within ±band of the current radius.")]
+    public float bounceShockwaveBandWidth = 1.6f;
+    [Tooltip("Color of the bounce shockwave ring.")]
+    public Color bounceShockwaveColor = new Color(1f, 0.55f, 0.1f, 0.95f);
 
     // ---- Melee parallel attack: homing barrage ----
 
@@ -176,6 +222,12 @@ public class SlimeGod : MonoBehaviour
     public float aerialArrowSpawnHeight = 1.0f;
     [Tooltip("Seconds of player-velocity prediction per-wave bias. Wave i lead = (i - waveCount/2) × this. Lower waves lag, higher waves lead.")]
     public float aerialLeadStep = 0.45f;
+    [Tooltip("Radius around the player's CURRENT position used by random-target waves (every other wave). Larger = more chaotic spread, smaller = closer to a sniper shot.")]
+    public float aerialRandomTargetRadius = 4f;
+    [Tooltip("How far past the arrow's target point the telegraph line is drawn. Without this the line ends at the target (mid-arena), which reads visually as 'this is where the arrow stops'. Extending it sells the actual flight path through the target and out the other side.")]
+    public float aerialTelegraphExtensionDistance = 40f;
+    [Tooltip("Width of the aerial-volley telegraph lines specifically. Lower than the shared telegraphLineWidth so the dense fan of arrow lines doesn't visually overwhelm the screen.")]
+    public float aerialTelegraphLineWidth = 0.10f;
 
     // ---- Projectile prefabs ----
 
@@ -345,6 +397,7 @@ public class SlimeGod : MonoBehaviour
     private Coroutine beamRoutine;
     private LineRenderer beamLine;
     private bool dying;
+    private ArenaGenerator cachedArena;
 
     // -------------------- Lifecycle --------------------
 
@@ -409,7 +462,11 @@ public class SlimeGod : MonoBehaviour
             damageReduction = endDamageReduction;
         }
 
-        // Player velocity estimate from frame-to-frame deltas.
+        // Player velocity estimate from frame-to-frame deltas. Clamp the
+        // magnitude to the player's natural walk speed so dashes (which
+        // briefly produce ~4× the walk velocity) don't throw off the boss's
+        // dash / bounce / aerial predictions. The boss aims where the player
+        // is WALKING toward, not where they momentarily teleported via dash.
         if (player != null)
         {
             Vector3 cur = player.transform.position;
@@ -417,6 +474,12 @@ public class SlimeGod : MonoBehaviour
             d.y = 0f;
             float dt = Mathf.Max(0.0001f, Time.deltaTime);
             Vector3 v = d / dt;
+
+            float capSpeed = Mathf.Max(0.01f, player.moveSpeed) * Mathf.Max(0.01f, playerSpeedPredictionCap);
+            float capSq = capSpeed * capSpeed;
+            if (v.sqrMagnitude > capSq)
+                v = v.normalized * capSpeed;
+
             estPlayerVel = Vector3.Lerp(estPlayerVel, v, 0.4f);
             prevPlayerPos = cur;
         }
@@ -626,6 +689,8 @@ public class SlimeGod : MonoBehaviour
             Vector3 dirN = toSnapshot.normalized;
             Vector3 target = snapshot + dirN * dashOvershoot;
             target.y = from.y;
+            // Keep the dash inside the arena.
+            target = ClampToArena(target);
 
             // (2) Lock-on delay. Boss stands still and faces the snapshot so
             // the player can read where the dash is about to go. Shortened
@@ -642,6 +707,17 @@ public class SlimeGod : MonoBehaviour
             // (3) Dash to the (frozen) snapshot.
             yield return DoDash(from, target);
 
+            // Quick non-telegraphed sweep beam in front of the boss along the
+            // dash direction. Runs in parallel so the dash chain stays tight.
+            if (dashEndBeamEnabled)
+            {
+                Vector3 forward = (target - from);
+                forward.y = 0f;
+                if (forward.sqrMagnitude < 0.0001f) forward = transform.forward;
+                forward.Normalize();
+                StartCoroutine(DashEndSweepBeam(forward));
+            }
+
             // Each successful dash adds a shield layer (per spec).
             shieldStacks++;
             EnsureShieldVisual();
@@ -654,6 +730,23 @@ public class SlimeGod : MonoBehaviour
     {
         rb.velocity = Vector3.zero;
 
+        // Pre-compute the dash direction & its perpendiculars so we can fire
+        // side arrows perpendicular to the path. Skip if the dash is degenerate.
+        Vector3 dashFlatDir = (target - from);
+        dashFlatDir.y = 0f;
+        bool hasDir = dashFlatDir.sqrMagnitude > 0.0001f;
+        if (hasDir) dashFlatDir.Normalize();
+        Vector3 perpRight = hasDir ? Vector3.Cross(Vector3.up, dashFlatDir).normalized : Vector3.right;
+        Vector3 perpLeft  = -perpRight;
+
+        int sideShots = dashSideArrowsEnabled ? Mathf.Max(0, dashSideArrowCount) : 0;
+        int nextSideShot = 0;
+
+        // Drop one burn patch right at the dash's starting position so the
+        // trail has something visible from frame zero.
+        if (dashBurnEnabled) DropDashBurnPatch(from);
+        float burnTimer = 0f;
+
         // Lerp from current position → target over dashDuration. The boss does
         // NOT teleport back to a "home" position between dashes — it stays
         // wherever the previous dash left it, then aims again at the player.
@@ -661,11 +754,33 @@ public class SlimeGod : MonoBehaviour
         bool hitPlayer = false;
         while (t < dashDuration)
         {
-            t += Time.deltaTime;
+            float dt = Time.deltaTime;
+            t += dt;
+            burnTimer += dt;
             float k = Mathf.Clamp01(t / dashDuration);
             Vector3 p = Vector3.Lerp(from, target, k);
             p.y = from.y;
+            p = ClampToArena(p);
             transform.position = p;
+
+            // Fire side arrow pairs at evenly-spaced k thresholds. Spacing is
+            // 1 / (sideShots + 1) so the shots land at 25/50/75 % for count=3.
+            while (sideShots > 0 && nextSideShot < sideShots
+                   && k >= (nextSideShot + 1f) / (sideShots + 1f))
+            {
+                FireDashSideArrow(p, from.y, perpLeft);
+                FireDashSideArrow(p, from.y, perpRight);
+                nextSideShot++;
+            }
+
+            // Drip burn patches along the dash path so the trail is continuous.
+            if (dashBurnEnabled && burnTimer >= dashBurnSpawnInterval)
+            {
+                burnTimer = 0f;
+                Vector3 patchPos = p; patchPos.y = from.y;
+                DropDashBurnPatch(patchPos);
+            }
+
             if (!hitPlayer && player != null && !player.IsDead)
             {
                 Vector3 d = player.transform.position - transform.position;
@@ -680,9 +795,134 @@ public class SlimeGod : MonoBehaviour
             }
             yield return null;
         }
-        transform.position = target;
+        transform.position = ClampToArena(target);
         // Always shake a little on dash impact so the speed reads, even on miss.
         if (!hitPlayer) ShakeCamera(dashFootstepShakeAmplitude, dashFootstepShakeDuration);
+    }
+
+    /// <summary>
+    /// Spawn one aerial-style arrow flying along <paramref name="dir"/> from
+    /// the boss's current position. Re-uses the aerial arrow prefab + tunables
+    /// so the dash side shots feel like part of the same projectile family.
+    /// </summary>
+    private void FireDashSideArrow(Vector3 bossPos, float groundY, Vector3 dir)
+    {
+        if (aerialArrowPrefab == null) return;
+        if (dir.sqrMagnitude < 0.0001f) return;
+        dir = dir.normalized;
+
+        Vector3 spawn = bossPos;
+        spawn.y = groundY + aerialArrowSpawnHeight;
+
+        EnemyProjectile p = Instantiate(aerialArrowPrefab, spawn, Quaternion.LookRotation(dir, Vector3.up));
+        if (aerialArrowSpeed > 0f) p.speed = aerialArrowSpeed;
+        ApplyArrowScale(p, aerialArrowScale);
+        p.Launch(dir, ScaledDamage(aerialArrowDamage));
+    }
+
+    /// <summary>
+    /// Spawn a single dash burn patch at the given world position, scaled
+    /// by the per-spawn damage multiplier.
+    /// </summary>
+    private void DropDashBurnPatch(Vector3 pos)
+    {
+        if (!dashBurnEnabled || dashBurnRadius <= 0f || dashBurnDuration <= 0f) return;
+        BossBurnPatch.Spawn(pos, dashBurnRadius, dashBurnDuration,
+                            ScaledDamage(dashBurnDamagePerSecond), dashBurnColor);
+    }
+
+    /// <summary>
+    /// Quick non-telegraphed death beam fired in front of the boss right
+    /// after a dash lands. Sweeps a small arc centered on the dash direction
+    /// and damages the player on the line during the brief lifetime. Runs as
+    /// a parallel coroutine so consecutive dashes don't slow down.
+    /// </summary>
+    private IEnumerator DashEndSweepBeam(Vector3 forwardDir)
+    {
+        if (dashEndBeamDuration <= 0.0001f) yield break;
+        if (forwardDir.sqrMagnitude < 0.0001f) yield break;
+        forwardDir = forwardDir.normalized;
+
+        // Pick a sweep direction (random L→R or R→L so consecutive dashes
+        // don't carve the same arc).
+        float halfSweep = Mathf.Max(0f, dashEndBeamSweepDegrees) * 0.5f;
+        bool reverse = Random.value < 0.5f;
+        Vector3 startDir = Quaternion.AngleAxis(reverse ?  halfSweep : -halfSweep, Vector3.up) * forwardDir;
+        Vector3 endDir   = Quaternion.AngleAxis(reverse ? -halfSweep :  halfSweep, Vector3.up) * forwardDir;
+
+        // Visual: prefer the bow Death Beam prefab (so it gets bloom),
+        // otherwise spawn a transient LineRenderer.
+        GameObject beamVisual = null;
+        LineRenderer beamLR = null;
+        if (deathBeamVisualPrefab != null)
+        {
+            beamVisual = Instantiate(deathBeamVisualPrefab);
+            // Bow's DeathBeam script self-destructs without an owner; strip it.
+            foreach (var db in beamVisual.GetComponentsInChildren<DeathBeam>()) Destroy(db);
+            beamVisual.transform.localScale = new Vector3(
+                beamFireVisualRadius * 2f,
+                beamFireVisualRadius * 2f,
+                beamRange);
+            foreach (var col in beamVisual.GetComponentsInChildren<Collider>()) col.enabled = false;
+        }
+        else
+        {
+            GameObject go = new GameObject("DashEndBeam", typeof(LineRenderer));
+            beamLR = go.GetComponent<LineRenderer>();
+            beamLR.useWorldSpace = true;
+            beamLR.positionCount = 2;
+            beamLR.startWidth = dashEndBeamWidth;
+            beamLR.endWidth   = dashEndBeamWidth;
+            beamLR.material = GetTelegraphMaterial();
+            beamLR.startColor = dashEndBeamColor;
+            beamLR.endColor   = dashEndBeamColor;
+            beamLR.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            beamLR.receiveShadows = false;
+        }
+
+        float t = 0f;
+        float damageTickT = 0f;
+        const float damageTick = 0.05f;
+        while (t < dashEndBeamDuration && this != null)
+        {
+            t += Time.deltaTime;
+            damageTickT += Time.deltaTime;
+            float k = Mathf.Clamp01(t / dashEndBeamDuration);
+            Vector3 dir = Vector3.Slerp(startDir, endDir, k).normalized;
+            Vector3 origin = transform.position + Vector3.up * beamOriginHeight;
+            Vector3 endpoint = origin + dir * beamRange;
+
+            if (beamVisual != null)
+            {
+                beamVisual.transform.position = origin + dir * (beamRange * 0.5f);
+                beamVisual.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+            }
+            else if (beamLR != null)
+            {
+                beamLR.SetPosition(0, origin);
+                beamLR.SetPosition(1, endpoint);
+                // Fade the LR a bit so the brief beam reads as a flash.
+                Color c = dashEndBeamColor; c.a = 1f - k * 0.4f;
+                beamLR.startColor = c;
+                beamLR.endColor   = c;
+            }
+
+            if (damageTickT >= damageTick && player != null && !player.IsDead)
+            {
+                Vector3 toPlayer = (player.transform.position + Vector3.up * beamTargetHeight) - origin;
+                float along = Mathf.Clamp(Vector3.Dot(toPlayer, dir), 0f, beamRange);
+                Vector3 closest = origin + dir * along;
+                float perpDist = Vector3.Distance(closest, player.transform.position + Vector3.up * beamTargetHeight);
+                if (perpDist <= dashEndBeamHitRadius)
+                    player.TakeDamage(ScaledDamage(dashEndBeamDamagePerSecond) * damageTickT);
+                damageTickT = 0f;
+            }
+
+            yield return null;
+        }
+
+        if (beamVisual != null) Destroy(beamVisual);
+        if (beamLR != null)     Destroy(beamLR.gameObject);
     }
 
     private IEnumerator BouncePattern()
@@ -700,6 +940,8 @@ public class SlimeGod : MonoBehaviour
             if (estPlayerVel.sqrMagnitude > 0.01f)
                 land += estPlayerVel.normalized * bounceLeadDistance;
             land.y = groundY;
+            // Keep the bounce landing inside the arena.
+            land = ClampToArena(land);
 
             // Telegraph circle on the ground.
             GameObject ring = MakeGroundRing(land, bounceImpactRadius, bounceTelegraphColor);
@@ -718,10 +960,15 @@ public class SlimeGod : MonoBehaviour
                 Vector3 p = Vector3.Lerp(from, land, k);
                 // Parabola: peak at k=0.5 with height bounceArcHeight.
                 p.y = groundY + 4f * bounceArcHeight * k * (1f - k);
-                transform.position = p;
+                // XZ clamp every frame too — covers the case where 'from' was
+                // already outside (e.g. boss got pushed) and the lerp would
+                // cross the wall.
+                Vector3 clamped = ClampToArena(p);
+                clamped.y = p.y;
+                transform.position = clamped;
                 yield return null;
             }
-            transform.position = land;
+            transform.position = ClampToArena(land);
             rb.velocity = Vector3.zero;
 
             // Apply AOE damage if the player is inside the impact radius.
@@ -737,6 +984,23 @@ public class SlimeGod : MonoBehaviour
                 count: 24, speed: 7f, lifetime: 0.5f, size: 0.18f,
                 color: bounceTelegraphColor, spreadAngle: 80f, useGravity: true);
             ShakeCamera(bounceShakeAmplitude, bounceShakeDuration);
+
+            // Expanding shockwave that deals delayed damage as it sweeps out.
+            // The immediate slam-impact damage above hits anyone inside
+            // bounceImpactRadius the moment the boss lands; this wave then
+            // fans out and clips the player if they don't keep moving away
+            // (or run inside the inner radius, but at that point they took
+            // the slam damage anyway).
+            if (bounceShockwaveEnabled && bounceShockwaveDamage > 0f && bounceShockwaveMaxRadius > 0f)
+            {
+                BossShockwave.SpawnDamaging(
+                    center: land,
+                    maxRadius: bounceShockwaveMaxRadius,
+                    color: bounceShockwaveColor,
+                    duration: bounceShockwaveDuration,
+                    damage: ScaledDamage(bounceShockwaveDamage),
+                    damageBandWidth: bounceShockwaveBandWidth);
+            }
 
             // Cleanup the telegraph ring for this bounce.
             if (ring != null) Destroy(ring);
@@ -830,15 +1094,19 @@ public class SlimeGod : MonoBehaviour
     private IEnumerator AerialPattern()
     {
         if (player == null) player = Hero.Instance;
-        // Fly up.
-        Vector3 ground = transform.position;
+        // Fly up. Snapshot the (clamped) ground position so the boss never
+        // takes off from outside the arena on a degenerate spawn.
+        Vector3 ground = ClampToArena(transform.position);
         Vector3 air = ground + Vector3.up * aerialFlyUpHeight;
         float t = 0f;
         while (t < aerialFlyUpTime)
         {
             t += Time.deltaTime;
             float k = Mathf.Clamp01(t / aerialFlyUpTime);
-            transform.position = Vector3.Lerp(ground, air, k);
+            Vector3 p = Vector3.Lerp(ground, air, k);
+            // XZ-clamp; preserve y so the rise still happens.
+            Vector3 clamped = ClampToArena(p); clamped.y = p.y;
+            transform.position = clamped;
             rb.velocity = Vector3.zero;
             yield return null;
         }
@@ -847,26 +1115,61 @@ public class SlimeGod : MonoBehaviour
         // Run waves.
         for (int i = 0; i < aerialWaveCount; i++)
         {
-            // Lead = (i - half) * step. With 5 waves the middle is 2 → wave 0
-            // has -2*step (lags), wave 4 has +2*step (leads).
-            float lead = (i - aerialWaveCount * 0.5f + 0.5f) * aerialLeadStep;
-            Vector3 predicted = PredictPlayerPosition(lead);
+            // Every other wave (odd indices) becomes a per-arrow scatter:
+            // each arrow rolls its OWN random target inside the radius around
+            // the player. Even waves use the predict-ahead lead and share a
+            // single target for all arrows in the wave.
+            bool isRandomWave = (i & 1) == 1;
+            Vector3 sharedPredicted;
+            if (isRandomWave)
+            {
+                // For random waves the "shared" predicted is just the player's
+                // current position — used as a fallback if a per-arrow target
+                // can't be computed for some reason.
+                Vector3 here = (player != null && !player.IsDead)
+                    ? player.transform.position
+                    : transform.position;
+                sharedPredicted = new Vector3(here.x, transform.position.y, here.z);
+            }
+            else
+            {
+                // Lead = (i - half) * step. With 5 waves the middle is 2 → wave 0
+                // has -2*step (lags), wave 4 has +2*step (leads).
+                float lead = (i - aerialWaveCount * 0.5f + 0.5f) * aerialLeadStep;
+                sharedPredicted = PredictPlayerPosition(lead);
+            }
 
             bool fromBoss = i < aerialEdgeWaveStartIndex;
 
-            // Telegraph: draw lines from each spawn point to the predicted target.
-            // All spawn points sit at ~aerialArrowSpawnHeight off the ground so
-            // the volley reads as a horizontal sweep instead of an air strike.
-            // Use the GROUND y (snapshotted before the boss flew up), not the
-            // predicted point's y — PredictPlayerPosition pins p.y to the
-            // boss's current y, which is way up in the air during this pattern.
-            List<Vector3> spawnPoints = new List<Vector3>();
-            List<LineRenderer> tels = new List<LineRenderer>();
+            // Telegraph: draw lines from each spawn point to the (per-arrow,
+            // for random waves; shared, for predict waves) target. Spawn
+            // points sit at ~aerialArrowSpawnHeight off the ground so the
+            // volley reads as a horizontal sweep instead of an air strike.
+            List<Vector3> spawnPoints  = new List<Vector3>();
+            List<Vector3> arrowTargets = new List<Vector3>();
+            List<LineRenderer> tels    = new List<LineRenderer>();
             float arrowY = ground.y + aerialArrowSpawnHeight;
-            Vector3 predictedAtArrowY = new Vector3(predicted.x, arrowY, predicted.z);
+            Vector3 sharedTargetAtArrowY = new Vector3(sharedPredicted.x, arrowY, sharedPredicted.z);
             int waveCount = ScaledCount(aerialArrowsPerWave);
             for (int a = 0; a < waveCount; a++)
             {
+                // Pick this arrow's destination first (random per-arrow on
+                // random waves; shared on predict waves).
+                Vector3 perArrowTarget;
+                if (isRandomWave)
+                {
+                    Vector3 playerCenter = (player != null && !player.IsDead)
+                        ? player.transform.position
+                        : transform.position;
+                    Vector2 ring = Random.insideUnitCircle * Mathf.Max(0f, aerialRandomTargetRadius);
+                    perArrowTarget = new Vector3(playerCenter.x + ring.x, arrowY, playerCenter.z + ring.y);
+                }
+                else
+                {
+                    perArrowTarget = sharedTargetAtArrowY;
+                }
+                arrowTargets.Add(perArrowTarget);
+
                 float angle = (360f / waveCount) * a;
                 Vector3 from;
                 if (fromBoss)
@@ -879,14 +1182,25 @@ public class SlimeGod : MonoBehaviour
                 }
                 else
                 {
+                    // Edge spawn: ring around THIS arrow's target so random
+                    // waves spawn arrows from a wide range of edge points.
                     float rad = angle * Mathf.Deg2Rad;
                     Vector3 offset = new Vector3(Mathf.Cos(rad), 0f, Mathf.Sin(rad)) * aerialEdgeSpawnRadius;
-                    from = predictedAtArrowY + offset;
+                    from = perArrowTarget + offset;
                     from.y = arrowY;
                 }
                 spawnPoints.Add(from);
 
-                LineRenderer lr = SpawnTelegraphLine(from, predictedAtArrowY, aerialTelegraphColor);
+                // Extend the telegraph line past the target along the
+                // flight direction so the line reads as a flight PATH, not as
+                // the line ending at a midpoint. The arrow itself still
+                // launches toward perArrowTarget — only the visual goes
+                // further.
+                Vector3 telDir = perArrowTarget - from;
+                Vector3 telEnd = perArrowTarget;
+                if (telDir.sqrMagnitude > 0.0001f && aerialTelegraphExtensionDistance > 0f)
+                    telEnd = perArrowTarget + telDir.normalized * aerialTelegraphExtensionDistance;
+                LineRenderer lr = SpawnTelegraphLine(from, telEnd, aerialTelegraphColor, aerialTelegraphLineWidth);
                 tels.Add(lr);
             }
 
@@ -895,9 +1209,7 @@ public class SlimeGod : MonoBehaviour
             for (int a = 0; a < spawnPoints.Count; a++)
             {
                 Vector3 from = spawnPoints[a];
-                // Aim along the ground plane so the arrow flies horizontally
-                // at the player's chest, not down at their feet from above.
-                Vector3 to = predictedAtArrowY;
+                Vector3 to   = arrowTargets[a];
                 Vector3 dir = (to - from);
                 if (dir.sqrMagnitude < 0.0001f) continue;
                 dir.Normalize();
@@ -915,16 +1227,20 @@ public class SlimeGod : MonoBehaviour
             yield return new WaitForSeconds(Mathf.Max(0.05f, ScaledInterval(aerialWaveInterval - aerialTelegraphTime)));
         }
 
-        // Drop back down.
+        // Drop back down. Clamp the landing XZ so the boss can't end up
+        // outside the arena if it drifted there during the aerial waves.
         Vector3 fromAir = transform.position;
-        Vector3 toGround = new Vector3(fromAir.x, ground.y, fromAir.z);
+        Vector3 toGround = ClampToArena(new Vector3(fromAir.x, ground.y, fromAir.z));
         t = 0f;
         float fall = 0.6f;
         while (t < fall)
         {
             t += Time.deltaTime;
             float k = Mathf.Clamp01(t / fall);
-            transform.position = Vector3.Lerp(fromAir, toGround, k * k);
+            Vector3 p = Vector3.Lerp(fromAir, toGround, k * k);
+            // Final-fall path — clamp XZ each frame just in case.
+            Vector3 clamped = ClampToArena(p); clamped.y = p.y;
+            transform.position = clamped;
             rb.velocity = Vector3.zero;
             yield return null;
         }
@@ -1409,6 +1725,22 @@ public class SlimeGod : MonoBehaviour
         if (cf != null) cf.Shake(amplitude, duration);
     }
 
+    /// <summary>
+    /// Clamp a candidate position to the arena bounds (XZ only) so the boss
+    /// can't dash / bounce / drop outside the map. Lazily caches the
+    /// ArenaGenerator on first use. Y is preserved.
+    /// </summary>
+    private Vector3 ClampToArena(Vector3 pos)
+    {
+        if (cachedArena == null) cachedArena = FindObjectOfType<ArenaGenerator>();
+        if (cachedArena == null) return pos;
+        float half = cachedArena.arenaSize * 0.5f - Mathf.Max(0f, arenaEdgeMargin);
+        if (half <= 0f) return pos;
+        pos.x = Mathf.Clamp(pos.x, -half, half);
+        pos.z = Mathf.Clamp(pos.z, -half, half);
+        return pos;
+    }
+
     private Vector3 PredictPlayerPosition(float seconds)
     {
         if (player == null) return transform.position;
@@ -1418,13 +1750,16 @@ public class SlimeGod : MonoBehaviour
     }
 
     private LineRenderer SpawnTelegraphLine(Vector3 a, Vector3 b, Color color)
+        => SpawnTelegraphLine(a, b, color, telegraphLineWidth);
+
+    private LineRenderer SpawnTelegraphLine(Vector3 a, Vector3 b, Color color, float width)
     {
         GameObject go = new GameObject("BossTelegraph", typeof(LineRenderer));
         var lr = go.GetComponent<LineRenderer>();
         lr.useWorldSpace = true;
         lr.positionCount = 2;
-        lr.startWidth = telegraphLineWidth;
-        lr.endWidth   = telegraphLineWidth;
+        lr.startWidth = width;
+        lr.endWidth   = width;
         lr.material = GetTelegraphMaterial();
         lr.startColor = color;
         lr.endColor = color;

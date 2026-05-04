@@ -417,17 +417,34 @@ MonoBehaviour:
   spawnShakeDuration: 0.9
   interPatternPause: 1.4
   baseMoveSpeed: 3
+  arenaEdgeMargin: 1.5
+  playerSpeedPredictionCap: 1
   dashCount: 10
   dashOvershoot: 4
   dashGap: 0.2
-  dashLockOnDelay: 0.75
+  dashLockOnDelay: 0.55
   dashDuration: 0.18
   dashHitRadius: 2.2
-  dashDamage: 90
+  dashDamage: 100
   dashShakeAmplitude: 0.35
   dashShakeDuration: 0.18
   dashFootstepShakeAmplitude: 0.08
   dashFootstepShakeDuration: 0.05
+  dashSideArrowsEnabled: 1
+  dashSideArrowCount: 3
+  dashEndBeamEnabled: 1
+  dashEndBeamDuration: 0.3
+  dashEndBeamSweepDegrees: 90
+  dashEndBeamDamagePerSecond: 160
+  dashEndBeamHitRadius: 1
+  dashEndBeamWidth: 0.6
+  dashEndBeamColor: {r: 1, g: 0.65, b: 0.25, a: 1}
+  dashBurnEnabled: 0
+  dashBurnDuration: 3
+  dashBurnRadius: 1.5
+  dashBurnDamagePerSecond: 25
+  dashBurnSpawnInterval: 0.04
+  dashBurnColor: {r: 1, g: 0.18, b: 0.12, a: 0.85}
   bounceCount: 10
   bounceTelegraphTime: 0.4
   bounceArcTime: 0.7
@@ -437,13 +454,19 @@ MonoBehaviour:
   bounceLeadDistance: 0.6
   bounceShakeAmplitude: 0.45
   bounceShakeDuration: 0.32
+  bounceShockwaveEnabled: 1
+  bounceShockwaveMaxRadius: 11
+  bounceShockwaveDuration: 0.7
+  bounceShockwaveDamage: 50
+  bounceShockwaveBandWidth: 1.6
+  bounceShockwaveColor: {r: 1, g: 0.55, b: 0.1, a: 0.95}
   meleeHomingProjectilePrefab: {fileID: 2241873115812845983, guid: e42e74e2f360725468bab61f4e054cc0, type: 3}
   meleeHomingBarrageStartDelay: 0.5
   meleeHomingBarrageInterval: 1.5
   meleeHomingArrowsPerBarrage: 10
-  meleeHomingArrowDamage: 20
+  meleeHomingArrowDamage: 35
   meleeHomingArrowSpeed: 18
-  meleeHomingTurnSpeed: 120
+  meleeHomingTurnSpeed: 135
   meleeHomingDuration: 2.5
   meleeHomingMaxRange: 25
   meleeHomingArrowScale: 1
@@ -454,24 +477,27 @@ MonoBehaviour:
   spamWaveInterval: 0.1
   spamRotationSpeed: 40
   spamChaseSpeed: 2.4
-  spamArrowDamage: 30
+  spamArrowDamage: 40
   spamArrowSpeed: 15
   spamArrowScale: 0.5
   spamArrowSpawnHeight: 0.3
-  aerialWaveCount: 7
+  aerialWaveCount: 18
   aerialFlyUpHeight: 18
   aerialFlyUpTime: 0.9
-  aerialWaveInterval: 1
-  aerialTelegraphTime: 0.8
-  aerialArrowsPerWave: 15
-  aerialArrowDamage: 25
-  aerialArrowSpeed: 22
+  aerialWaveInterval: 0.2
+  aerialTelegraphTime: 0.6
+  aerialArrowsPerWave: 16
+  aerialArrowDamage: 50
+  aerialArrowSpeed: 30
   aerialArrowScale: 0.55
   aerialRingRadius: 10
-  aerialEdgeWaveStartIndex: 2
+  aerialEdgeWaveStartIndex: 0
   aerialEdgeSpawnRadius: 22
   aerialArrowSpawnHeight: 0.3
   aerialLeadStep: 0.45
+  aerialRandomTargetRadius: 5
+  aerialTelegraphExtensionDistance: 40
+  aerialTelegraphLineWidth: 0.1
   spamArrowPrefab: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
   aerialArrowPrefab: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
   telegraphLineWidth: 0.18
@@ -482,17 +508,17 @@ MonoBehaviour:
   aerialTelegraphColor: {r: 0.9, g: 0.2, b: 0.6, a: 1}
   beamCooldown: 3
   beamFadeInTime: 1.6
-  beamLockTime: 2
+  beamLockTime: 1
   beamFireDuration: 1
-  beamDamagePerSecond: 90
+  beamDamagePerSecond: 400
   beamHitRadius: 1.2
   beamRange: 30
   beamTelegraphWidth: 0.15
-  beamFireWidth: 0.55
-  beamFireTrackDegPerSec: 30
+  beamFireWidth: 0.45
+  beamFireTrackDegPerSec: 40
   beamFastTrackThresholdDegrees: 30
   beamFastTrackMultiplier: 5
-  beamDamageTickInterval: 0.1
+  beamDamageTickInterval: 0.02
   beamTelegraphColor: {r: 1, g: 0.15, b: 0.15, a: 1}
   beamFireColor: {r: 1, g: 0.85, b: 0.4, a: 1}
   beamOriginHeight: 1.6
@@ -512,7 +538,7 @@ MonoBehaviour:
   sweepingBeamFarDistance: 25
   sweepingBeamCloseTrackMultiplier: 0.15
   sweepingBeamFarTrackMultiplier: 4
-  sweepingBeamDamagePerSecond: 100
+  sweepingBeamDamagePerSecond: 450
   sweepingBeamHitRadius: 1.6
   sweepingBeamTelegraphColor: {r: 1, g: 0.2, b: 0.2, a: 1}
   sweepingBeamFireColor: {r: 1, g: 0.85, b: 0.4, a: 1}

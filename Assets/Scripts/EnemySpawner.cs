@@ -106,10 +106,16 @@ public class EnemySpawner : MonoBehaviour
     public float finalBossShockwaveShake = 0.9f;
     [Tooltip("Camera shake duration when the final boss spawns.")]
     public float finalBossShockwaveShakeDuration = 1.2f;
+    [Tooltip("How many existing enemies KillSilently runs per frame during the boss-spawn wipe. Higher = wipe finishes sooner but the spawn frame may stutter; lower = smoother spawn but wipe takes longer.")]
+    public int finalBossSpawnWipeKillsPerFrame = 8;
+    [Tooltip("If true, instantiate the final boss prefab once at scene load (far offscreen, with all MonoBehaviours disabled) so its meshes / materials / shaders are compiled before the real spawn. Eliminates the first-time-instantiate hitch at the 8-minute mark. Costs nothing if the prefab is null.")]
+    public bool prewarmFinalBossPrefab = true;
     [Tooltip("After the player picks Continue on the Win Menu, this many minutes from the moment of the previous boss kill before the next final boss spawns.")]
     public float finalBossRespawnDelayMinutes = 4f;
     [Tooltip("EXTRA exponential HP multiplier applied to the final boss on top of bossHpMultiplierPerSpawn. Effective HP scale = (bossMul × extraMul)^finalBossesSpawned. Defaults to 1.5 so endless mode ramps faster than the regular boss curve. Set to 1 to disable the extra stack.")]
     public float finalBossExtraHpMultiplierPerSpawn = 1.5f;
+    [Tooltip("EXPONENTIAL damage multiplier applied to the final boss per previous summon. Stacks multiplicatively with the linear bonus below — effective dmg multiplier = (1 + linearBonus × n) × extraMul^n. Default 1.3 → ×1, ×1.3, ×1.69, ×2.20, …. Set to 1 to disable.")]
+    public float finalBossExtraDamageMultiplierPerSpawn = 1.3f;
     [Tooltip("Linear ATTACK-DAMAGE bonus added per previous final boss kill. Effective dmg multiplier = 1 + bonus × finalBossesSpawned. Default +0.5 → 1×, 1.5×, 2×, 2.5×, …")]
     public float finalBossDamageBonusPerKill = 0.5f;
     [Tooltip("Linear PROJECTILE-COUNT bonus added per previous final boss kill. Effective count multiplier = 1 + bonus × finalBossesSpawned. Spam / aerial / homing fans all get this many extra arrows.")]
@@ -208,6 +214,61 @@ public class EnemySpawner : MonoBehaviour
             Debug.Log($"EnemySpawner: started. Regular start rate = {startSpawnsPerSecond}/s, peak = {maxSpawnsPerSecond}/s after {timeToReachMaxSpawnRate}s.");
             Debug.Log($"EnemySpawner: first boss at {bossFirstSpawnDelay}s, then every {bossSpawnInterval}s.");
         }
+
+        if (prewarmFinalBossPrefab && finalBossPrefab != null)
+            StartCoroutine(WarmUpFinalBossPrefab());
+    }
+
+    /// <summary>
+    /// Instantiate the final boss prefab once at scene load to force shader /
+    /// material / mesh-buffer compilation. The instance is parked far off-map
+    /// with every MonoBehaviour disabled so it can't run patterns or affect
+    /// the run, lives for one render frame so its renderers actually draw
+    /// (which is what triggers the GPU compile), then gets destroyed.
+    /// </summary>
+    private System.Collections.IEnumerator WarmUpFinalBossPrefab()
+    {
+        // Wait one frame so GameManager / Hero / WinMenu have all done their
+        // own Awake/OnEnable before our warmup briefly registers itself.
+        yield return null;
+
+        Vector3 farAway = new Vector3(99999f, -9999f, 99999f);
+        GameObject warmup = Instantiate(finalBossPrefab, farAway, Quaternion.identity);
+        warmup.name = finalBossPrefab.name + "_Warmup";
+
+        // SlimeGod.OnEnable registered itself as the active final boss; undo
+        // that so the HUD / GameManager don't think the boss is already alive.
+        if (GameManager.Instance != null) GameManager.Instance.NotifyFinalBossDespawned();
+
+        // Disable every MonoBehaviour on the warmup so Start (and the master
+        // / beam coroutines it would kick off) never runs. Renderers and the
+        // Animator remain enabled — they're not MonoBehaviours, so they keep
+        // running long enough to compile shaders and instantiate materials.
+        foreach (var b in warmup.GetComponentsInChildren<MonoBehaviour>(true))
+        {
+            if (b != null) b.enabled = false;
+        }
+
+        // Make sure the warmup's Rigidbody can't physically interact during
+        // its single frame of life (e.g. fall through ground colliders that
+        // happen to extend out to the offscreen position).
+        foreach (var rb in warmup.GetComponentsInChildren<Rigidbody>(true))
+        {
+            if (rb != null) { rb.isKinematic = true; rb.detectCollisions = false; }
+        }
+        // And belt-and-suspenders: turn colliders off too.
+        foreach (var col in warmup.GetComponentsInChildren<Collider>(true))
+        {
+            if (col != null) col.enabled = false;
+        }
+
+        // Live for one render frame so the GPU actually draws the meshes and
+        // compiles the shader variants we'll need at real spawn time.
+        yield return new WaitForEndOfFrame();
+
+        Destroy(warmup);
+
+        if (debugLogs) Debug.Log("EnemySpawner: final boss prefab warmed up.");
     }
 
     private void Update()
@@ -287,15 +348,20 @@ public class EnemySpawner : MonoBehaviour
             if (cf != null) cf.Shake(finalBossShockwaveShake, finalBossShockwaveShakeDuration);
         }
 
-        // Wipe every existing enemy off the arena.
-        for (int i = aliveEnemies.Count - 1; i >= 0; i--)
+        // Snapshot the existing enemies (excluding null/dead) and clear the
+        // list — the boss is added below. The actual wipe happens over the
+        // next few frames in a coroutine so we don't drop a 1k-particle frame
+        // spike right when the player needs to read the boss spawn.
+        List<Enemy> toWipe = new List<Enemy>(aliveEnemies.Count);
+        for (int i = 0; i < aliveEnemies.Count; i++)
         {
-            if (aliveEnemies[i] != null && !aliveEnemies[i].IsDead)
-                aliveEnemies[i].KillSilently();
+            Enemy e = aliveEnemies[i];
+            if (e != null && !e.IsDead) toWipe.Add(e);
         }
         aliveEnemies.Clear();
+        if (toWipe.Count > 0) StartCoroutine(WipeEnemiesGradually(toWipe));
 
-        // Spawn the boss.
+        // Spawn the boss FIRST so it's visible immediately.
         GameObject boss = Instantiate(finalBossPrefab, spawnPos, Quaternion.identity, enemyRoot);
         boss.name = finalBossPrefab.name;
         Enemy bossEnemy = boss.GetComponent<Enemy>() ?? boss.GetComponentInChildren<Enemy>();
@@ -303,7 +369,13 @@ public class EnemySpawner : MonoBehaviour
         // both into the boss instance and the debug log below.
         float hpMul = GetCurrentFinalBossHpMultiplier();
         int   priorKills = finalBossesSpawned;
-        float dmgMul   = 1f + Mathf.Max(0f, finalBossDamageBonusPerKill)      * priorKills;
+        // Exponential per-spawn damage multiplier — stacks multiplicatively
+        // on top of the linear bonus so endless mode ramps faster than the
+        // linear curve alone. extraMul^0 = 1, so the FIRST spawn gets x1
+        // (the linear bonus is also 0 on the first spawn), and subsequent
+        // spawns compound by extraMul each.
+        float extraDmgMul = Mathf.Pow(Mathf.Max(0.01f, finalBossExtraDamageMultiplierPerSpawn), priorKills);
+        float dmgMul   = (1f + Mathf.Max(0f, finalBossDamageBonusPerKill)      * priorKills) * extraDmgMul;
         float projMul  = 1f + Mathf.Max(0f, finalBossProjectileBonusPerKill)  * priorKills;
         float speedMul = 1f + Mathf.Max(0f, finalBossAttackSpeedBonusPerKill) * priorKills;
 
@@ -332,26 +404,58 @@ public class EnemySpawner : MonoBehaviour
 
         if (debugLogs)
             Debug.Log($"EnemySpawner: SlimeGod spawn #{finalBossesSpawned} at t={elapsedTime:F1}s, " +
+                      $"bossesSpawned={bossesSpawned}, baseExp={bossesSpawned + priorKills + 1}, extraExp={priorKills + 1}, " +
                       $"HP×{hpMul:F2}, DMG×{dmgMul:F2}, PROJ×{projMul:F2}, SPEED×{speedMul:F2}, " +
                       $"resulting maxHP={bossEnemy?.MaxHP}.");
     }
 
     /// <summary>
-    /// HP multiplier the NEXT final boss spawn will use. Stacks the regular
-    /// boss multiplier and the final-boss-only extra multiplier and uses the
-    /// SAME (n+1) exponent the regular SlimeKing curve uses, so the FIRST
-    /// final boss already starts at (bossMul × extraMul)^1 instead of 1×.
-    /// With defaults (boss=2, extra=1.5): 1st = 3×, 2nd = 9×, 3rd = 27×, …
+    /// HP multiplier the NEXT final boss spawn will use. The base
+    /// (bossHpMultiplierPerSpawn) curve CONTINUES from the SlimeKing series —
+    /// every regular boss AND every previous final boss spawn pushes the
+    /// exponent up. The extra multiplier only stacks once per final-boss
+    /// spawn so the player sees an obvious jump on each Continue cycle.
+    ///
+    /// Effective exponent on bossHpMultiplierPerSpawn:
+    ///     bossesSpawned + finalBossesSpawned + 1
+    /// Effective exponent on finalBossExtraHpMultiplierPerSpawn:
+    ///     finalBossesSpawned + 1
+    ///
+    /// Example with bossMul=2, extraMul=1.5, default 60s boss interval and
+    /// 8-minute final boss spawn time → ~7 SlimeKings have spawned by then,
+    /// so the 1st final boss gets 2^8 × 1.5 = 384× base HP.
     /// </summary>
     public float GetCurrentFinalBossHpMultiplier() => GetFinalBossHpMultiplierAt(finalBossesSpawned);
 
-    private float GetFinalBossHpMultiplierAt(int priorKills)
+    private float GetFinalBossHpMultiplierAt(int finalPriorKills)
     {
         float baseMul  = Mathf.Max(0.01f, bossHpMultiplierPerSpawn);
         float extraMul = Mathf.Max(0.01f, finalBossExtraHpMultiplierPerSpawn);
-        // priorKills + 1 so spawn #1 already gets the full multiplier (mirrors
-        // GetCurrentBossHpMultiplier()'s bossesSpawned + 1 for SlimeKings).
-        return Mathf.Pow(baseMul * extraMul, priorKills + 1);
+        int   baseExp  = bossesSpawned + finalPriorKills + 1;
+        int   extraExp = finalPriorKills + 1;
+        return Mathf.Pow(baseMul, baseExp) * Mathf.Pow(extraMul, extraExp);
+    }
+
+    /// <summary>
+    /// Spread the mass-kill of existing enemies across multiple frames so the
+    /// boss-spawn frame doesn't take a giant spike from N simultaneous
+    /// KillSilently calls (each spawning particles + scheduling Destroy).
+    /// </summary>
+    private System.Collections.IEnumerator WipeEnemiesGradually(List<Enemy> targets)
+    {
+        int budget = Mathf.Max(1, finalBossSpawnWipeKillsPerFrame);
+        int processed = 0;
+        for (int i = 0; i < targets.Count; i++)
+        {
+            Enemy e = targets[i];
+            if (e == null || e.IsDead) continue;
+            // Skip particles for everything past the first batch — the
+            // arena-wide visual shockwave already sells the wipe; per-enemy
+            // bursts on later batches are redundant cost.
+            e.KillSilently(emitParticles: processed < budget);
+            processed++;
+            if (processed % budget == 0) yield return null;
+        }
     }
 
     /// <summary>

@@ -38,6 +38,8 @@ public class GameSettings : MonoBehaviour
         public float slimeKingAttackSpeedBoostMultiplier;
         [Tooltip("Multiplier on every Crossbow-behavior enemy's projectile damage (incl. SlimeKing's ranged shots).")]
         public float crossbowDamageMultiplier;
+        [Tooltip("Multiplier applied to the final boss (SlimeGod) — feeds into its attackDamageMultiplier so every damaging move it does (dash, beam, arrows, etc.) scales together.")]
+        public float finalBossDamageMultiplier;
     }
 
     [Header("Difficulty Presets")]
@@ -48,14 +50,16 @@ public class GameSettings : MonoBehaviour
         bossHpMultiplierPerSpawn = 1.5f,
         slimeKingAttackSpeedBoostMultiplier = 0.75f,
         crossbowDamageMultiplier = 0.6f,
+        finalBossDamageMultiplier = 0.7f,
     };
     public DifficultyPreset normalPreset = new DifficultyPreset
     {
         regularHpBonusPerMinute = 1f,
         bossSpawnInterval = 60f,
         bossHpMultiplierPerSpawn = 2.5f,
-        slimeKingAttackSpeedBoostMultiplier = 0.35f,
+        slimeKingAttackSpeedBoostMultiplier = 0.3f,
         crossbowDamageMultiplier = 1.0f,
+        finalBossDamageMultiplier = 1.0f,
     };
     public DifficultyPreset hardPreset = new DifficultyPreset
     {
@@ -64,6 +68,7 @@ public class GameSettings : MonoBehaviour
         bossHpMultiplierPerSpawn = 5f,
         slimeKingAttackSpeedBoostMultiplier = 0.1f,
         crossbowDamageMultiplier = 1.5f,
+        finalBossDamageMultiplier = 1.4f,
     };
 
     public DifficultyPreset GetActivePreset()
