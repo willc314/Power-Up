@@ -162,10 +162,11 @@ public class OptionsMenu : MonoBehaviour
 
         if (wasOpen && pauseGameWhileOpen)
         {
-            // Resume gameplay (or whatever timeScale the player was at before
-            // we opened — handles the case where the panel was opened on top
-            // of another modal that had also paused).
-            Time.timeScale = prePauseTimeScale > 0f ? prePauseTimeScale : 1f;
+            // Restore whatever timeScale was active when we opened. If the
+            // OptionsMenu was opened on top of another modal that already
+            // paused (e.g. the PowerUpChoiceUI), prePauseTimeScale is 0 and
+            // we want to STAY paused so the underlying modal still works.
+            Time.timeScale = prePauseTimeScale;
         }
         // Restore music volume only if we were actually showing the panel,
         // so accidental Hide() calls on an already-hidden panel don't underflow.
