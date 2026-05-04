@@ -1222,8 +1222,11 @@ MonoBehaviour:
   finalBossShockwaveRadius: 60
   finalBossShockwaveShake: 0.9
   finalBossShockwaveShakeDuration: 1.2
+  finalBossSpawnWipeKillsPerFrame: 8
+  prewarmFinalBossPrefab: 1
   finalBossRespawnDelayMinutes: 4
-  finalBossExtraHpMultiplierPerSpawn: 4
+  finalBossExtraHpMultiplierPerSpawn: 2
+  finalBossExtraDamageMultiplierPerSpawn: 1.3
   finalBossDamageBonusPerKill: 1
   finalBossProjectileBonusPerKill: 1
   finalBossAttackSpeedBonusPerKill: 1
