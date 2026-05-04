@@ -407,18 +407,33 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dd3156eec293fe849a0dd5438f3e783f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  startDamageReduction: 0.99
+  startDamageReduction: 0.5
   endDamageReduction: 0
-  damageReductionGracePeriod: 40
-  damageReductionDecayTime: 120
+  damageReductionGracePeriod: 15
+  damageReductionDecayTime: 45
   spawnTelegraphTime: 2.5
   spawnTelegraphRadius: 6
   spawnShakeAmplitude: 0.7
   spawnShakeDuration: 0.9
+  spawnGridVolleysEnabled: 1
+  spawnGridVolleyCount: 3
+  spawnGridArrowsPerVolley: 12
+  spawnGridTelegraphTime: 0.9
+  spawnGridIntervalBetween: 0.4
+  spawnGridArrowSpeed: 32
+  spawnGridArrowDamage: 15
+  spawnGridArrowScale: 0.55
+  spawnGridEdgeSpawnRadius: 18
+  spawnGridLeadStep: 0.4
+  bonusVolleysContinuousEnabled: 1
+  bonusVolleyInterval: 10
   interPatternPause: 1.4
+  enragePhaseTime: 480
+  enragedRangedSpamInterval: 0.18
   baseMoveSpeed: 3
   arenaEdgeMargin: 1.5
   playerSpeedPredictionCap: 1
+  playerSpeedSpikeMultiplier: 2
   dashCount: 10
   dashOvershoot: 4
   dashGap: 0.2
@@ -438,7 +453,7 @@ MonoBehaviour:
   dashEndBeamDamagePerSecond: 160
   dashEndBeamHitRadius: 1
   dashEndBeamWidth: 0.6
-  dashEndBeamColor: {r: 1, g: 0.65, b: 0.25, a: 1}
+  dashEndBeamColor: {r: 1, g: 0.55073583, b: 0.035848916, a: 1}
   dashBurnEnabled: 0
   dashBurnDuration: 3
   dashBurnRadius: 1.5
@@ -457,14 +472,14 @@ MonoBehaviour:
   bounceShockwaveEnabled: 1
   bounceShockwaveMaxRadius: 11
   bounceShockwaveDuration: 0.7
-  bounceShockwaveDamage: 50
+  bounceShockwaveDamage: 60
   bounceShockwaveBandWidth: 1.6
   bounceShockwaveColor: {r: 1, g: 0.55, b: 0.1, a: 0.95}
   meleeHomingProjectilePrefab: {fileID: 2241873115812845983, guid: e42e74e2f360725468bab61f4e054cc0, type: 3}
   meleeHomingBarrageStartDelay: 0.5
   meleeHomingBarrageInterval: 1.5
   meleeHomingArrowsPerBarrage: 10
-  meleeHomingArrowDamage: 35
+  meleeHomingArrowDamage: 40
   meleeHomingArrowSpeed: 18
   meleeHomingTurnSpeed: 135
   meleeHomingDuration: 2.5
@@ -477,7 +492,7 @@ MonoBehaviour:
   spamWaveInterval: 0.1
   spamRotationSpeed: 40
   spamChaseSpeed: 2.4
-  spamArrowDamage: 40
+  spamArrowDamage: 60
   spamArrowSpeed: 15
   spamArrowScale: 0.5
   spamArrowSpawnHeight: 0.3
@@ -487,7 +502,7 @@ MonoBehaviour:
   aerialWaveInterval: 0.2
   aerialTelegraphTime: 0.6
   aerialArrowsPerWave: 16
-  aerialArrowDamage: 50
+  aerialArrowDamage: 60
   aerialArrowSpeed: 30
   aerialArrowScale: 0.55
   aerialRingRadius: 10
@@ -498,6 +513,20 @@ MonoBehaviour:
   aerialRandomTargetRadius: 5
   aerialTelegraphExtensionDistance: 40
   aerialTelegraphLineWidth: 0.1
+  aerialTelegraphYOffset: -0.3
+  aerialEscapePunishEnabled: 1
+  aerialEscapeRadius: 8
+  aerialPunishArrowCount: 8
+  aerialPunishMinLead: 0.5
+  aerialPunishMaxLead: 5
+  aerialPunishTelegraphTime: 0.4
+  aerialPunishArrowDamage: 18
+  aerialPunishArrowSpeed: 38
+  aerialPunishArrowScale: 0.55
+  aerialPunishEdgeSpawnRadius: 16
+  aerialPunishFrontArcDegrees: 120
+  aerialPunishTrackSmoothing: 0.25
+  aerialPunishTelegraphSortingOrder: 5
   spamArrowPrefab: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
   aerialArrowPrefab: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
   telegraphLineWidth: 0.18
@@ -545,6 +574,28 @@ MonoBehaviour:
   sweepingBeamShakeAmplitude: 0.7
   sweepingBeamShakeDuration: 0.45
   sweepingBeamDamageTickInterval: 0.1
+  ragePhaseEnabled: 1
+  ragePhaseFirstAt: 120
+  ragePhaseInterval: 60
+  ragePhaseChannelDuration: 1.6
+  ragePhaseDamageTakenMultiplier: 3
+  ragePhaseDamageDealtMultiplier: 2
+  ragePhaseExtraProjectilesPerTrigger: 2
+  ragePhaseColor: {r: 1, g: 0.55, b: 0.1, a: 1}
+  ragePhaseTelegraphRadius: 6
+  ragePhaseGatherRadius: 7
+  ragePhaseGatherParticlesPerBurst: 4
+  ragePhaseGatherSpawnInterval: 0.05
+  ragePhaseGatherParticleSpeed: 12
+  ragePhaseGatherParticleLifetime: 0.55
+  ragePhaseGatherParticleSize: 0.18
+  ragePhaseShakeAmplitude: 0.4
+  ragePhaseShakeDuration: 0.3
+  ragePhaseChannelShakeAmplitude: 0.18
+  ragePhaseChannelShakeInterval: 0.1
+  ragePhaseBurstRadius: 16
+  ragePhaseBurstDuration: 0.55
+  suddenDeathAt: 480
 --- !u!1 &2582265603895067027
 GameObject:
   m_ObjectHideFlags: 0

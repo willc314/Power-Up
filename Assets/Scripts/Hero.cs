@@ -242,6 +242,15 @@ public class Hero : MonoBehaviour
     private Vector3 moveInput;
     private DamageFlash damageFlash;
 
+    /// <summary>
+    /// Read-only access to the hero's WASD input vector (XZ-only). Useful
+    /// for systems that need to know where the player is TRYING to move
+    /// rather than where they're facing — e.g. the SlimeGod's punish volley
+    /// aims its spawn arc along this direction so it isn't fooled by the
+    /// cursor-driven facing direction.
+    /// </summary>
+    public Vector3 MoveInput => moveInput;
+
     private float dashTimer;
     private float dashCooldownTimer;
     private Vector3 dashDirection;

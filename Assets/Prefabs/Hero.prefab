@@ -2835,11 +2835,11 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.001
   attackSpeedIncreasePercent: 0.15
-  attackSpeedDiminishingFactor: 0.85
+  attackSpeedDiminishingFactor: 0.75
   minAttackSpeedIncreasePercent: 0.01
-  postMaxBoostScale: 0.5
+  postMaxBoostScale: 0.75
   extraAttackCount: 0
-  maxExtraAttackCount: 4
+  maxExtraAttackCount: 100
   extraAttackMinSpacing: 0.05
   bowVisualPrefab: {fileID: 131850, guid: 8093457b576f04fbfa270bca1b2553a1, type: 3}
   bowSpawnDistance: 1.2
@@ -2851,7 +2851,7 @@ MonoBehaviour:
   maxLightIntensity: 6
   maxLightRange: 4
   fullChargeTime: 1.5
-  slowdownWhileCharging: 0.4
+  slowdownWhileCharging: 0.75
   minReleaseTime: 0.1
   arrowPrefab: {fileID: 4620594600889568894, guid: 14c125fb9e5d3c04db5be83d0ab292d9, type: 3}
   arrowSpeed: 45

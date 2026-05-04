@@ -60,6 +60,7 @@ public class GameHUD : MonoBehaviour
     // ---- Built UI references ----
     private Canvas canvas;
     private Text timerText;
+    private Text bossTimerText;
     private Text scoreText;
     private Text highScoreText;
     private Text newHighScoreText;
@@ -132,8 +133,26 @@ public class GameHUD : MonoBehaviour
     private void UpdateTimer()
     {
         if (timerText == null) return;
-        float t = gameManager != null ? gameManager.ElapsedTime : 0f;
+        // Use EffectiveSurvivalTime so the displayed run-timer freezes the
+        // moment the SlimeGod spawns and resumes once the boss dies (the
+        // same value drives the survival-points score so HUD and score
+        // stay in lockstep).
+        float t = gameManager != null ? gameManager.EffectiveSurvivalTime : 0f;
         timerText.text = GameManager.FormatTime(t);
+
+        // Boss sub-timer below the main timer — only visible while a
+        // SlimeGod is alive.
+        UpdateBossTimer();
+    }
+
+    private void UpdateBossTimer()
+    {
+        if (bossTimerText == null) return;
+        SlimeGod boss = FindActiveFinalBoss();
+        bool show = boss != null && boss.IsActive;
+        if (bossTimerText.gameObject.activeSelf != show)
+            bossTimerText.gameObject.SetActive(show);
+        if (show) bossTimerText.text = "Boss " + GameManager.FormatTime(boss.LifeTime);
     }
 
     private void UpdateScore()
@@ -304,9 +323,20 @@ public class GameHUD : MonoBehaviour
         {
             int dr = Mathf.RoundToInt(boss.CurrentDamageReduction * 100f);
             string shieldStr = boss.ShieldStacks > 0 ? "  •  Shield ×" + boss.ShieldStacks : "";
+            // Rage phase: show ENRAGED ×N where N is the number of times the
+            // boss has triggered the rage channel. Rendered orange to match
+            // the channel particles.
+            string rageStr = boss.ragePhaseTriggerCount > 0
+                ? "  •  <color=#FF8E1A>ENRAGED ×" + boss.ragePhaseTriggerCount + "</color>"
+                : "";
+            // Sudden Death: appended in red once the fight has dragged on past
+            // the suddenDeathAt threshold (default 8 minutes). Cosmetic.
+            string suddenStr = boss.IsSuddenDeath
+                ? "  •  <color=#FF2D2D>SUDDEN DEATH</color>"
+                : "";
             bossBarLabel.text = dr > 0
-                ? "SLIME GOD  •  " + dr + "% DMG REDUCTION" + shieldStr
-                : "SLIME GOD" + shieldStr;
+                ? "SLIME GOD  •  " + dr + "% DMG REDUCTION" + shieldStr + rageStr + suddenStr
+                : "SLIME GOD" + shieldStr + rageStr + suddenStr;
         }
     }
 
@@ -439,6 +469,26 @@ public class GameHUD : MonoBehaviour
         timerText.text = "00:00";
 
         AddTextOutline(go);
+
+        // Boss sub-timer: smaller, sits right under the main timer. Hidden
+        // until a SlimeGod is alive (UpdateBossTimer toggles visibility).
+        GameObject bossGo = MakeUIObject("BossTimer", parent);
+        RectTransform bossRt = (RectTransform)bossGo.transform;
+        int bossFontSize = Mathf.Max(18, timerFontSize / 2);
+        AnchorTopLeft(bossRt, margin, margin + timerFontSize + 6, 360, bossFontSize + 8);
+
+        bossTimerText = bossGo.AddComponent<Text>();
+        bossTimerText.font = defaultFont;
+        bossTimerText.fontSize = bossFontSize;
+        bossTimerText.color = new Color(1f, 0.55f, 0.45f, 1f);
+        bossTimerText.alignment = TextAnchor.UpperLeft;
+        bossTimerText.fontStyle = FontStyle.Bold;
+        bossTimerText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        bossTimerText.verticalOverflow = VerticalWrapMode.Overflow;
+        bossTimerText.raycastTarget = false;
+        bossTimerText.text = "Boss 00:00";
+        AddTextOutline(bossGo);
+        bossGo.SetActive(false);
     }
 
     private void BuildScore(Transform parent)

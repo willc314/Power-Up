@@ -170,10 +170,23 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>Cleanup hook if the boss is destroyed without OnFinalBossKilled (e.g. scene unload).</summary>
+    /// <summary>
+    /// Cleanup hook if the boss is destroyed without OnFinalBossKilled
+    /// (e.g. scene unload, EnemySpawner's pre-warm instantiate-then-destroy
+    /// pass). Also releases the survival-time freeze so a later REAL boss
+    /// spawn can capture the actual elapsed time at that moment instead of
+    /// being stuck on whatever value the warmup recorded.
+    /// </summary>
     public void NotifyFinalBossDespawned()
     {
         activeFinalBoss = null;
+        // Only release the freeze if no real kill has happened — otherwise
+        // we'd disrupt the post-Continue scoring snapshot.
+        if (!finalBossKilled)
+        {
+            survivalTimeFrozenSet = false;
+            survivalTimeFrozen = 0f;
+        }
     }
 
     /// <summary>

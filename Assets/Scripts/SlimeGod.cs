@@ -39,7 +39,7 @@ public class SlimeGod : MonoBehaviour
     public float damageReductionDecayTime = 120f;
 
     [Header("Spawn Attack")]
-    [Tooltip("Seconds the boss telegraphs before slamming the player to 1 HP.")]
+    [Tooltip("Seconds the boss telegraphs before slamming the player to half max HP.")]
     public float spawnTelegraphTime = 2.5f;
     [Tooltip("Aura/light radius shown during the spawn telegraph.")]
     public float spawnTelegraphRadius = 6f;
@@ -48,9 +48,39 @@ public class SlimeGod : MonoBehaviour
     [Tooltip("Camera shake duration when the spawn attack lands.")]
     public float spawnShakeDuration = 0.9f;
 
+    [Header("Spawn Attack — Bonus Aerial Volleys")]
+    [Tooltip("If true, after the spawn slam resolves the boss fires a series of standard aerial-style volleys (same look as the AerialPattern wave), one after the other.")]
+    public bool spawnGridVolleysEnabled = true;
+    [Tooltip("How many bonus aerial volleys are fired in sequence (during the spawn attack AND alongside every Sweeping Beam attack).")]
+    public int spawnGridVolleyCount = 3;
+    [Tooltip("Arrows per volley — uses the same edge-ring spawn pattern as the main aerial wave.")]
+    public int spawnGridArrowsPerVolley = 12;
+    [Tooltip("Seconds the per-volley telegraph stays visible before the arrows fly.")]
+    public float spawnGridTelegraphTime = 0.9f;
+    [Tooltip("Pause between successive bonus volleys.")]
+    public float spawnGridIntervalBetween = 0.4f;
+    [Tooltip("Travel speed for bonus-volley arrows.")]
+    public float spawnGridArrowSpeed = 32f;
+    [Tooltip("Damage per bonus-volley arrow.")]
+    public float spawnGridArrowDamage = 15f;
+    [Tooltip("Visual scale for bonus-volley arrows. Trigger collider stays full size via ApplyArrowScale.")]
+    public float spawnGridArrowScale = 0.55f;
+    [Tooltip("Edge-spawn ring radius around each volley's predicted target (same role as aerialEdgeSpawnRadius).")]
+    public float spawnGridEdgeSpawnRadius = 18f;
+    [Tooltip("Per-volley prediction lead time (seconds). Volley i uses (i + 0.5) × this — first volley aims close to the player, later volleys lead progressively further ahead.")]
+    public float spawnGridLeadStep = 0.4f;
+    [Tooltip("If true, the boss continuously fires single aerial-style volleys at this interval throughout the fight, EXCEPT while the AerialPattern or SweepingBeamPattern is running (since those already include their own volleys).")]
+    public bool bonusVolleysContinuousEnabled = true;
+    [Tooltip("Seconds between bonus aerial volleys when no main aerial / sweeping-beam pattern is active.")]
+    public float bonusVolleyInterval = 10f;
+
     [Header("Phase Timings")]
     [Tooltip("Pause between sub-patterns (lets the player breathe and read telegraphs).")]
     public float interPatternPause = 1.4f;
+    [Tooltip("Once the boss has been alive this many seconds, MeleePattern stacks a parallel ranged-fire side coroutine on top — the boss attacks with both melee patterns AND ranged volleys at the same time. Default 480 = 8 minutes into the boss fight.")]
+    public float enragePhaseTime = 480f;
+    [Tooltip("Seconds between each spam wave fired by the enraged side coroutine. Lower = denser bullet spam stacked over the dashes/bounces.")]
+    public float enragedRangedSpamInterval = 0.18f;
 
     [Header("Movement")]
     [Tooltip("Default cruising speed in units/sec.")]
@@ -59,6 +89,8 @@ public class SlimeGod : MonoBehaviour
     public float arenaEdgeMargin = 1.5f;
     [Tooltip("The boss's estimated player-velocity (used by dash / bounce / aerial predictions) is capped at player.moveSpeed × this. Keep at 1.0 so a dash spike (~22 u/s) doesn't flatten the prediction off-screen — the prediction only takes the player's natural walk speed into account. Bump above 1 if you DO want the boss to react to dashes.")]
     public float playerSpeedPredictionCap = 1.0f;
+    [Tooltip("If a single frame's raw velocity exceeds (cap × this multiplier) — i.e. the player just dashed — the prediction skips that frame entirely instead of letting the dash partially influence the smoothed estimate. 2.0 = anything more than 2× walk speed is treated as a dash and ignored.")]
+    public float playerSpeedSpikeMultiplier = 2.0f;
 
     // ---- Melee: 10-dash pattern ----
 
@@ -228,6 +260,34 @@ public class SlimeGod : MonoBehaviour
     public float aerialTelegraphExtensionDistance = 40f;
     [Tooltip("Width of the aerial-volley telegraph lines specifically. Lower than the shared telegraphLineWidth so the dense fan of arrow lines doesn't visually overwhelm the screen.")]
     public float aerialTelegraphLineWidth = 0.10f;
+    [Tooltip("Vertical offset added to the aerial-arrow telegraph lines (visual only — arrow spawn / flight y is unchanged). Negative drops the lines closer to the ground so they read as floor markings instead of mid-air streaks.")]
+    public float aerialTelegraphYOffset = -0.3f;
+    [Tooltip("If true, each aerial wave checks how far the player has run from the attack center; if they've fled past aerialEscapeRadius, an EXTRA tracking volley fires that predicts at multiple lead scales so the player can't outrun the whole pattern.")]
+    public bool aerialEscapePunishEnabled = true;
+    [Tooltip("Distance from the boss's takeoff position the player has to leave for the per-wave punishment volley to fire. Below this distance the wave runs as normal with no punishment.")]
+    public float aerialEscapeRadius = 12f;
+    [Tooltip("Number of arrows in the punishment volley. Each one predicts the player's position at a different lead time spread across the min/max range, so the volley fans out along the player's escape vector.")]
+    public int aerialPunishArrowCount = 6;
+    [Tooltip("Smallest prediction lead used by the punishment volley (seconds). Negative leads aim at where the player WAS, 0 aims at NOW.")]
+    public float aerialPunishMinLead = 0f;
+    [Tooltip("Largest prediction lead used by the punishment volley (seconds). With the player's velocity capped by playerSpeedPredictionCap, a 1.2s lead means roughly 6 units in front of them.")]
+    public float aerialPunishMaxLead = 1.2f;
+    [Tooltip("Seconds the punishment-volley telegraph is visible before the arrows fire.")]
+    public float aerialPunishTelegraphTime = 0.4f;
+    [Tooltip("Damage per punishment-volley arrow.")]
+    public float aerialPunishArrowDamage = 18f;
+    [Tooltip("Travel speed for punishment-volley arrows.")]
+    public float aerialPunishArrowSpeed = 38f;
+    [Tooltip("Scale applied to punishment-volley arrows (visual). Trigger collider stays full-size via ApplyArrowScale.")]
+    public float aerialPunishArrowScale = 0.55f;
+    [Tooltip("Edge-spawn ring radius around each punishment-volley target. The arrows come from points around the predicted spot at this distance.")]
+    public float aerialPunishEdgeSpawnRadius = 16f;
+    [Tooltip("Total arc (degrees) the punishment volley fans across, centered on the player's velocity direction. With 120° you get arrows spread from 60° left of the escape vector to 60° right of it — they appear IN FRONT of the player along their escape path. 360 = full ring around the player.")]
+    public float aerialPunishFrontArcDegrees = 120f;
+    [Tooltip("Smoothing time-constant for the punish-volley telegraph tracking. Higher = telegraph slides more lazily toward the new target each frame; lower = snappy. 0 disables smoothing.")]
+    public float aerialPunishTrackSmoothing = 0.15f;
+    [Tooltip("LineRenderer sortingOrder used by the punish-volley telegraphs so they always render ON TOP of the regular aerial wave telegraphs. Higher = drawn later (on top). Default 5 is enough to layer above the standard telegraphs (sortingOrder 0).")]
+    public int aerialPunishTelegraphSortingOrder = 5;
 
     // ---- Projectile prefabs ----
 
@@ -245,7 +305,7 @@ public class SlimeGod : MonoBehaviour
     public Color bounceTelegraphColor = new Color(1f, 0.55f, 0.1f);
     public Color spawnTelegraphColor  = new Color(1f, 0.05f, 0.05f);
     public Color shieldColor          = new Color(0.4f, 0.7f, 1f);
-    public Color aerialTelegraphColor = new Color(0.9f, 0.2f, 0.6f);
+    public Color aerialTelegraphColor = new Color(0.9f, 0.2f, 0.6f, 120f / 255f);
 
     // ---- Constant attack: Death Beam ----
 
@@ -333,6 +393,56 @@ public class SlimeGod : MonoBehaviour
     [Tooltip("Seconds between damage ticks while the player is on the sweeping beam (smaller = smoother but more TakeDamage calls).")]
     public float sweepingBeamDamageTickInterval = 0.1f;
 
+    // ---- Rage Phase: periodic empower channel ----
+
+    [Header("Rage Phase (periodic empower channel)")]
+    [Tooltip("If true, the boss periodically pauses and channels an orange empower that boosts its damage taken AND damage dealt while adding extra projectiles. Lets a low-DPS player end the fight by trading toughness for lethality.")]
+    public bool ragePhaseEnabled = true;
+    [Tooltip("Seconds of boss life before the FIRST rage phase triggers. After this, the phase repeats every Rage Phase Interval seconds.")]
+    public float ragePhaseFirstAt = 120f;
+    [Tooltip("Seconds between subsequent rage phases after the first one.")]
+    public float ragePhaseInterval = 60f;
+    [Tooltip("Seconds the boss spends frozen, gathering orange particles before the multipliers apply. Player gets a free attack window — that's the trade.")]
+    public float ragePhaseChannelDuration = 1.6f;
+    [Tooltip("Multiplier applied to incoming damage at each rage trigger. 3 = damage taken triples each phase (stacks exponentially: 3x, 9x, 27x …).")]
+    public float ragePhaseDamageTakenMultiplier = 3f;
+    [Tooltip("Multiplier applied to outgoing damage at each rage trigger. 2 = boss damage doubles each phase (stacks exponentially with the per-spawn damage scaling).")]
+    public float ragePhaseDamageDealtMultiplier = 2f;
+    [Tooltip("Extra projectiles added to every multi-projectile attack at each rage trigger. Stacks ADDITIVELY across phases (2 → 4 → 6 …).")]
+    public int ragePhaseExtraProjectilesPerTrigger = 2;
+    [Tooltip("Color of the gathering particles + ground ring during the channel.")]
+    public Color ragePhaseColor = new Color(1f, 0.55f, 0.1f, 1f);
+    [Tooltip("Radius of the orange telegraph ring drawn under the boss during the channel.")]
+    public float ragePhaseTelegraphRadius = 6f;
+    [Tooltip("Radius from the boss at which gathering particles spawn (they fly inward toward the boss center).")]
+    public float ragePhaseGatherRadius = 7f;
+    [Tooltip("Particles spawned per gathering tick.")]
+    public int ragePhaseGatherParticlesPerBurst = 4;
+    [Tooltip("Seconds between each gather-burst spawn during the channel.")]
+    public float ragePhaseGatherSpawnInterval = 0.05f;
+    [Tooltip("Speed of each gathering particle as it flies inward toward the boss.")]
+    public float ragePhaseGatherParticleSpeed = 12f;
+    [Tooltip("Lifetime (seconds) of each gathering particle.")]
+    public float ragePhaseGatherParticleLifetime = 0.55f;
+    [Tooltip("Visual size of each gathering particle.")]
+    public float ragePhaseGatherParticleSize = 0.18f;
+    [Tooltip("Camera-shake amplitude when the rage phase resolves and the multipliers apply.")]
+    public float ragePhaseShakeAmplitude = 0.4f;
+    [Tooltip("Camera-shake duration when the rage phase resolves.")]
+    public float ragePhaseShakeDuration = 0.3f;
+    [Tooltip("Peak amplitude of the rolling channel shake (the rumble while the boss is gathering particles). Builds from ~0 at channel start up to this at the climax.")]
+    public float ragePhaseChannelShakeAmplitude = 0.18f;
+    [Tooltip("Seconds between each tick of channel-shake re-trigger. Shorter = denser rumble.")]
+    public float ragePhaseChannelShakeInterval = 0.1f;
+    [Tooltip("Radius of the burst shockwave drawn when the rage phase resolves.")]
+    public float ragePhaseBurstRadius = 16f;
+    [Tooltip("Duration of the burst shockwave drawn when the rage phase resolves.")]
+    public float ragePhaseBurstDuration = 0.55f;
+    [Tooltip("Seconds of boss life before the boss bar starts displaying a red 'SUDDEN DEATH' tag. Purely cosmetic — signals to the player that the fight has gone on much longer than intended.")]
+    public float suddenDeathAt = 480f;
+    /// <summary>True once boss life has exceeded <see cref="suddenDeathAt"/> seconds — drives the red SUDDEN DEATH label on the boss bar.</summary>
+    public bool IsSuddenDeath => IsActive && lifeTimer >= Mathf.Max(0f, suddenDeathAt);
+
     // -------------------- Runtime state --------------------
 
     // ---- Per-spawn stat multipliers (set by EnemySpawner just after Instantiate) ----
@@ -344,16 +454,24 @@ public class SlimeGod : MonoBehaviour
     [System.NonSerialized] public float projectileCountMultiplier = 1f;
     [System.NonSerialized] public float attackSpeedMultiplier    = 1f;
 
+    // Rage-phase runtime state. incomingDamageMultiplier doubles each trigger
+    // and is consumed by ModifyIncomingDamage. extraProjectileCount is added
+    // by ScaledCount on top of the per-spawn projectile scaling.
+    [System.NonSerialized] public float incomingDamageMultiplier = 1f;
+    [System.NonSerialized] public int   extraProjectileCount     = 0;
+    [System.NonSerialized] public int   ragePhaseTriggerCount    = 0;
+
     /// <summary>Multiplies a base damage by the per-spawn damage multiplier.</summary>
     private float ScaledDamage(float baseDamage) => baseDamage * Mathf.Max(0f, attackDamageMultiplier);
 
     /// <summary>
-    /// Rounds a base projectile count by the per-spawn projectile multiplier.
-    /// Always returns at least 1 so a degenerate multiplier doesn't silently
-    /// turn off an attack.
+    /// Rounds a base projectile count by the per-spawn projectile multiplier
+    /// and then adds the additive rage-phase boost. Always returns at least 1
+    /// so a degenerate multiplier doesn't silently turn off an attack.
     /// </summary>
     private int ScaledCount(int baseCount)
-        => Mathf.Max(1, Mathf.RoundToInt(baseCount * Mathf.Max(0.01f, projectileCountMultiplier)));
+        => Mathf.Max(1, Mathf.RoundToInt(baseCount * Mathf.Max(0.01f, projectileCountMultiplier))
+                       + Mathf.Max(0, extraProjectileCount));
 
     /// <summary>
     /// Returns a base interval / cooldown shortened by the per-spawn attack
@@ -389,12 +507,25 @@ public class SlimeGod : MonoBehaviour
     private bool meleeNextIsBounce;     // alternates within Melee mode
     private int  rangedSubpatternIndex; // cycles through Spam → Aerial → Sweeping
     private float spamGroundY;          // world y for spam-arrow spawn (snapshot at SpamPattern start)
+    private float bossGroundY;          // world y the boss spawned on — used for bonus volleys so arrows don't follow the boss into the air mid-bounce
+    private float homeY;                // boss's ground-level y captured at Start (used to drop the boss back to the ground if a rage phase interrupts an aerial pattern mid-air)
 
     private readonly List<LineRenderer> dashTelegraphPool = new List<LineRenderer>();
     private readonly List<GameObject>   bounceTelegraphPool = new List<GameObject>();
+    // Catch-all list for every "BossTelegraph" line spawned by SpawnTelegraphLine
+    // (currently the aerial-volley telegraph fan). Local lifecycles in
+    // AerialPattern still destroy each line on their normal path; this pool
+    // exists so an interrupted pattern (e.g. cancelled by a rage phase) can
+    // ClearAllTelegraphs() and not leak floating world-space lines.
+    private readonly List<LineRenderer> transientTelegraphPool = new List<LineRenderer>();
 
     private Coroutine masterRoutine;
     private Coroutine beamRoutine;
+    private Coroutine rageWatcherRoutine;
+    private Coroutine bonusVolleyRoutine;
+    private bool rageActive;       // true while the channel is in progress
+    private float nextRagePhaseTime; // lifeTimer threshold for the next rage trigger
+    private bool isAerialOrSweepingActive; // suppresses bonus volley coroutine while these patterns run
     private LineRenderer beamLine;
     private bool dying;
     private ArenaGenerator cachedArena;
@@ -406,6 +537,11 @@ public class SlimeGod : MonoBehaviour
         enemy = GetComponent<Enemy>();
         rb = GetComponent<Rigidbody>();
         damageReduction = startDamageReduction;
+
+        // Snapshot the spawn y as the boss's "ground" reference. Used by the
+        // rage phase to pull the boss back down if it was mid-air (in the
+        // aerial pattern's fly-up or wave loop) when the rage triggered.
+        homeY = transform.position.y;
 
         // The world-space bar above the boss is replaced by a screen-bottom bar
         // built in GameHUD, so suppress it here (set BEFORE Enemy.Awake is too
@@ -430,8 +566,20 @@ public class SlimeGod : MonoBehaviour
     {
         if (IsActive) return;
         IsActive = true;
+        // Snapshot the spawn-time ground y. Bounces & aerial fly-ups change
+        // transform.position.y at runtime, but bonus volleys want a stable
+        // ground reference so arrows don't materialize 12 units in the sky
+        // when the boss happens to be mid-bounce when a volley fires.
+        bossGroundY = transform.position.y;
         masterRoutine = StartCoroutine(BossLifecycle());
         beamRoutine   = StartCoroutine(DeathBeamRoutine());
+        bonusVolleyRoutine = StartCoroutine(BonusAerialVolleysRoutine());
+
+        // Periodic rage-phase watcher. Runs in parallel with the master state
+        // machine; when its threshold is hit it stops & restarts master/beam.
+        nextRagePhaseTime = Mathf.Max(0f, ragePhaseFirstAt);
+        if (ragePhaseEnabled)
+            rageWatcherRoutine = StartCoroutine(RagePhaseWatcher());
 
         // Swap arena music for the boss track. Safe if no MusicManager exists.
         if (MusicManager.Instance != null) MusicManager.Instance.PlayBoss();
@@ -462,11 +610,17 @@ public class SlimeGod : MonoBehaviour
             damageReduction = endDamageReduction;
         }
 
-        // Player velocity estimate from frame-to-frame deltas. Clamp the
-        // magnitude to the player's natural walk speed so dashes (which
-        // briefly produce ~4× the walk velocity) don't throw off the boss's
-        // dash / bounce / aerial predictions. The boss aims where the player
-        // is WALKING toward, not where they momentarily teleported via dash.
+        // Player velocity estimate from frame-to-frame deltas.
+        //
+        // Three layers of protection so the prediction never aims wildly:
+        //   1. SPIKE detection: a single frame's raw velocity over
+        //      (cap × playerSpeedSpikeMultiplier) means the player almost
+        //      certainly dashed. Skip the update entirely so the dash
+        //      direction doesn't pollute the smoothed estimate at all.
+        //   2. CAP on the raw value before smoothing.
+        //   3. CAP on the smoothed value after Lerp — defensive, ensures
+        //      estPlayerVel never exceeds capSpeed regardless of how the
+        //      smoothing math composes.
         if (player != null)
         {
             Vector3 cur = player.transform.position;
@@ -477,10 +631,28 @@ public class SlimeGod : MonoBehaviour
 
             float capSpeed = Mathf.Max(0.01f, player.moveSpeed) * Mathf.Max(0.01f, playerSpeedPredictionCap);
             float capSq = capSpeed * capSpeed;
-            if (v.sqrMagnitude > capSq)
-                v = v.normalized * capSpeed;
+            float spikeCap = capSpeed * Mathf.Max(1f, playerSpeedSpikeMultiplier);
+            float spikeSq = spikeCap * spikeCap;
 
-            estPlayerVel = Vector3.Lerp(estPlayerVel, v, 0.4f);
+            if (v.sqrMagnitude > spikeSq)
+            {
+                // Dash-magnitude spike — discard this frame's contribution
+                // entirely. estPlayerVel keeps its previous walking-speed
+                // estimate, so predictions track where the player WAS
+                // walking before the dash.
+            }
+            else
+            {
+                if (v.sqrMagnitude > capSq) v = v.normalized * capSpeed;
+                estPlayerVel = Vector3.Lerp(estPlayerVel, v, 0.4f);
+            }
+
+            // Defensive clamp on the smoothed value — guarantees the
+            // prediction never overshoots the cap regardless of edge cases
+            // (Time.timeScale glitches, mid-frame moveSpeed boosts, etc.).
+            if (estPlayerVel.sqrMagnitude > capSq)
+                estPlayerVel = estPlayerVel.normalized * capSpeed;
+
             prevPlayerPos = cur;
         }
     }
@@ -507,7 +679,11 @@ public class SlimeGod : MonoBehaviour
             return 0f;
         }
 
-        float reduced = incoming * (1f - Mathf.Clamp01(damageReduction));
+        // Rage phase scales damage TAKEN exponentially (×2 per trigger by
+        // default). We multiply BEFORE the damage-reduction curve so the
+        // curve still works as a percentage of the (now amplified) hit.
+        float amplified = incoming * Mathf.Max(0f, incomingDamageMultiplier);
+        float reduced = amplified * (1f - Mathf.Clamp01(damageReduction));
         return Mathf.Max(0f, reduced);
     }
 
@@ -519,6 +695,8 @@ public class SlimeGod : MonoBehaviour
         IsActive = false;
         if (masterRoutine != null) StopCoroutine(masterRoutine);
         if (beamRoutine   != null) StopCoroutine(beamRoutine);
+        if (rageWatcherRoutine != null) StopCoroutine(rageWatcherRoutine);
+        if (bonusVolleyRoutine != null) { StopCoroutine(bonusVolleyRoutine); bonusVolleyRoutine = null; }
         if (beamLine != null) { Destroy(beamLine.gameObject); beamLine = null; }
         ClearAllTelegraphs();
         DestroyShieldVisual();
@@ -552,6 +730,20 @@ public class SlimeGod : MonoBehaviour
         yield return SweepingBeamPattern();
         yield return new WaitForSeconds(interPatternPause);
 
+        // Hand off to the regular pattern loop. Lives in its own method so
+        // the rage phase can stop & restart the master coroutine here without
+        // re-running the spawn slam or the opening sweeping beam.
+        yield return RegularLoop();
+    }
+
+    /// <summary>
+    /// Post-opening pattern rotation. Alternates Melee ↔ Ranged with a brief
+    /// pause between sub-patterns. Extracted so the rage phase can restart
+    /// the master coroutine partway through the fight without redoing the
+    /// spawn attack or the opening sweeping beam.
+    /// </summary>
+    private IEnumerator RegularLoop()
+    {
         bool meleeFirst = Random.value < 0.5f;
         while (IsActive && enemy != null && !enemy.IsDead)
         {
@@ -559,6 +751,240 @@ public class SlimeGod : MonoBehaviour
             else            yield return RangedPattern();
             meleeFirst = !meleeFirst;
             yield return new WaitForSeconds(interPatternPause);
+        }
+    }
+
+    // -------------------- Rage Phase --------------------
+
+    /// <summary>
+    /// Watches lifeTimer and triggers a rage phase at <see cref="ragePhaseFirstAt"/>,
+    /// then every <see cref="ragePhaseInterval"/> seconds. Each trigger:
+    ///   * Stops the master + beam coroutines so the boss is fully paused.
+    ///   * Plays an orange "gathering" particle channel for ragePhaseChannelDuration.
+    ///   * Doubles incoming damage taken AND outgoing damage dealt (stacks
+    ///     exponentially across triggers).
+    ///   * Adds <see cref="ragePhaseExtraProjectilesPerTrigger"/> projectiles to
+    ///     every multi-projectile attack (additive per trigger).
+    ///   * Restarts the master coroutine at <see cref="RegularLoop"/> so the
+    ///     boss doesn't redo its spawn attack / opening sweeping beam, and
+    ///     restarts the death-beam routine.
+    /// Runs as a parallel coroutine so it can pre-empt whichever sub-pattern
+    /// is active when the timer crosses the threshold.
+    /// </summary>
+    private IEnumerator RagePhaseWatcher()
+    {
+        while (IsActive)
+        {
+            // Don't trigger before the spawn slam resolves — the player has to
+            // see the intro first, and stopping the master mid-spawn is bad.
+            if (!SpawnAttackResolved) { yield return null; continue; }
+            if (rageActive)            { yield return null; continue; }
+
+            if (lifeTimer >= nextRagePhaseTime)
+            {
+                yield return TriggerRagePhase();
+                // Schedule the next phase. Anchor to the previous trigger
+                // time + interval so we don't drift forward if the channel
+                // takes longer than expected.
+                nextRagePhaseTime = nextRagePhaseTime + Mathf.Max(1f, ragePhaseInterval);
+            }
+            yield return null;
+        }
+    }
+
+    /// <summary>
+    /// Pause the boss, run the orange-gathering channel, then apply the
+    /// exponential damage-taken / damage-dealt boosts and add extra projectiles.
+    /// </summary>
+    private IEnumerator TriggerRagePhase()
+    {
+        rageActive = true;
+
+        // Stop the master state machine + the constant death beam so the
+        // boss truly pauses. We restart them after the channel resolves.
+        if (masterRoutine != null) { StopCoroutine(masterRoutine); masterRoutine = null; }
+        if (beamRoutine   != null) { StopCoroutine(beamRoutine);   beamRoutine   = null; }
+        if (bonusVolleyRoutine != null) { StopCoroutine(bonusVolleyRoutine); bonusVolleyRoutine = null; }
+        isAerialOrSweepingActive = false;
+        if (beamLine != null) beamLine.enabled = false;
+        ClearAllTelegraphs();
+        // Destroy any in-flight pattern visuals parented to the boss
+        // (mainly the SweepingBeam line) — without this, an interrupted
+        // sweep would leave a stale beam glued to the boss for the rest of
+        // the fight.
+        for (int i = transform.childCount - 1; i >= 0; i--)
+        {
+            var child = transform.GetChild(i);
+            if (child == null) continue;
+            string n = child.name;
+            if (n == "SweepingBeam" || n == "BossTelegraph") Destroy(child.gameObject);
+        }
+
+        // Freeze in place. Velocity is zeroed every frame in the channel
+        // loop too, in case the rigidbody gets nudged by colliders.
+        if (rb != null) rb.velocity = Vector3.zero;
+
+        // Telegraph ring + pulsing aura light.
+        GameObject ring = MakeGroundRing(transform.position, ragePhaseTelegraphRadius, ragePhaseColor);
+        ring.transform.SetParent(transform, true);
+
+        GameObject auraGo = new GameObject("RageAura");
+        auraGo.transform.SetParent(transform, false);
+        auraGo.transform.localPosition = Vector3.up * 1.5f;
+        var auraLight = auraGo.AddComponent<Light>();
+        auraLight.type = LightType.Point;
+        auraLight.color = ragePhaseColor;
+        auraLight.intensity = 4f;
+        auraLight.range = 14f;
+        auraLight.shadows = LightShadows.None;
+
+        float duration = Mathf.Max(0.05f, ragePhaseChannelDuration);
+        float t = 0f;
+        float gatherTimer = 0f;
+        float shakeTimer = 0f;
+        // Initial bump on channel start so the player feels the rage kicking in.
+        ShakeCamera(ragePhaseChannelShakeAmplitude * 0.6f, Mathf.Max(0.05f, ragePhaseChannelShakeInterval * 1.5f));
+        while (t < duration && this != null)
+        {
+            float dt = Time.deltaTime;
+            t += dt;
+            gatherTimer += dt;
+            shakeTimer += dt;
+            float k = t / duration;
+
+            if (rb != null) rb.velocity = Vector3.zero;
+            auraLight.intensity = Mathf.Lerp(4f, 18f, k * k);
+            // Ring pulses inward then back so it doesn't read as a static circle.
+            float ringScale = Mathf.Lerp(1.0f, 0.6f + 0.15f * Mathf.Sin(t * 12f), k);
+            ring.transform.localScale = Vector3.one * ringScale;
+
+            if (gatherTimer >= Mathf.Max(0.01f, ragePhaseGatherSpawnInterval))
+            {
+                gatherTimer = 0f;
+                EmitGatherBurst();
+            }
+
+            // Rolling channel shake — builds up over the channel so the
+            // tension grows toward the release. Each tick fires a short
+            // overlapping shake; CameraFollow.Shake already merges them
+            // intelligently (peak amplitude wins).
+            if (shakeTimer >= Mathf.Max(0.02f, ragePhaseChannelShakeInterval))
+            {
+                shakeTimer = 0f;
+                float amp = ragePhaseChannelShakeAmplitude * Mathf.Lerp(0.35f, 1f, k);
+                ShakeCamera(amp, Mathf.Max(0.05f, ragePhaseChannelShakeInterval * 1.5f));
+            }
+            yield return null;
+        }
+
+        // Apply the boost. Stacks exponentially because we MULTIPLY the
+        // running multipliers by the per-trigger factor — each phase doubles
+        // (×2, then ×4, then ×8, …) by default.
+        ragePhaseTriggerCount++;
+        attackDamageMultiplier  *= Mathf.Max(0.01f, ragePhaseDamageDealtMultiplier);
+        incomingDamageMultiplier *= Mathf.Max(0.01f, ragePhaseDamageTakenMultiplier);
+        extraProjectileCount    += Mathf.Max(0, ragePhaseExtraProjectilesPerTrigger);
+
+        // Resolve burst: orange shockwave + heavy particle burst + camera shake.
+        BossShockwave.Spawn(transform.position,
+                            Mathf.Max(1f, ragePhaseBurstRadius),
+                            ragePhaseColor,
+                            Mathf.Max(0.05f, ragePhaseBurstDuration));
+        HitParticles.EmitBurst(transform.position + Vector3.up * 1.0f,
+            Vector3.up,
+            count: 32, speed: 11f, lifetime: 0.7f, size: 0.22f,
+            color: ragePhaseColor, spreadAngle: 80f, useGravity: false);
+        ShakeCamera(ragePhaseShakeAmplitude, ragePhaseShakeDuration);
+
+        if (ring    != null) Destroy(ring);
+        if (auraGo  != null) Destroy(auraGo);
+
+        // If the rage interrupted an aerial pattern, the boss could be in
+        // the air (fly-up phase, between waves, or mid-fall). Drop it back
+        // to homeY before resuming so the next pattern doesn't dash / bounce
+        // / spam from a floating altitude.
+        if (transform.position.y > homeY + 0.5f && IsActive && enemy != null && !enemy.IsDead)
+            yield return FallToHomeY();
+
+        // Re-enable the running fight. RegularLoop is safe to start mid-fight
+        // (no spawn slam, no opening beam); the death-beam routine waits one
+        // frame internally so it picks up cleanly.
+        if (IsActive && enemy != null && !enemy.IsDead)
+        {
+            masterRoutine = StartCoroutine(RegularLoop());
+            beamRoutine   = StartCoroutine(DeathBeamRoutine());
+            if (bonusVolleyRoutine == null)
+                bonusVolleyRoutine = StartCoroutine(BonusAerialVolleysRoutine());
+        }
+
+        rageActive = false;
+    }
+
+    /// <summary>
+    /// Animate the boss falling from its current position back down to homeY
+    /// (the ground level captured at Awake). Eases with a quadratic so the
+    /// landing feels weighty. XZ is held; only y changes. Caps the time so a
+    /// huge altitude doesn't stretch into a slow drop.
+    /// </summary>
+    private IEnumerator FallToHomeY()
+    {
+        if (rb != null) rb.velocity = Vector3.zero;
+        Vector3 from = transform.position;
+        Vector3 to = new Vector3(from.x, homeY, from.z);
+        // Time scales with altitude (taller drop = a bit longer fall),
+        // capped so it never drags. ~0.4s for typical aerialFlyUpHeight.
+        float dist = Mathf.Max(0f, from.y - homeY);
+        float fall = Mathf.Clamp(dist / 32f + 0.18f, 0.18f, 0.55f);
+        float t = 0f;
+        while (t < fall && this != null)
+        {
+            t += Time.deltaTime;
+            float k = Mathf.Clamp01(t / fall);
+            // Ease-in (k*k) so the boss accelerates downward — reads as gravity.
+            Vector3 p = Vector3.Lerp(from, to, k * k);
+            Vector3 clamped = ClampToArena(p); clamped.y = p.y;
+            transform.position = clamped;
+            if (rb != null) rb.velocity = Vector3.zero;
+            yield return null;
+        }
+        transform.position = ClampToArena(to);
+        if (rb != null) rb.velocity = Vector3.zero;
+
+        // Tiny landing punctuation: light shake + a smattering of orange
+        // particles so the drop reads as a deliberate beat instead of a teleport.
+        ShakeCamera(0.18f, 0.16f);
+        HitParticles.EmitBurst(to + Vector3.up * 0.1f, Vector3.up,
+            count: 14, speed: 6f, lifetime: 0.45f, size: 0.18f,
+            color: ragePhaseColor, spreadAngle: 80f, useGravity: true);
+    }
+
+    /// <summary>
+    /// Spawn one tick of the gathering effect: small particles spawn at random
+    /// positions on a ring around the boss and fly inward toward the boss
+    /// center. Uses HitParticles with a tight spreadAngle + useGravity=false
+    /// so the particles read as streaks pulled toward the boss.
+    /// </summary>
+    private void EmitGatherBurst()
+    {
+        int count = Mathf.Max(1, ragePhaseGatherParticlesPerBurst);
+        Vector3 center = transform.position + Vector3.up * 1.0f;
+        float radius = Mathf.Max(0.5f, ragePhaseGatherRadius);
+        for (int i = 0; i < count; i++)
+        {
+            float ang = Random.Range(0f, 360f) * Mathf.Deg2Rad;
+            Vector3 offset = new Vector3(Mathf.Cos(ang), 0f, Mathf.Sin(ang)) * radius;
+            offset.y = Random.Range(-0.3f, 1.6f);
+            Vector3 spawnPos = center + offset;
+            Vector3 inward = (center - spawnPos);
+            if (inward.sqrMagnitude < 0.0001f) inward = Vector3.up;
+            HitParticles.EmitBurst(spawnPos, inward.normalized,
+                count: 1,
+                speed: ragePhaseGatherParticleSpeed,
+                lifetime: ragePhaseGatherParticleLifetime,
+                size: ragePhaseGatherParticleSize,
+                color: ragePhaseColor,
+                spreadAngle: 5f,
+                useGravity: false);
         }
     }
 
@@ -604,6 +1030,131 @@ public class SlimeGod : MonoBehaviour
 
         if (auraGo != null) Destroy(auraGo);
         if (lightGo != null) Destroy(lightGo);
+
+        // After the slam, follow up with telegraphed grid arrow volleys.
+        // This is part of the spawn-attack sequence — only runs once on
+        // initial boss spawn (and again on subsequent Continue spawns
+        // because BossLifecycle calls SpawnAttack each time).
+        if (spawnGridVolleysEnabled && aerialArrowPrefab != null && spawnGridVolleyCount > 0)
+            yield return SpawnAttackGridVolleys();
+    }
+
+    /// <summary>
+    /// Continuous side coroutine that fires single uniform aerial-style
+    /// volleys throughout the fight on a fixed interval. Suppressed while
+    /// AerialPattern or SweepingBeamPattern is running (those patterns
+    /// already include their own bonus volleys, so we'd double up).
+    /// </summary>
+    private IEnumerator BonusAerialVolleysRoutine()
+    {
+        // Wait one cycle before the FIRST bonus volley fires so the spawn
+        // attack and its post-slam volleys finish first.
+        float waitTimer = 0f;
+        while (IsActive)
+        {
+            float dt = Time.deltaTime;
+            waitTimer += dt;
+
+            if (!bonusVolleysContinuousEnabled
+                || aerialArrowPrefab == null
+                || !SpawnAttackResolved
+                || isAerialOrSweepingActive)
+            {
+                // Don't accrue interval time while suppressed — we want a
+                // clean N-second gap from when the suppression ENDS, not
+                // potentially firing immediately because the timer expired
+                // during the AerialPattern.
+                if (isAerialOrSweepingActive) waitTimer = 0f;
+                yield return null;
+                continue;
+            }
+
+            if (waitTimer >= Mathf.Max(0.5f, bonusVolleyInterval))
+            {
+                waitTimer = 0f;
+                yield return SpawnAttackOneGridVolley(0);
+            }
+            else
+            {
+                yield return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fires <see cref="spawnGridVolleyCount"/> sequential aerial-style
+    /// arrow volleys. Each volley uses the same predict-ahead + edge-ring
+    /// spawn pattern as the main AerialPattern wave, so the player gets
+    /// three back-to-back bonus volleys after the spawn slam (and again
+    /// alongside every Sweeping Beam attack).
+    /// </summary>
+    private IEnumerator SpawnAttackGridVolleys()
+    {
+        int volleys = Mathf.Max(0, spawnGridVolleyCount);
+        for (int v = 0; v < volleys; v++)
+        {
+            yield return SpawnAttackOneGridVolley(v);
+            if (v < volleys - 1)
+                yield return new WaitForSeconds(Mathf.Max(0f, spawnGridIntervalBetween));
+            if (!IsActive) yield break;
+        }
+    }
+
+    private IEnumerator SpawnAttackOneGridVolley(int volleyIndex)
+    {
+        if (aerialArrowPrefab == null) yield break;
+
+        // Each volley picks a slightly different lead so volley 0 aims at
+        // ~now, volley 1 a bit ahead, volley 2 further ahead — gives the
+        // three volleys distinct feel without any rigid "grid" math.
+        float lead = (volleyIndex + 0.5f) * Mathf.Max(0f, spawnGridLeadStep);
+        Vector3 predicted = PredictPlayerPosition(lead);
+
+        // Use the snapshotted ground y, NOT transform.position.y. The boss
+        // can be mid-bounce / mid-aerial when a periodic bonus volley
+        // fires; without this anchor the arrows would spawn high in the
+        // sky and arc down past the player.
+        float arrowY = bossGroundY + aerialArrowSpawnHeight;
+        Vector3 predictedAtArrowY = new Vector3(predicted.x, arrowY, predicted.z);
+
+        int count = ScaledCount(Mathf.Max(1, spawnGridArrowsPerVolley));
+        List<Vector3> spawnPoints = new List<Vector3>(count);
+        List<Vector3> targets     = new List<Vector3>(count);
+        List<LineRenderer> tels   = new List<LineRenderer>(count);
+
+        for (int a = 0; a < count; a++)
+        {
+            float angle = (360f / count) * a;
+            float rad = angle * Mathf.Deg2Rad;
+            Vector3 offset = new Vector3(Mathf.Cos(rad), 0f, Mathf.Sin(rad)) * spawnGridEdgeSpawnRadius;
+            Vector3 from = predictedAtArrowY + offset;
+            from.y = arrowY;
+
+            spawnPoints.Add(from);
+            targets.Add(predictedAtArrowY);
+
+            Vector3 telDir = predictedAtArrowY - from;
+            Vector3 telEnd = predictedAtArrowY;
+            if (telDir.sqrMagnitude > 0.0001f && aerialTelegraphExtensionDistance > 0f)
+                telEnd = predictedAtArrowY + telDir.normalized * aerialTelegraphExtensionDistance;
+            LineRenderer lr = SpawnAerialTelegraph(from, telEnd, aerialTelegraphColor);
+            tels.Add(lr);
+        }
+
+        yield return new WaitForSeconds(Mathf.Max(0.05f, spawnGridTelegraphTime));
+
+        for (int i = 0; i < spawnPoints.Count; i++)
+        {
+            Vector3 dir = (targets[i] - spawnPoints[i]);
+            if (dir.sqrMagnitude < 0.0001f) continue;
+            dir.Normalize();
+            EnemyProjectile p = Instantiate(aerialArrowPrefab, spawnPoints[i], Quaternion.LookRotation(dir, Vector3.up));
+            if (spawnGridArrowSpeed > 0f) p.speed = spawnGridArrowSpeed;
+            ApplyArrowScale(p, spawnGridArrowScale);
+            p.Launch(dir, ScaledDamage(spawnGridArrowDamage));
+        }
+
+        for (int k = 0; k < tels.Count; k++) if (tels[k] != null) Destroy(tels[k].gameObject);
     }
 
     // -------------------- Melee mode --------------------
@@ -618,23 +1169,63 @@ public class SlimeGod : MonoBehaviour
         if (meleeHomingProjectilePrefab != null)
             barrage = StartCoroutine(MeleeHomingBarrage());
 
+        // Enrage phase: after enragePhaseTime seconds of boss life, melee
+        // and ranged stack on top of each other. We start a side-fire
+        // coroutine that keeps spitting spam waves while the dash / bounce
+        // pattern runs underneath it.
+        Coroutine enragedFire = null;
+        if (lifeTimer >= enragePhaseTime && spamArrowPrefab != null)
+            enragedFire = StartCoroutine(EnragedRangedSideFire());
+
         if (meleeNextIsBounce) yield return BouncePattern();
         else                   yield return DashPattern();
         meleeNextIsBounce = !meleeNextIsBounce;
 
-        if (barrage != null) StopCoroutine(barrage);
+        if (barrage     != null) StopCoroutine(barrage);
+        if (enragedFire != null) StopCoroutine(enragedFire);
+    }
+
+    /// <summary>
+    /// Side coroutine started during enraged melee phases. Continuously
+    /// fires the rotating 8-direction spam wave from the boss's current
+    /// position so ranged pressure stacks on top of the melee pattern.
+    /// Doesn't move the boss — the melee sub-pattern owns transform writes.
+    /// </summary>
+    private IEnumerator EnragedRangedSideFire()
+    {
+        // FireSpamWave reads spamGroundY for the y of the spawn ring. Keep
+        // it tracking the boss so even airborne bounce moments still spawn
+        // arrows at the boss's current ground level.
+        float fanAngle = 0f;
+        float waveTimer = 0f;
+        while (IsActive)
+        {
+            spamGroundY = transform.position.y;
+            float dt = Time.deltaTime;
+            waveTimer -= dt;
+            fanAngle  += spamRotationSpeed * dt;
+            if (waveTimer <= 0f)
+            {
+                FireSpamWave(fanAngle);
+                waveTimer = Mathf.Max(0.05f, ScaledInterval(enragedRangedSpamInterval));
+            }
+            yield return null;
+        }
     }
 
     /// <summary>
     /// Parallel side-routine that fires periodic ring-fans of homing
     /// EnemyProjectiles while the boss is mid-dashing or mid-bouncing. Stops
-    /// as soon as MeleePattern stops it (or when IsActive flips false).
+    /// as soon as MeleePattern stops it (or when IsActive flips false). Also
+    /// self-terminates when a rage phase begins so the boss is fully paused
+    /// during the channel; a fresh MeleePattern after the channel will spin
+    /// up a new barrage.
     /// </summary>
     private IEnumerator MeleeHomingBarrage()
     {
         if (meleeHomingBarrageStartDelay > 0f)
             yield return new WaitForSeconds(meleeHomingBarrageStartDelay);
-        while (IsActive)
+        while (IsActive && !rageActive)
         {
             FireHomingBarrage();
             yield return new WaitForSeconds(Mathf.Max(0.05f, ScaledInterval(meleeHomingBarrageInterval)));
@@ -1093,6 +1684,9 @@ public class SlimeGod : MonoBehaviour
 
     private IEnumerator AerialPattern()
     {
+        // Suppress the continuous bonus volleys while this pattern runs —
+        // it already fires its own waves so doubling them up is overkill.
+        isAerialOrSweepingActive = true;
         if (player == null) player = Hero.Instance;
         // Fly up. Snapshot the (clamped) ground position so the boss never
         // takes off from outside the arena on a degenerate spawn.
@@ -1115,6 +1709,20 @@ public class SlimeGod : MonoBehaviour
         // Run waves.
         for (int i = 0; i < aerialWaveCount; i++)
         {
+            // Escape-punish (parallel): if the player has fled past
+            // aerialEscapeRadius from the takeoff center when this wave
+            // starts, kick off an extra punish volley as a SIDE coroutine —
+            // it runs ALONGSIDE this wave's telegraph + fire instead of
+            // gating the wave loop. The main uniform / random alternation
+            // continues unchanged underneath.
+            if (aerialEscapePunishEnabled && player != null && !player.IsDead)
+            {
+                Vector3 toPlayerFromCenter = player.transform.position - ground;
+                toPlayerFromCenter.y = 0f;
+                if (toPlayerFromCenter.sqrMagnitude > aerialEscapeRadius * aerialEscapeRadius)
+                    StartCoroutine(FireAerialPunishVolley(ground.y));
+            }
+
             // Every other wave (odd indices) becomes a per-arrow scatter:
             // each arrow rolls its OWN random target inside the radius around
             // the player. Even waves use the predict-ahead lead and share a
@@ -1200,7 +1808,7 @@ public class SlimeGod : MonoBehaviour
                 Vector3 telEnd = perArrowTarget;
                 if (telDir.sqrMagnitude > 0.0001f && aerialTelegraphExtensionDistance > 0f)
                     telEnd = perArrowTarget + telDir.normalized * aerialTelegraphExtensionDistance;
-                LineRenderer lr = SpawnTelegraphLine(from, telEnd, aerialTelegraphColor, aerialTelegraphLineWidth);
+                LineRenderer lr = SpawnAerialTelegraph(from, telEnd, aerialTelegraphColor);
                 tels.Add(lr);
             }
 
@@ -1245,6 +1853,166 @@ public class SlimeGod : MonoBehaviour
             yield return null;
         }
         transform.position = toGround;
+        isAerialOrSweepingActive = false;
+    }
+
+    /// <summary>
+    /// Returns a unit vector pointing in the player's escape direction for
+    /// the punish volley. Source priority:
+    ///   1. Hero.MoveInput — raw WASD direction. This is the cleanest
+    ///      "where they're trying to go" signal, completely independent of
+    ///      the cursor-driven facing direction. No smoothing lag either.
+    ///   2. estPlayerVel.normalized — smoothed actual velocity. Used when
+    ///      the player isn't currently pressing a movement key but is still
+    ///      coasting along.
+    ///   3. Boss → player direction.
+    ///   4. World forward.
+    /// </summary>
+    private Vector3 ComputePlayerForwardForPunish(Vector3 playerCenter)
+    {
+        if (player != null)
+        {
+            Vector3 input = player.MoveInput;
+            input.y = 0f;
+            if (input.sqrMagnitude > 0.0001f) return input.normalized;
+        }
+        Vector3 v = estPlayerVel; v.y = 0f;
+        if (v.sqrMagnitude > 0.0001f) return v.normalized;
+        Vector3 fromBoss = playerCenter - transform.position; fromBoss.y = 0f;
+        if (fromBoss.sqrMagnitude > 0.0001f) return fromBoss.normalized;
+        return Vector3.forward;
+    }
+
+    /// <summary>
+    /// Helper that wraps SpawnTelegraphLine for any aerial-style telegraph
+    /// (main wave, escape-punish volley, spawn grid volley). Shifts both
+    /// endpoints down by aerialTelegraphYOffset so the telegraph lines sit
+    /// closer to the ground than the actual arrow flight path.
+    /// </summary>
+    private LineRenderer SpawnAerialTelegraph(Vector3 from, Vector3 to, Color color)
+    {
+        Vector3 yShift = Vector3.up * aerialTelegraphYOffset;
+        return SpawnTelegraphLine(from + yShift, to + yShift, color, aerialTelegraphLineWidth);
+    }
+
+    /// <summary>
+    /// Punishment volley fired when the player escapes the aerial attack
+    /// area. Each arrow uses a different player-velocity lead (from
+    /// aerialPunishMinLead to aerialPunishMaxLead) so the volley fans out
+    /// across "where the player is now" through "where they'll be in 1+
+    /// seconds", making it hard to outrun on a single straight-line escape
+    /// vector.
+    /// </summary>
+    private IEnumerator FireAerialPunishVolley(float groundY)
+    {
+        if (aerialArrowPrefab == null) yield break;
+        int count = ScaledCount(Mathf.Max(1, aerialPunishArrowCount));
+        float arrowY = groundY + aerialArrowSpawnHeight;
+
+        // Live telegraph + smoothed target / spawn caches per arrow.
+        Vector3[] smoothedTargets = new Vector3[count];
+        Vector3[] smoothedFroms   = new Vector3[count];
+        LineRenderer[] tels       = new LineRenderer[count];
+
+        // Snapshot the player's EXIT MOMENT once: their position and
+        // velocity direction when the volley starts. The spawn arc is
+        // computed from these snapshots and FROZEN — the spawn points
+        // don't move during the telegraph window. Only the targets
+        // continue tracking the player as they move.
+        Vector3 exitPlayerPos = (player != null && !player.IsDead)
+            ? player.transform.position
+            : transform.position;
+        Vector3 exitForward = ComputePlayerForwardForPunish(exitPlayerPos);
+        float spreadHalf = Mathf.Max(0f, aerialPunishFrontArcDegrees) * 0.5f;
+        for (int a = 0; a < count; a++)
+        {
+            float t01  = count == 1 ? 0.5f : (float)a / (count - 1);
+            float lead = Mathf.Lerp(aerialPunishMinLead, aerialPunishMaxLead, t01);
+            Vector3 predicted = PredictPlayerPosition(lead);
+            Vector3 target = new Vector3(predicted.x, arrowY, predicted.z);
+
+            // Spawn point: fixed for this volley. Sits on the front-facing
+            // arc anchored at the EXIT point with the EXIT velocity
+            // direction. Each arrow rotates the exit forward by an angle
+            // lerped from -spreadHalf to +spreadHalf.
+            float angleDeg = count == 1 ? 0f : Mathf.Lerp(-spreadHalf, spreadHalf, t01);
+            Vector3 spawnDir = Quaternion.AngleAxis(angleDeg, Vector3.up) * exitForward;
+            Vector3 from = new Vector3(
+                exitPlayerPos.x + spawnDir.x * aerialPunishEdgeSpawnRadius,
+                arrowY,
+                exitPlayerPos.z + spawnDir.z * aerialPunishEdgeSpawnRadius);
+            smoothedTargets[a] = target;
+            smoothedFroms[a]   = from;
+
+            // Punish telegraphs render with a higher sortingOrder so they
+            // sit ON TOP of the regular aerial wave telegraphs (which use
+            // the default sortingOrder of 0).
+            LineRenderer lr = SpawnAerialTelegraph(from, target, aerialTelegraphColor);
+            if (lr != null) lr.sortingOrder = aerialPunishTelegraphSortingOrder;
+            tels[a] = lr;
+        }
+
+        Vector3 yShift = Vector3.up * aerialTelegraphYOffset;
+        float t = 0f;
+        float duration = Mathf.Max(0.01f, aerialPunishTelegraphTime);
+        while (t < duration && IsActive)
+        {
+            float dt = Time.deltaTime;
+            t += dt;
+            // Exponential smoothing factor — framerate-independent so the
+            // visible easing rate is the same at 30 / 60 / 144 fps.
+            float tau = Mathf.Max(0.0001f, aerialPunishTrackSmoothing);
+            float smoothK = aerialPunishTrackSmoothing > 0f
+                ? 1f - Mathf.Exp(-dt / tau)
+                : 1f;
+
+            // Spawn points (smoothedFroms[a]) are FROZEN at the exit-moment
+            // snapshot — only the targets continue tracking the player as
+            // they keep running. This anchors the volley's source to the
+            // moment they crossed the safe-radius boundary.
+            for (int a = 0; a < count; a++)
+            {
+                float t01  = count == 1 ? 0.5f : (float)a / (count - 1);
+                float lead = Mathf.Lerp(aerialPunishMinLead, aerialPunishMaxLead, t01);
+                Vector3 predicted = PredictPlayerPosition(lead);
+                Vector3 target = new Vector3(predicted.x, arrowY, predicted.z);
+
+                // Smooth ONLY the target toward the latest prediction; leave
+                // smoothedFroms[a] untouched so the spawn point stays locked.
+                smoothedTargets[a] = Vector3.Lerp(smoothedTargets[a], target, smoothK);
+
+                Vector3 sFrom   = smoothedFroms[a];
+                Vector3 sTarget = smoothedTargets[a];
+                Vector3 telDir  = sTarget - sFrom;
+                Vector3 telEnd  = sTarget;
+                if (telDir.sqrMagnitude > 0.0001f && aerialTelegraphExtensionDistance > 0f)
+                    telEnd = sTarget + telDir.normalized * aerialTelegraphExtensionDistance;
+
+                LineRenderer lr = tels[a];
+                if (lr != null)
+                {
+                    lr.SetPosition(0, sFrom + yShift);
+                    lr.SetPosition(1, telEnd + yShift);
+                }
+            }
+
+            yield return null;
+        }
+
+        for (int a = 0; a < count; a++)
+        {
+            Vector3 from = smoothedFroms[a];
+            Vector3 to   = smoothedTargets[a];
+            Vector3 dir = (to - from);
+            if (dir.sqrMagnitude < 0.0001f) continue;
+            dir.Normalize();
+            EnemyProjectile p = Instantiate(aerialArrowPrefab, from, Quaternion.LookRotation(dir, Vector3.up));
+            if (aerialPunishArrowSpeed > 0f) p.speed = aerialPunishArrowSpeed;
+            ApplyArrowScale(p, aerialPunishArrowScale);
+            p.Launch(dir, ScaledDamage(aerialPunishArrowDamage));
+        }
+
+        for (int k = 0; k < tels.Length; k++) if (tels[k] != null) Destroy(tels[k].gameObject);
     }
 
     // -------------------- Ranged sub-pattern: Sweeping Death Beam --------------------
@@ -1260,8 +2028,21 @@ public class SlimeGod : MonoBehaviour
     /// </summary>
     private IEnumerator SweepingBeamPattern()
     {
+        // Suppress the continuous bonus volleys while this pattern runs —
+        // SweepingBeamPattern already starts its own grid volley coroutine
+        // in parallel.
+        isAerialOrSweepingActive = true;
         if (player == null) player = Hero.Instance;
         rb.velocity = Vector3.zero;
+
+        // Fire the telegraphed grid volleys in PARALLEL with the sweeping
+        // beam so every "big laser" attack ships with the wall-of-arrows
+        // accompaniment, not just the spawn-attack one. The grid coroutine
+        // self-cleans (telegraphs + arrows fire and despawn naturally), so
+        // we deliberately don't store/Stop the handle — let it run its
+        // course independently.
+        if (spawnGridVolleysEnabled && aerialArrowPrefab != null && spawnGridVolleyCount > 0)
+            StartCoroutine(SpawnAttackGridVolleys());
 
         // Dedicated LineRenderer for this attack so it doesn't fight with the
         // constant Death Beam routine for the same line.
@@ -1303,7 +2084,7 @@ public class SlimeGod : MonoBehaviour
             lr.SetPosition(0, origin);
             lr.SetPosition(1, endpoint);
             yield return null;
-            if (!IsActive) { Destroy(go); yield break; }
+            if (!IsActive) { Destroy(go); isAerialOrSweepingActive = false; yield break; }
         }
 
         // ---- Lock phase ----
@@ -1327,7 +2108,7 @@ public class SlimeGod : MonoBehaviour
             lr.SetPosition(0, origin);
             lr.SetPosition(1, origin + currentDir * sweepingBeamRange);
             yield return null;
-            if (!IsActive) { Destroy(go); yield break; }
+            if (!IsActive) { Destroy(go); isAerialOrSweepingActive = false; yield break; }
         }
 
         // ---- Fire phase ----
@@ -1442,12 +2223,14 @@ public class SlimeGod : MonoBehaviour
             {
                 if (sweepVisual != null) Destroy(sweepVisual);
                 Destroy(go);
+                isAerialOrSweepingActive = false;
                 yield break;
             }
         }
 
         if (sweepVisual != null) Destroy(sweepVisual);
         Destroy(go);
+        isAerialOrSweepingActive = false;
     }
 
     // -------------------- Constant attack: Death Beam --------------------
@@ -1767,6 +2550,10 @@ public class SlimeGod : MonoBehaviour
         lr.receiveShadows = false;
         lr.SetPosition(0, a);
         lr.SetPosition(1, b);
+        // Register so ClearAllTelegraphs() catches orphans from cancelled
+        // patterns (the aerial volley's telegraph fan otherwise floats
+        // permanently if the master coroutine is stopped mid-telegraph).
+        transientTelegraphPool.Add(lr);
         return lr;
     }
 
@@ -1808,10 +2595,18 @@ public class SlimeGod : MonoBehaviour
         bounceTelegraphPool.Clear();
     }
 
+    private void ClearTransientTelegraphs()
+    {
+        for (int i = 0; i < transientTelegraphPool.Count; i++)
+            if (transientTelegraphPool[i] != null) Destroy(transientTelegraphPool[i].gameObject);
+        transientTelegraphPool.Clear();
+    }
+
     private void ClearAllTelegraphs()
     {
         ClearDashTelegraphs();
         ClearBounceTelegraphs();
+        ClearTransientTelegraphs();
     }
 
     private void EnsureShieldVisual()

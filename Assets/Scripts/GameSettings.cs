@@ -50,16 +50,16 @@ public class GameSettings : MonoBehaviour
         bossHpMultiplierPerSpawn = 1.5f,
         slimeKingAttackSpeedBoostMultiplier = 0.75f,
         crossbowDamageMultiplier = 0.6f,
-        finalBossDamageMultiplier = 0.7f,
+        finalBossDamageMultiplier = 0.6f,
     };
     public DifficultyPreset normalPreset = new DifficultyPreset
     {
         regularHpBonusPerMinute = 1f,
         bossSpawnInterval = 60f,
         bossHpMultiplierPerSpawn = 2.5f,
-        slimeKingAttackSpeedBoostMultiplier = 0.3f,
+        slimeKingAttackSpeedBoostMultiplier = 0.25f,
         crossbowDamageMultiplier = 1.0f,
-        finalBossDamageMultiplier = 1.0f,
+        finalBossDamageMultiplier = 1.2f,
     };
     public DifficultyPreset hardPreset = new DifficultyPreset
     {
@@ -68,7 +68,7 @@ public class GameSettings : MonoBehaviour
         bossHpMultiplierPerSpawn = 5f,
         slimeKingAttackSpeedBoostMultiplier = 0.1f,
         crossbowDamageMultiplier = 1.5f,
-        finalBossDamageMultiplier = 1.4f,
+        finalBossDamageMultiplier = 1.8f,
     };
 
     public DifficultyPreset GetActivePreset()
