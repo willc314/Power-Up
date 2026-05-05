@@ -23,16 +23,42 @@ public class Projectile : MonoBehaviour
     [Tooltip("Vertical height of the hit volume. Use a tall value (1.5-2.5) so projectiles catch short enemies whose colliders sit below the projectile's flight height. If <= 2*hitRadius, it behaves as a pure sphere.")]
     public float hitHeight = 2.0f;
 
+    [Header("Damage Falloff (optional)")]
+    [Tooltip("Multiplier applied to the running damage scale after every successful hit. 1 = no falloff (every hit deals full damage). 0.5 = damage halves each hit. 0.25 = damage drops to a quarter each hit. Combined with damageFalloffFloor to keep later hits from going to zero.")]
+    [Range(0f, 1f)] public float damageFalloffPerHit = 1f;
+    [Tooltip("Minimum multiplier the damage scale can fall to. 0 = no floor (damage trends to zero). 0.25 = damage never drops below 25% of the original — useful for piercing/homing arrows that loop back so they keep doing meaningful (but reduced) damage on every hit.")]
+    [Range(0f, 1f)] public float damageFalloffFloor = 0f;
+
     [Header("Visual")]
     [Tooltip("Spin around the projectile's local forward axis, deg/sec. 0 = no spin (arrows). Use 720+ for thrown daggers.")]
     public float spinSpeed = 0f;
     [Tooltip("Initial Euler offset applied so the model points along travel. Tweak if the arrow/dagger model points the wrong way (try (90,0,0), (0,90,0), or (0,0,90)).")]
     public Vector3 modelRotationOffset = Vector3.zero;
 
+    [Header("Homing (optional — used by fully-charged Bow shots)")]
+    [Tooltip("If true, the projectile actively curves toward the nearest enemy each frame. Combine with a high homingTurnSpeed for near-perfect tracking.")]
+    public bool homing = false;
+    [Tooltip("Base degrees per second the flight direction can rotate toward the homing target at the moment of last hit. 360 = ~perfect aim — the arrow can do a full U-turn in one second. Effective rate ramps UP from this value while the arrow goes without hitting an enemy (see homingTurnSpeedRampPerSecond).")]
+    public float homingTurnSpeed = 360f;
+    [Tooltip("Degrees/sec ADDED to the effective turn rate per second the arrow goes without landing a hit. Prevents the arrow from spiraling around an enemy it can't quite catch — given enough time the turn rate gets tight enough to break the orbit. Reset to zero whenever the arrow lands a hit. 0 = disabled.")]
+    public float homingTurnSpeedRampPerSecond = 360f;
+    [Tooltip("Hard cap on the effective turn rate (deg/sec). Stops the ramp from growing unbounded against unreachable targets. 0 or negative = uncapped.")]
+    public float homingTurnSpeedMax = 2160f;
+    [Tooltip("Seconds the projectile actively homes for. After this, it falls back to a straight line.")]
+    public float homingDuration = 4f;
+    [Tooltip("Stops looking for / tracking targets further than this. Small radius = the projectile flies straight if no enemy is close.")]
+    public float homingMaxRange = 30f;
+    [Tooltip("If true, the homing target is re-acquired every frame so a dying enemy is replaced immediately. Very useful for piercing arrows that need to chain through a crowd.")]
+    public bool homingRetargetEachFrame = true;
+
     private Vector3 direction;
     private float damage;
+    private float damageScale; // running multiplier on `damage` for the next hit (multiplied by damageFalloffPerHit after each hit, floored at damageFalloffFloor)
     private LayerMask enemyLayers;
     private int pierceRemaining;
+    private float homingElapsed;
+    private float homingTimeSinceHit; // counts up while no hit lands; resets to 0 on each hit
+    private Enemy homingTarget;
     private readonly HashSet<Enemy> alreadyHit = new HashSet<Enemy>();
     private readonly Collider[] hitBuffer = new Collider[16];
 
@@ -40,6 +66,7 @@ public class Projectile : MonoBehaviour
     {
         direction = dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.forward;
         this.damage = damage;
+        this.damageScale = 1f; // first hit always lands at full damage; falloff kicks in afterward
         this.enemyLayers = enemyLayers;
         this.pierceRemaining = pierceCount;
         transform.rotation = Quaternion.LookRotation(direction, Vector3.up) * Quaternion.Euler(modelRotationOffset);
@@ -48,6 +75,37 @@ public class Projectile : MonoBehaviour
 
     private void Update()
     {
+        // Homing: rotate `direction` toward the nearest live enemy. Skips
+        // already-hit enemies (for piercing shots) so the arrow chains
+        // between targets instead of looping back into the same one.
+        if (homing && homingElapsed < homingDuration)
+        {
+            homingElapsed += Time.deltaTime;
+            homingTimeSinceHit += Time.deltaTime;
+            if (homingTarget == null || homingTarget.IsDead || homingRetargetEachFrame)
+                homingTarget = FindNearestEnemy();
+            if (homingTarget != null && !homingTarget.IsDead)
+            {
+                Vector3 toTarget = homingTarget.transform.position - transform.position;
+                toTarget.y = 0f;
+                if (toTarget.sqrMagnitude > 0.0001f)
+                {
+                    Vector3 desired = toTarget.normalized;
+                    // Effective turn rate ramps up while we go without landing
+                    // a hit — keeps the arrow from spiraling forever around a
+                    // target it can't quite intercept. Cap prevents runaway
+                    // values when the ramp persists for several seconds.
+                    float effTurnSpeed = Mathf.Max(0f, homingTurnSpeed)
+                        + Mathf.Max(0f, homingTurnSpeedRampPerSecond) * homingTimeSinceHit;
+                    if (homingTurnSpeedMax > 0f)
+                        effTurnSpeed = Mathf.Min(effTurnSpeed, homingTurnSpeedMax);
+                    float maxRad = effTurnSpeed * Mathf.Deg2Rad * Time.deltaTime;
+                    direction = Vector3.RotateTowards(direction, desired, maxRad, 0f).normalized;
+                    transform.rotation = Quaternion.LookRotation(direction, Vector3.up) * Quaternion.Euler(modelRotationOffset);
+                }
+            }
+        }
+
         Vector3 step = direction * speed * Time.deltaTime;
         Vector3 nextPos = transform.position + step;
 
@@ -62,7 +120,25 @@ public class Projectile : MonoBehaviour
             Enemy e = hit.collider.GetComponentInParent<Enemy>();
             if (e != null && alreadyHit.Add(e))
             {
-                e.TakeDamage(damage);
+                // Damage scale lets the projectile deal less per chained hit
+                // (set up via damageFalloffPerHit + damageFalloffFloor). The
+                // CURRENT scale is consumed by this hit, then we step it
+                // toward the floor for the next hit.
+                e.TakeDamage(damage * damageScale);
+                if (damageFalloffPerHit < 1f - 0.0001f)
+                {
+                    damageScale = Mathf.Max(damageFalloffFloor, damageScale * damageFalloffPerHit);
+                }
+                // Homing: when this arrow makes contact, drop the current
+                // homing lock so the next FindNearestEnemy call picks a
+                // different target, AND reset the no-hit ramp so the next
+                // target gets the gentle base turn rate again (the ramp
+                // only escalates while the arrow is failing to land hits).
+                if (homing)
+                {
+                    if (homingTarget == e) homingTarget = null;
+                    homingTimeSinceHit = 0f;
+                }
                 if (pierceCount >= 0 && pierceRemaining-- <= 0)
                 {
                     Destroy(gameObject);
@@ -74,6 +150,77 @@ public class Projectile : MonoBehaviour
         transform.position = nextPos;
 
         if (spinSpeed != 0f) transform.Rotate(Vector3.forward, spinSpeed * Time.deltaTime, Space.Self);
+    }
+
+    /// <summary>
+    /// Find the nearest live, not-yet-hit enemy within homingMaxRange.
+    /// Returns null if nothing qualifies — the projectile will fly straight
+    /// in that case.
+    ///
+    /// Uses EnemySpawner.AliveEnemies (the authoritative registry) when
+    /// available, falling back to Physics.OverlapSphere otherwise. The
+    /// registry path avoids the buffer-fills-with-non-enemy-colliders
+    /// problem (a 16-slot OverlapSphere result can be saturated by cacti
+    /// or terrain on the same layer mask before any actual enemy slot is
+    /// returned, which is what was hiding homing targets).
+    ///
+    /// Loop-back behavior: if the first pass (excluding already-hit enemies)
+    /// finds nothing, alreadyHit is cleared and a second pass runs. This
+    /// lets a homing arrow re-target a previously-damaged enemy when there
+    /// are no fresh ones nearby — useful for single-target / boss fights
+    /// so the arrow loops back instead of flying off into nothing.
+    /// </summary>
+    private Enemy FindNearestEnemy()
+    {
+        Enemy best = FindNearestEnemyExcludingAlreadyHit();
+        if (best == null && alreadyHit.Count > 0)
+        {
+            // No fresh targets — let the arrow re-engage previously-hit
+            // enemies. Clearing alreadyHit also lets the CapsuleCast hit
+            // logic deal damage on the next contact (Add returns true again).
+            alreadyHit.Clear();
+            best = FindNearestEnemyExcludingAlreadyHit();
+        }
+        return best;
+    }
+
+    private Enemy FindNearestEnemyExcludingAlreadyHit()
+    {
+        Enemy best = null;
+        float bestSqr = float.MaxValue;
+        float maxSqr = homingMaxRange * homingMaxRange;
+
+        var spawner = EnemySpawner.Instance;
+        if (spawner != null && spawner.AliveEnemies != null)
+        {
+            var list = spawner.AliveEnemies;
+            for (int i = 0; i < list.Count; i++)
+            {
+                Enemy e = list[i];
+                if (e == null || e.IsDead) continue;
+                if (alreadyHit.Contains(e)) continue;
+                Vector3 d = e.transform.position - transform.position;
+                d.y = 0f; // horizontal distance only — arrows fly at chest height
+                float sqr = d.sqrMagnitude;
+                if (sqr > maxSqr) continue;
+                if (sqr < bestSqr) { bestSqr = sqr; best = e; }
+            }
+            return best;
+        }
+
+        // Fallback: Physics.OverlapSphere (only used if the spawner singleton
+        // hasn't initialized yet, e.g. during very first-frame edge cases).
+        int n = Physics.OverlapSphereNonAlloc(
+            transform.position, homingMaxRange, hitBuffer, enemyLayers, QueryTriggerInteraction.Collide);
+        for (int i = 0; i < n; i++)
+        {
+            Enemy e = hitBuffer[i] != null ? hitBuffer[i].GetComponentInParent<Enemy>() : null;
+            if (e == null || e.IsDead) continue;
+            if (alreadyHit.Contains(e)) continue;
+            float d = (e.transform.position - transform.position).sqrMagnitude;
+            if (d < bestSqr) { bestSqr = d; best = e; }
+        }
+        return best;
     }
 
     private void OnDrawGizmosSelected()

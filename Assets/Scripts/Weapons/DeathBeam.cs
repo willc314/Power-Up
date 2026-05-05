@@ -22,8 +22,10 @@ public class DeathBeam : MonoBehaviour
     public float radius = 0.6f;
     [Tooltip("Multiplier on the visual radius for hit detection. >1 makes the beam damage enemies in the bloom halo around the visible beam, not just inside it. 2.5 is a good starting point for noticeable bloom.")]
     public float hitRadiusMultiplier = 2.5f;
-    [Tooltip("Damage dealt per second to each enemy in the beam.")]
+    [Tooltip("Damage dealt per second to each enemy in the beam. Boosted by the bow's powerups (deathBeamDpsBonus, post-overcharge multiplier, hero damage modifiers).")]
     public float damagePerSecond = 200f;
+    [Tooltip("ADDITIONAL damage dealt per second to each enemy, expressed as a fraction of THAT enemy's MAX HP. Stacks ON TOP of damagePerSecond — does NOT replace it. Fixed — no powerup, no post-overcharge multiplier, no hero damage modifier touches this. 0.01 = an extra 1%/s of max HP. Set to 0 to disable the bonus damage entirely.")]
+    [Range(0f, 1f)] public float maxHpFractionPerSecond = 0.01f;
 
     [Header("Hero Control")]
     [Tooltip("Hero speed multiplier while the beam is active. 0 = locked in place.")]
@@ -103,12 +105,27 @@ public class DeathBeam : MonoBehaviour
         Vector3 p1 = origin + owner.transform.forward * radius;
         Vector3 p2 = origin + owner.transform.forward * (range - radius);
         int n = Physics.OverlapCapsuleNonAlloc(p1, p2, hitRadius, hitBuffer, enemyLayers, QueryTriggerInteraction.Collide);
-        float dmg = damagePerSecond * Time.deltaTime;
+
+        // Two-track damage: the boosted flat DPS (Damage / Projectiles boosts,
+        // post-overcharge multiplier, hero modifiers — already baked in by
+        // BowWeapon.FireDeathBeam), PLUS a fixed %-of-max-HP-per-second tick
+        // that bypasses every multiplier. Both are applied as separate
+        // TakeDamage calls per enemy per frame.
+        float flatDmg = damagePerSecond * Time.deltaTime;
         HashSet<Enemy> hitOnce = new HashSet<Enemy>();
         for (int i = 0; i < n; i++)
         {
             Enemy e = hitBuffer[i].GetComponentInParent<Enemy>();
-            if (e != null && hitOnce.Add(e)) e.TakeDamage(dmg);
+            if (e == null || !hitOnce.Add(e)) continue;
+            // Base flat damage + bonuses (boostable).
+            if (flatDmg > 0f) e.TakeDamage(flatDmg);
+            // % of max HP — fixed, applied additionally so the beam is
+            // meaningfully effective against very high-HP bosses.
+            if (maxHpFractionPerSecond > 0f && !e.IsDead)
+            {
+                float maxHpDmg = (float)e.MaxHP * maxHpFractionPerSecond * Time.deltaTime;
+                if (maxHpDmg > 0f) e.TakeDamage(maxHpDmg);
+            }
         }
 
         // Continuous camera shake.

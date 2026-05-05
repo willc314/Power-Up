@@ -166,6 +166,15 @@ public class EnemySpawner : MonoBehaviour
 
     public static EnemySpawner Instance { get; private set; }
 
+    /// <summary>
+    /// Read-only view of every currently alive enemy spawned by this spawner.
+    /// Used by homing projectiles (e.g. fully-charged bow shots) to enumerate
+    /// targets directly instead of relying on Physics.OverlapSphere — which
+    /// can miss enemies when the buffer fills with non-enemy colliders that
+    /// share the weapon's layer mask (cacti, terrain, etc.).
+    /// </summary>
+    public IReadOnlyList<Enemy> AliveEnemies => aliveEnemies;
+
     private readonly List<Enemy> aliveEnemies = new List<Enemy>();
     private Transform enemyRoot;
     private float elapsedTime;

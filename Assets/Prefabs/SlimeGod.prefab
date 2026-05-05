@@ -284,7 +284,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   behavior: 6
-  maxHP: 8000
+  maxHP: 6000
   attackDamage: 80
   moveSpeed: 1.2
   attackRange: 1.4
@@ -350,7 +350,7 @@ MonoBehaviour:
   skAttackSpeedBoostMultiplier: 0.1
   skAttackSpeedBoostDuration: 7
   skKiteRange: 7
-  splitOnDeath: 1
+  splitOnDeath: 0
   splitPrefab: {fileID: 1931298151966786, guid: 928a1377c1cd4515b208fef3a396b8ea, type: 3}
   splitCount: 10
   splitRadius: 1.6

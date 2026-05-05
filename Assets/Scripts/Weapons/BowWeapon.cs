@@ -46,6 +46,8 @@ public class BowWeapon : Weapon
     public Projectile arrowPrefab;
     [Tooltip("If > 0, overrides the projectile prefab's Speed so bow arrows can fly faster than crossbow arrows. Set to 0 to use the prefab's default.")]
     public float arrowSpeed = 45f;
+    [Tooltip("Base lifetime (seconds) of every spawned bow arrow before any Range boost. Overrides the prefab's lifetime. Range boosts (Grenade pickups) add arrowLifetimeBonus on top of this — a maxed Range boost takes a 2s arrow up to 6s.")]
+    public float arrowBaseLifetime = 2f;
     [Tooltip("How far in front of the hero the arrow spawns. Keep small (e.g. 0.2) so enemies hugging the hero still get hit — large values can spawn the arrow past the target.")]
     public float arrowSpawnForward = 0.2f;
     [Tooltip("Damage at zero charge.")]
@@ -56,6 +58,12 @@ public class BowWeapon : Weapon
     public float arrowMinScale = 1f;
     [Tooltip("Visual scale multiplier at full charge.")]
     public float arrowMaxScale = 2.5f;
+
+    [Header("Arrow Damage Falloff")]
+    [Tooltip("Multiplier applied to the running damage scale after every successful hit. 0.5 = damage halves with each subsequent hit. 1 = no falloff. Combined with arrowDamageFalloffFloor so chained / loop-back hits never drop below a useful floor.")]
+    [Range(0f, 1f)] public float arrowDamageFalloffPerHit = 0.5f;
+    [Tooltip("Minimum damage multiplier the arrow can fall to. 0.25 = each hit caps at 25% of the original damage no matter how many enemies the arrow has already chained through. Set to 0 for unbounded decay or 1 to disable falloff entirely.")]
+    [Range(0f, 1f)] public float arrowDamageFalloffFloor = 0.25f;
 
     [Header("Death Beam (Overcharge)")]
     [Tooltip("Holding past this many seconds switches the release to a Death Beam.")]
@@ -88,6 +96,14 @@ public class BowWeapon : Weapon
 
     public override bool CanFire => true; // charging weapon — always allowed to start
 
+    /// <summary>
+    /// True when the assigned death-beam prefab uses the "1% of max HP per
+    /// second" damage model. Powerup descriptions hide the irrelevant
+    /// "+Beam DPS" string when this is true so the boost label stays honest.
+    /// </summary>
+    private bool BeamUsesMaxHpDamage =>
+        deathBeamPrefab != null && deathBeamPrefab.maxHpFractionPerSecond > 0f;
+
     // ---- Boost overrides ----
     [Header("Boost Tuning — Arrow Damage")]
     [Tooltip("How much arrowMaxDamage grows per Damage boost.")]
@@ -105,13 +121,31 @@ public class BowWeapon : Weapon
     [Tooltip("Reduction in overchargeTime per AttackSpeed boost (fraction). 0.15 = -15% time-to-beam per pickup, diminishing as it approaches minOverchargeTime.")]
     [Range(0f, 1f)] public float overchargeSpeedIncreasePercent = 0.15f;
 
+    [Header("Fully-Charged Homing")]
+    [Tooltip("Charge fraction (0..1) at which arrows gain homing. 1.0 = only fully-charged shots home, 0.95 = slightly-under-full also homes (helps when frame timing nips a few ms off the perceived full charge).")]
+    [Range(0.5f, 1f)] public float homingChargeThreshold = 0.95f;
+    [Tooltip("Seconds a fully-charged arrow actively homes for, BEFORE the Range boost extends it. The Range boost adds arrowLifetimeBonus to this number too so the homing window grows alongside the arrow's lifespan. Default 2 matches the default arrow base lifetime so a fresh shot homes for its entire life.")]
+    public float fullyChargedHomingDuration = 2f;
+    [Tooltip("Base degrees/sec the fully-charged arrow can turn at the moment it last hit something. 360 = ~perfect aim (a full U-turn per second). Effective rate ramps higher while the arrow goes without landing a hit (see fullyChargedHomingTurnSpeedRamp).")]
+    public float fullyChargedHomingTurnSpeed = 360f;
+    [Tooltip("Degrees/sec ADDED to the arrow's effective turn rate per second it spends without landing a hit. Stops the arrow from spiraling around an enemy it can't quite catch — given a couple seconds the turn rate gets tight enough to break the orbit. Reset to zero on every hit. 360 means after 1 unhit second the arrow can U-turn in 0.5s.")]
+    public float fullyChargedHomingTurnSpeedRamp = 360f;
+    [Tooltip("Hard cap on the ramped turn rate (deg/sec). 0 or negative = uncapped; 2160 caps at six full rotations per second.")]
+    public float fullyChargedHomingTurnSpeedMax = 2160f;
+    [Tooltip("Range within which the fully-charged arrow looks for targets. Outside this it flies straight.")]
+    public float fullyChargedHomingMaxRange = 40f;
+    [Tooltip("Pierce count applied to fully-charged arrows so they keep chaining through enemies indefinitely. -1 = infinite pierce (recommended); a positive number caps the chain length.")]
+    public int fullyChargedPierceCount = -1;
+
     [Header("Boost Tuning — Multi-Arrow (Projectiles boost)")]
-    [Tooltip("How many arrows the normal attack fires per release. Crossbow pickups bump this by 1, fanned out across arrowSpreadAngle.")]
+    [Tooltip("How many arrows the normal attack fires per release. Crossbow pickups bump this by 1 every other upgrade — half the rate the Crossbow itself gets, since the bow's fully-charged shots already chain via homing.")]
     public int arrowProjectileCount = 1;
     [Tooltip("Cap on arrowProjectileCount.")]
     public int maxArrowProjectileCount = 5;
     [Tooltip("Total spread (degrees) for the fan when arrowProjectileCount > 1.")]
     public float arrowSpreadAngle = 25f;
+    [Tooltip("Running count of Projectiles (Crossbow) pickups taken on this Bow. Used to gate +1 Arrow to every OTHER upgrade — odd-numbered pickups (1st, 3rd, 5th, …) grant an extra arrow; even-numbered ones still apply the rest of the boost (damage, beam duration, beam DPS) but skip the projectile bump.")]
+    public int crossbowPickupCount = 0;
 
     [Header("Post-Overcharge Damage Rate")]
     [Tooltip("Once the player has held past overchargeTime, every additional second of holding adds this fraction to the death beam's damage multiplier. 0.20 = +20% beam damage per second held. Stack indefinitely if the player wants to commit to a giant nuke.")]
@@ -124,12 +158,30 @@ public class BowWeapon : Weapon
     public float deathBeamDpsBonus = 0f;
     [Tooltip("How much beam DPS grows per Damage boost.")]
     public float deathBeamDpsPerBoost = 25f;
-    [Tooltip("Total bonus radius added to the spawned death beam from Range boosts. Set by TryApplyBoost(Range). Radius makes the beam thicker / cover a wider AOE.")]
+    [Tooltip("Bonus radius added to the spawned death beam. Range boosts no longer touch this field — the bow's Range upgrade now boosts the beam's MaxHP%-per-second damage instead. Left in the inspector so it can still be set manually if desired.")]
     public float deathBeamRadiusBonus = 0f;
-    [Tooltip("How much beam radius grows per Range boost (world units).")]
-    public float deathBeamRadiusPerBoost = 0.4f;
-    [Tooltip("Cap on deathBeamRadiusBonus.")]
-    public float maxDeathBeamRadiusBonus = 3f;
+    [Tooltip("Legacy: used to be how much beam radius grew per Range boost. The Range boost no longer touches the radius (it now bumps deathBeamMaxHpPercentBonus instead), so this value is unused at runtime.")]
+    public float deathBeamRadiusPerBoost = 0f;
+    [Tooltip("Legacy cap on deathBeamRadiusBonus. Unused now that the Range boost no longer grows the radius.")]
+    public float maxDeathBeamRadiusBonus = 0f;
+    [Tooltip("Bonus PERCENT added to the death beam's max-HP-per-second damage. 1 = +1%/s of each enemy's max HP. Stacks ON TOP of the prefab's base maxHpFractionPerSecond. Set by TryApplyBoost(Range).")]
+    public float deathBeamMaxHpPercentBonus = 0f;
+    [Tooltip("Percent points added to deathBeamMaxHpPercentBonus per Range boost. 0.1 = +0.1% Max HP damage per pickup.")]
+    public float deathBeamMaxHpPercentBonusPerBoost = 0.1f;
+    [Tooltip("Cap on deathBeamMaxHpPercentBonus. Default 2 = up to +2% Max HP/s on top of the prefab's base 1%, so a fully-upgraded Range bow's beam ticks 3% Max HP/s.")]
+    public float maxDeathBeamMaxHpPercentBonus = 2f;
+    [Tooltip("Total bonus seconds added to each spawned arrow's lifetime from Range boosts (Grenade pickups). Lets fully-charged homing arrows stay alive long enough to chain through more enemies. Set by TryApplyBoost(Range).")]
+    public float arrowLifetimeBonus = 0f;
+    [Tooltip("How many extra seconds of arrow lifetime each Range boost adds.")]
+    public float arrowLifetimeBonusPerBoost = 0.5f;
+    [Tooltip("Cap on arrowLifetimeBonus (seconds). Default 4 = up to four extra seconds of homing on top of the prefab's base lifetime.")]
+    public float maxArrowLifetimeBonus = 4f;
+    [Tooltip("Total bonus pierce count added to each spawned arrow from Range boosts. Stacks ON TOP of the prefab's pierceCount for non-fully-charged shots. Fully-charged shots already pierce infinitely, so this is ignored on them. Set by TryApplyBoost(Range).")]
+    public int arrowPierceBonus = 0;
+    [Tooltip("How many extra pierces each Range boost adds.")]
+    public int arrowPierceBonusPerBoost = 1;
+    [Tooltip("Cap on arrowPierceBonus.")]
+    public int maxArrowPierceBonus = 8;
     [Tooltip("Total bonus seconds added to the spawned death beam's duration. Bumped by Projectiles boosts (Crossbow pickup) so the beam stays out longer alongside the extra-arrow effect.")]
     public float deathBeamDurationBonus = 0f;
     [Tooltip("How many extra seconds of beam duration each Projectiles boost adds.")]
@@ -148,7 +200,11 @@ public class BowWeapon : Weapon
                 return chargeFloor && overFloor;
 
             case BoostKind.Range:
-                return deathBeamRadiusBonus >= maxDeathBeamRadiusBonus - 0.001f;
+                // Range maxes only when ALL THREE pieces — beam Max HP%,
+                // arrow lifetime, and arrow pierce — have hit their caps.
+                return deathBeamMaxHpPercentBonus >= maxDeathBeamMaxHpPercentBonus - 0.001f
+                    && arrowLifetimeBonus         >= maxArrowLifetimeBonus         - 0.001f
+                    && arrowPierceBonus           >= maxArrowPierceBonus;
 
             case BoostKind.Damage:
                 return IsDamageMaxed;
@@ -182,11 +238,15 @@ public class BowWeapon : Weapon
                     // its own cap is reached so the button stays honest.
                     bool arrowFull = arrowProjectileCount >= maxArrowProjectileCount;
                     bool durFull   = deathBeamDurationBonus >= maxDeathBeamDurationBonus - 0.001f;
+                    // The Bow only grants +1 Arrow every OTHER pickup. The
+                    // NEXT pickup grants when the running counter is even
+                    // (since incrementing it lands on an odd number).
+                    bool nextGrantsArrow = !arrowFull && (crossbowPickupCount % 2 == 0);
                     float scale = IsDamageMaxed ? postMaxBoostScale : 1f;
                     string dmgPart = $"+{maxDamageIncreasePerLevel * scale:0.#} Max Damage  •  +{deathBeamDpsPerBoost * scale:0.#} Beam DPS";
                     string parts = dmgPart;
-                    if (!durFull)   parts = $"+{deathBeamDurationPerBoost:0.##}s Beam  •  " + parts;
-                    if (!arrowFull) parts = "+1 Arrow  •  " + parts;
+                    if (!durFull)         parts = $"+{deathBeamDurationPerBoost:0.##}s Beam  •  " + parts;
+                    if (nextGrantsArrow)  parts = "+1 Arrow  •  " + parts;
                     return parts;
                 }
 
@@ -217,9 +277,21 @@ public class BowWeapon : Weapon
                 }
 
             case BoostKind.Range:
-                if (IsBoostMaxed(BoostKind.Range))
-                    return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
-                return $"+{deathBeamRadiusPerBoost:0.##} Beam Radius";
+                {
+                    if (IsBoostMaxed(BoostKind.Range))
+                        return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
+
+                    // Show whichever pieces of the Range boost still have
+                    // headroom — Max HP%, lifetime, and pierce cap independently.
+                    bool maxHpFull    = deathBeamMaxHpPercentBonus >= maxDeathBeamMaxHpPercentBonus - 0.001f;
+                    bool lifetimeFull = arrowLifetimeBonus  >= maxArrowLifetimeBonus  - 0.001f;
+                    bool pierceFull   = arrowPierceBonus    >= maxArrowPierceBonus;
+                    var parts = new System.Collections.Generic.List<string>(3);
+                    if (!maxHpFull)    parts.Add($"+{deathBeamMaxHpPercentBonusPerBoost:0.##}% Beam Max HP Dmg");
+                    if (!lifetimeFull) parts.Add($"+{arrowLifetimeBonusPerBoost:0.##}s Arrow Lifetime");
+                    if (!pierceFull)   parts.Add($"+{arrowPierceBonusPerBoost} Pierce");
+                    return string.Join("  •  ", parts);
+                }
         }
         return base.DescribeBoost(kind);
     }
@@ -232,7 +304,23 @@ public class BowWeapon : Weapon
         sb.Append($"\nFull Charge: {fullChargeTime:0.##}s");
         sb.Append($"\nTime to Beam: {overchargeTime:0.##}s");
         if (deathBeamDpsBonus > 0f)      sb.Append($"\nBeam DPS Bonus: +{deathBeamDpsBonus:0.#}");
+        // Beam Max HP/s damage: prefab base (always shown) plus any Range-boost
+        // bonus from grenade pickups (only shown if non-zero).
+        if (BeamUsesMaxHpDamage)
+        {
+            float basePct = deathBeamPrefab.maxHpFractionPerSecond * 100f;
+            float totalPct = basePct + deathBeamMaxHpPercentBonus;
+            if (deathBeamMaxHpPercentBonus > 0f)
+                sb.Append($"\nBeam Max HP/s: {totalPct:0.##}%  (base {basePct:0.##}% + {deathBeamMaxHpPercentBonus:0.##}%)");
+            else
+                sb.Append($"\nBeam Max HP/s: {basePct:0.##}%");
+        }
         if (deathBeamRadiusBonus > 0f)   sb.Append($"\nBeam Radius +{deathBeamRadiusBonus:0.##}");
+        // Show the total arrow lifetime (base + bonus) since the bow
+        // explicitly controls the base value now. Always rendered so the
+        // player can see how long their arrows stay alive.
+        sb.Append($"\nArrow Lifetime: {arrowBaseLifetime + arrowLifetimeBonus:0.##}s");
+        if (arrowPierceBonus > 0)        sb.Append($"\nArrow Pierce +{arrowPierceBonus}");
         if (deathBeamDurationBonus > 0f) sb.Append($"\nBeam Duration +{deathBeamDurationBonus:0.##}s");
         sb.Append($"\nOvercharge Rate: +{postOverchargeDamageRate * 100f:0}%/s");
         return sb.ToString();
@@ -255,11 +343,13 @@ public class BowWeapon : Weapon
 
             case BoostKind.Projectiles:
                 {
-                    // Crossbow pickup on Bow: bump arrow count if there's room,
-                    // extend the death beam's duration, and apply the same
-                    // damage/beam-DPS gain Damage gets.
-                    if (arrowProjectileCount < maxArrowProjectileCount)
-                        arrowProjectileCount++;
+                    // Crossbow pickup on Bow. Every other upgrade grants
+                    // +1 Arrow; the rest of the boost (beam duration,
+                    // damage, beam DPS) applies on every pickup.
+                    crossbowPickupCount++;
+                    bool grantArrow = (crossbowPickupCount % 2 == 1)
+                                       && arrowProjectileCount < maxArrowProjectileCount;
+                    if (grantArrow) arrowProjectileCount++;
 
                     deathBeamDurationBonus = Mathf.Min(maxDeathBeamDurationBonus,
                         deathBeamDurationBonus + deathBeamDurationPerBoost);
@@ -308,13 +398,20 @@ public class BowWeapon : Weapon
             case BoostKind.Range:
                 if (IsBoostMaxed(BoostKind.Range))
                 {
-                    // Beam radius capped — fall back to scaled damage.
+                    // Both pieces capped — fall back to scaled damage.
                     damage     += damageIncreasePerLevel * postMaxBoostScale;
                     damageLevel++;
                     return true;
                 }
-                deathBeamRadiusBonus = Mathf.Min(maxDeathBeamRadiusBonus,
-                    deathBeamRadiusBonus + deathBeamRadiusPerBoost);
+                // Bump every Range piece toward its cap. Mathf.Min keeps each
+                // one from overshooting — capped pieces stop changing while
+                // the others can keep growing.
+                deathBeamMaxHpPercentBonus = Mathf.Min(maxDeathBeamMaxHpPercentBonus,
+                    deathBeamMaxHpPercentBonus + deathBeamMaxHpPercentBonusPerBoost);
+                arrowLifetimeBonus = Mathf.Min(maxArrowLifetimeBonus,
+                    arrowLifetimeBonus + arrowLifetimeBonusPerBoost);
+                arrowPierceBonus = Mathf.Min(maxArrowPierceBonus,
+                    arrowPierceBonus + arrowPierceBonusPerBoost);
                 return true;
         }
         return base.TryApplyBoost(kind);
@@ -473,7 +570,21 @@ public class BowWeapon : Weapon
         // for the whole volley so all arrows in the fan share it.
         dmg = owner.ComputeAttackDamage(dmg);
 
+        // Fully-charged shots gain homing — they curve onto the nearest
+        // enemy with near-perfect tracking, then chain to a new target if
+        // their current one dies. Piercing is preserved by the prefab.
+        bool fullyCharged = chargeT >= homingChargeThreshold;
+
         Vector3 spawn = owner.transform.position + owner.transform.forward * arrowSpawnForward + Vector3.up * bowSpawnHeight;
+
+        // Total lifetime for this shot — bow controls the base explicitly
+        // (overrides the prefab's value) and stacks the Range-boost bonus.
+        float effLifetime = Mathf.Max(0.01f, arrowBaseLifetime + Mathf.Max(0f, arrowLifetimeBonus));
+
+        // Damage falloff lives on the Projectile, but the bow controls the
+        // policy — so push the inspector values down onto every spawned arrow.
+        float falloffPerHit = Mathf.Clamp01(arrowDamageFalloffPerHit);
+        float falloffFloor  = Mathf.Clamp01(arrowDamageFalloffFloor);
 
         int n = Mathf.Max(1, arrowProjectileCount);
         if (n == 1)
@@ -481,6 +592,15 @@ public class BowWeapon : Weapon
             Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
             p.transform.localScale = arrowPrefab.transform.localScale * scale;
             if (arrowSpeed > 0f) p.speed = arrowSpeed;
+            ApplyHomingIfCharged(p, fullyCharged);
+            // Lifetime + pierce bonuses must be set BEFORE Launch — Launch
+            // snapshots pierceCount and schedules Destroy(gameObject, lifetime).
+            // Pierce bonus is only applied to non-infinite arrows so the
+            // fully-charged shot's infinite-pierce override is preserved.
+            p.lifetime = effLifetime;
+            if (arrowPierceBonus > 0 && p.pierceCount >= 0) p.pierceCount += arrowPierceBonus;
+            p.damageFalloffPerHit = falloffPerHit;
+            p.damageFalloffFloor  = falloffFloor;
             p.Launch(owner.transform.forward, dmg, enemyLayers);
             return;
         }
@@ -497,8 +617,38 @@ public class BowWeapon : Weapon
             Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
             p.transform.localScale = arrowPrefab.transform.localScale * scale;
             if (arrowSpeed > 0f) p.speed = arrowSpeed;
+            ApplyHomingIfCharged(p, fullyCharged);
+            p.lifetime = effLifetime;
+            if (arrowPierceBonus > 0 && p.pierceCount >= 0) p.pierceCount += arrowPierceBonus;
+            p.damageFalloffPerHit = falloffPerHit;
+            p.damageFalloffFloor  = falloffFloor;
             p.Launch(dir, dmg, enemyLayers);
         }
+    }
+
+    /// <summary>
+    /// Toggle homing on a freshly-spawned arrow if the shot was at or above
+    /// homingChargeThreshold. Uses near-perfect turn rate so the arrow can
+    /// tightly track a moving target, AND overrides pierceCount so the arrow
+    /// keeps chaining through enemies for the whole homing window. Must run
+    /// BEFORE Launch — Launch snapshots pierceCount into pierceRemaining.
+    /// </summary>
+    private void ApplyHomingIfCharged(Projectile p, bool fullyCharged)
+    {
+        if (p == null || !fullyCharged) return;
+        p.homing = true;
+        p.homingTurnSpeed              = fullyChargedHomingTurnSpeed;
+        p.homingTurnSpeedRampPerSecond = fullyChargedHomingTurnSpeedRamp;
+        p.homingTurnSpeedMax           = fullyChargedHomingTurnSpeedMax;
+        // Range boost extends the homing window in lockstep with the arrow's
+        // lifetime, so the arrow can keep homing for as long as it's alive.
+        p.homingDuration  = fullyChargedHomingDuration + Mathf.Max(0f, arrowLifetimeBonus);
+        p.homingMaxRange  = fullyChargedHomingMaxRange;
+        p.homingRetargetEachFrame = true;
+        // Override the prefab's pierce count so the homing arrow doesn't
+        // burn out after a fixed number of hits (Arrow_Piercing.prefab ships
+        // with pierceCount = 5, which would cap the chain).
+        p.pierceCount = fullyChargedPierceCount;
     }
 
     private void FireDeathBeam(Hero owner)
@@ -509,6 +659,11 @@ public class BowWeapon : Weapon
         // (so its damage tick, visual stretch, and lifetime reflect upgrades).
         if (deathBeamRadiusBonus   > 0f) beam.radius   += deathBeamRadiusBonus;
         if (deathBeamDurationBonus > 0f) beam.duration += deathBeamDurationBonus;
+        // Range boost: bonus Max HP%-per-second damage. The field on the beam
+        // is in fraction units (0.01 = 1%), but the bow tracks the bonus in
+        // percent points (0.5 = 0.5%) for readable inspector values.
+        if (deathBeamMaxHpPercentBonus > 0f)
+            beam.maxHpFractionPerSecond += deathBeamMaxHpPercentBonus / 100f;
 
         // Bake the post-overcharge damage multiplier into the beam: every
         // second held past overchargeTime added postOverchargeDamageRate to

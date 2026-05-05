@@ -60,6 +60,14 @@ public class PowerUpChoiceUI : MonoBehaviour
 
     private Hero hero;
     private eWeaponType pendingType;
+    // Backlog of pickup types collected while the choice panel was already
+    // open. Drained one-by-one in Close(): each queued entry transitions the
+    // panel to the next pickup instead of fully closing, so the player gets
+    // to make a choice for every powerup they grabbed (no silent overwrite).
+    private readonly Queue<eWeaponType> pendingQueue = new Queue<eWeaponType>();
+
+    /// <summary>True while the choice panel is currently visible to the player.</summary>
+    public bool IsOpen => panelRoot != null && panelRoot.activeSelf;
 
     // Built UI references (rebuilt each Show so the layout matches state).
     private Canvas canvas;
@@ -126,6 +134,16 @@ public class PowerUpChoiceUI : MonoBehaviour
 
     public void Show(Hero hero, eWeaponType type)
     {
+        // Edge case: the hero walks into two (or more) powerups in the same
+        // frame. Without this guard, the second Show() would overwrite
+        // pendingType, voiding the first powerup's choice. Instead, queue the
+        // extra pickups and drain them one-by-one in Close().
+        if (IsOpen)
+        {
+            pendingQueue.Enqueue(type);
+            return;
+        }
+
         this.hero = hero;
         this.pendingType = type;
 
@@ -331,6 +349,16 @@ public class PowerUpChoiceUI : MonoBehaviour
 
     private void Close()
     {
+        // Drain queued pickups before fully closing. Time stays paused and
+        // the music stays ducked across the chain — only the panel content
+        // refreshes so the player gets to choose for every queued powerup.
+        if (pendingQueue.Count > 0)
+        {
+            pendingType = pendingQueue.Dequeue();
+            Refresh();
+            return;
+        }
+
         Hide();
         Time.timeScale = 1f;
 

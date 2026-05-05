@@ -2854,25 +2854,36 @@ MonoBehaviour:
   slowdownWhileCharging: 0.75
   minReleaseTime: 0.1
   arrowPrefab: {fileID: 4620594600889568894, guid: 14c125fb9e5d3c04db5be83d0ab292d9, type: 3}
-  arrowSpeed: 45
+  arrowSpeed: 40
+  arrowBaseLifetime: 2
   arrowSpawnForward: 0.2
   arrowMinDamage: 10
-  arrowMaxDamage: 70
-  arrowMinScale: 1
-  arrowMaxScale: 2.5
+  arrowMaxDamage: 30
+  arrowMinScale: 0.75
+  arrowMaxScale: 1.25
+  arrowDamageFalloffPerHit: 0.3
+  arrowDamageFalloffFloor: 0.01
   overchargeTime: 5
   deathBeamPrefab: {fileID: 4926047971536815124, guid: 5b65ab245209fd5468ad11d4e38a7460, type: 3}
   overchargeColor: {r: 1, g: 0.95, b: 0.7, a: 1}
   overchargeVfxPrefab: {fileID: 0}
-  maxDamageIncreasePerLevel: 30
+  maxDamageIncreasePerLevel: 8
   minDamageIncreasePerLevel: 4
   minFullChargeTime: 0.4
   chargeSpeedIncreasePercent: 0.15
   minOverchargeTime: 1.5
   overchargeSpeedIncreasePercent: 0.15
+  homingChargeThreshold: 0.95
+  fullyChargedHomingDuration: 6
+  fullyChargedHomingTurnSpeed: 360
+  fullyChargedHomingTurnSpeedRamp: 360
+  fullyChargedHomingTurnSpeedMax: 2160
+  fullyChargedHomingMaxRange: 30
+  fullyChargedPierceCount: 1
   arrowProjectileCount: 1
   maxArrowProjectileCount: 100
   arrowSpreadAngle: 10
+  crossbowPickupCount: 0
   postOverchargeDamageRate: 0.6
   maxPostOverchargeMultiplier: 0
   deathBeamDpsBonus: 0
@@ -2880,9 +2891,18 @@ MonoBehaviour:
   deathBeamRadiusBonus: 0
   deathBeamRadiusPerBoost: 0.4
   maxDeathBeamRadiusBonus: 4
+  deathBeamMaxHpPercentBonus: 0
+  deathBeamMaxHpPercentBonusPerBoost: 0.1
+  maxDeathBeamMaxHpPercentBonus: 2
+  arrowLifetimeBonus: 0
+  arrowLifetimeBonusPerBoost: 0.5
+  maxArrowLifetimeBonus: 4
+  arrowPierceBonus: 0
+  arrowPierceBonusPerBoost: 1
+  maxArrowPierceBonus: 8
   deathBeamDurationBonus: 0
   deathBeamDurationPerBoost: 0.5
-  maxDeathBeamDurationBonus: 10
+  maxDeathBeamDurationBonus: 6
 --- !u!114 &3670884374136682343
 MonoBehaviour:
   m_ObjectHideFlags: 0
