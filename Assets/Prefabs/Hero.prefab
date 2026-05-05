@@ -2762,16 +2762,16 @@ MonoBehaviour:
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 100
-  extraAttackMinSpacing: 0.01
+  extraAttackMinSpacing: 0.005
   slashPrefab: {fileID: 2526017728917958653, guid: cbc65052b92d3a245a0e616c4b3de3a3, type: 3}
   spawnDistance: 1
   spawnHeight: 1
   arcDegreesBonus: 0
-  arcDegreesPerBoost: 50
+  arcDegreesPerBoost: 60
   maxSlashArcDegrees: 360
   bladeSizeMultiplier: 1
-  bladeSizeIncreasePerBoost: 0.1
-  maxBladeSizeMultiplier: 2.5
+  bladeSizeIncreasePerBoost: 0.25
+  maxBladeSizeMultiplier: 5
 --- !u!114 &8888070785139311172
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2858,11 +2858,11 @@ MonoBehaviour:
   arrowBaseLifetime: 2
   arrowSpawnForward: 0.2
   arrowMinDamage: 10
-  arrowMaxDamage: 30
+  arrowMaxDamage: 40
   arrowMinScale: 0.75
   arrowMaxScale: 1.25
-  arrowDamageFalloffPerHit: 0.5
-  arrowDamageFalloffFloor: 0.1
+  arrowDamageFalloffPerHit: 0.6
+  arrowDamageFalloffFloor: 0.2
   overchargeTime: 5
   deathBeamPrefab: {fileID: 4926047971536815124, guid: 5b65ab245209fd5468ad11d4e38a7460, type: 3}
   overchargeColor: {r: 1, g: 0.95, b: 0.7, a: 1}

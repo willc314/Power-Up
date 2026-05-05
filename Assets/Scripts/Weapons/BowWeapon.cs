@@ -40,6 +40,8 @@ public class BowWeapon : Weapon
     [Range(0f, 1f)] public float slowdownWhileCharging = 0.4f;
     [Tooltip("Minimum charge time required to actually fire something. Below this, the release does nothing (prevents accidental dry-fires).")]
     public float minReleaseTime = 0.1f;
+    [Tooltip("Fraction of incoming damage absorbed while the hero is charging this bow. 0.30 = the hero takes 70% damage while drawing. Read by Hero.TakeDamage and applied before HP subtraction. The slowdown means the player is stuck in place with limited mobility — this reduction makes that risk worthwhile.")]
+    [Range(0f, 1f)] public float chargingDamageReduction = 0.30f;
 
     [Header("Arrow")]
     [Tooltip("Prefab spawned on release for normal shots. Should have a Projectile component (use Arrow_Piercing.prefab).")]
@@ -86,6 +88,13 @@ public class BowWeapon : Weapon
     private bool overchargeReached;
     /// <summary>Damage multiplier accumulated while holding past overchargeTime. Applied to beam damage at fire and reset on EndCharge.</summary>
     private float postOverchargeAccumulated;
+    /// <summary>Reference to the most recently fired death beam. While non-null (the GameObject is still alive), OnFireDown refuses to start a new charge — the player must wait for the beam to finish.</summary>
+    private DeathBeam activeBeam;
+
+    /// <summary>True while the player is actively drawing the bow. Read by Hero.TakeDamage to apply the charging damage reduction.</summary>
+    public bool IsCharging => charging;
+    /// <summary>True while a previously-fired death beam is still alive in the world. Read by OnFireDown to lock out new charges.</summary>
+    public bool IsBeamActive => activeBeam != null;
 
     // Cached material info for tinting the bow visual.
     private struct MatRef { public Material mat; public int prop; public Color original; }
@@ -419,6 +428,11 @@ public class BowWeapon : Weapon
 
     public override bool OnFireDown(Hero owner)
     {
+        // Block new charges while the previously-fired death beam is still
+        // alive — the player has to wait for the beam to finish before the
+        // next shot can begin. activeBeam compares to "fake null" once the
+        // beam GameObject is destroyed, so this clears itself automatically.
+        if (activeBeam != null) return false;
         StartCharge(owner);
         return false;
     }
@@ -675,6 +689,12 @@ public class BowWeapon : Weapon
         // is consistently boosted (or critting) for its full duration.
         beam.damagePerSecond = owner.ComputeAttackDamage(dps);
         beam.Init(owner, enemyLayers);
+
+        // Track the active beam so OnFireDown can lock out new charges until
+        // it finishes. Unity's null-equivalence on destroyed GameObjects
+        // handles the auto-clear; the beam destroys itself when its duration
+        // elapses (DeathBeam.Update -> Destroy(gameObject)).
+        activeBeam = beam;
     }
 
     // ---- Bow tinting (similar to DamageFlash) ----

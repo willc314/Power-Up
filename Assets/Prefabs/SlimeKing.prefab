@@ -574,7 +574,7 @@ MonoBehaviour:
   skKiteRange: 7
   splitOnDeath: 1
   splitPrefab: {fileID: 1931298151966786, guid: 928a1377c1cd4515b208fef3a396b8ea, type: 3}
-  splitCount: 10
+  splitCount: 12
   splitRadius: 1.6
   projectilePrefab: {fileID: 0}
   projectileSpawn: {fileID: 0}

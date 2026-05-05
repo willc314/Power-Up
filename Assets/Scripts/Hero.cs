@@ -648,6 +648,17 @@ public class Hero : MonoBehaviour
         if (IsInvulnerable)
             return;
 
+        // Charging-bow damage reduction. Both slots are checked because the
+        // player can hold the bow on either LMB or RMB; whichever bow is
+        // currently charging wins (the higher reduction if both somehow are).
+        float chargeReduction = 0f;
+        if (primaryWeapon is BowWeapon bowA && bowA.IsCharging)
+            chargeReduction = bowA.chargingDamageReduction;
+        if (secondaryWeapon is BowWeapon bowB && bowB.IsCharging)
+            chargeReduction = Mathf.Max(chargeReduction, bowB.chargingDamageReduction);
+        if (chargeReduction > 0f)
+            amount *= 1f - Mathf.Clamp01(chargeReduction);
+
         currentHP = Mathf.Max(0f, currentHP - amount);
 
         if (damageFlash != null)
