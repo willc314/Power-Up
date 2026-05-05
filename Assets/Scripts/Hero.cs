@@ -653,6 +653,12 @@ public class Hero : MonoBehaviour
         if (damageFlash != null)
             damageFlash.Flash();
 
+        // Brief red vignette flash so the player gets a clear screen-edge
+        // signal that they were hit, even when the body flash is hidden by
+        // particles / weapons / camera angle.
+        if (HealthVignette.Instance != null)
+            HealthVignette.Instance.Flash();
+
         if (currentHP <= 0f)
             Die();
     }
@@ -672,6 +678,7 @@ public class Hero : MonoBehaviour
         if (clamped >= currentHP) return; // never heal via this entry point
         currentHP = clamped;
         if (damageFlash != null) damageFlash.Flash();
+        if (HealthVignette.Instance != null) HealthVignette.Instance.Flash();
         if (currentHP <= 0f) Die();
     }
 

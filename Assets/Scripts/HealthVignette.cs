@@ -20,6 +20,13 @@ using UnityEngine.UI;
 /// </summary>
 public class HealthVignette : MonoBehaviour
 {
+    /// <summary>
+    /// Singleton accessor so Hero.TakeDamage (and anything else that wants
+    /// to flash the screen red on a hit) can call <see cref="Flash"/> without
+    /// chasing a scene reference.
+    /// </summary>
+    public static HealthVignette Instance { get; private set; }
+
     [Header("Threshold")]
     [Tooltip("HP at which the vignette is fully invisible. Below this, the alpha ramps up to maxAlpha as HP approaches 0.")]
     public float criticalHealth = 20f;
@@ -31,6 +38,12 @@ public class HealthVignette : MonoBehaviour
     [Range(0f, 1f)] public float maxAlpha = 0.65f;
     [Tooltip("How quickly the vignette fades in/out, in alpha units per second.")]
     public float fadeSpeed = 3.5f;
+
+    [Header("Hit Flash")]
+    [Tooltip("Peak alpha of the brief red flash whenever the hero takes damage. Stacks ON TOP of the low-HP vignette so a hit at full HP still reads, and a hit at low HP gets even more dramatic. 0 = disabled.")]
+    [Range(0f, 1f)] public float hitFlashPeakAlpha = 0.3f;
+    [Tooltip("Seconds the hit-flash takes to fade from peak back to zero.")]
+    public float hitFlashFadeTime = 0.35f;
 
     [Header("Pulse (optional)")]
     [Tooltip("Pulses per second while the vignette is visible. 0 = no pulse.")]
@@ -48,10 +61,30 @@ public class HealthVignette : MonoBehaviour
 
     private Image image;
     private float currentDisplayAlpha;
+    private float hitFlashAlpha; // current contribution from the most recent hit; decays to 0 over hitFlashFadeTime
 
     private void Awake()
     {
+        Instance = this;
         BuildUI();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
+    /// <summary>
+    /// Trigger a brief red vignette flash. Stacks additively on top of the
+    /// low-HP vignette and decays back to zero over <see cref="hitFlashFadeTime"/>.
+    /// Called by Hero.TakeDamage.
+    /// </summary>
+    public void Flash()
+    {
+        // Peak overrides any in-flight flash so successive hits don't dim the
+        // signal — the brightest flash always wins, and the falloff resumes
+        // from there.
+        if (hitFlashPeakAlpha > hitFlashAlpha) hitFlashAlpha = hitFlashPeakAlpha;
     }
 
     private void BuildUI()
@@ -150,6 +183,17 @@ public class HealthVignette : MonoBehaviour
         {
             float pulse = 1f + Mathf.Sin(Time.time * pulseSpeed * Mathf.PI * 2f) * pulseAmount;
             a *= pulse;
+        }
+
+        // Hit flash: linear decay from peak to zero. Stacks additively on
+        // top of the low-HP vignette so a hit at full HP still reads as a
+        // clean red flash, and a hit during low HP intensifies what's
+        // already there.
+        if (hitFlashAlpha > 0f)
+        {
+            float decayPerSec = hitFlashFadeTime > 0.0001f ? hitFlashPeakAlpha / hitFlashFadeTime : float.MaxValue;
+            hitFlashAlpha = Mathf.Max(0f, hitFlashAlpha - decayPerSec * Time.deltaTime);
+            a += hitFlashAlpha;
         }
 
         Color c = vignetteColor;

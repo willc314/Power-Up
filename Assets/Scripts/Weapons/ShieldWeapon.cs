@@ -32,6 +32,25 @@ public class ShieldWeapon : Weapon
         shield.Init(owner.transform, owner.ComputeAttackDamage(damage), enemyLayers, owner.transform.forward);
     }
 
+    public override string GetExtraStatsBlock()
+    {
+        // Surface the upgrade-tracked extra-shield count plus a few static
+        // throw stats lifted from the prefab. Keeps the in-game stats panel
+        // populated so the shield isn't a blank entry like it used to be.
+        var sb = new System.Text.StringBuilder();
+        if (shieldPrefab != null)
+        {
+            float throwRange = Mathf.Max(0f, shieldPrefab.throwSpeed) * Mathf.Max(0f, shieldPrefab.outboundDuration);
+            sb.Append($"Throw Range: {throwRange:0.#}");
+            sb.Append($"\nThrow Speed: {shieldPrefab.throwSpeed:0.#}");
+            sb.Append($"\nReturn Speed: {shieldPrefab.returnSpeed:0.#}");
+            sb.Append($"\nHit Radius: {shieldPrefab.hitRadius:0.##}");
+        }
+        sb.Append($"\nExtra Shields: {extraAttackCount}");
+        // Trim a leading newline if the prefab block was empty.
+        return sb.ToString().TrimStart('\n');
+    }
+
     // Crossbow pickup → Projectiles boost. On the Shield, this chains an
     // extra throw spread across the cooldown — they boomerang back
     // independently so multiple shields can be in flight at once.

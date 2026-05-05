@@ -2861,8 +2861,8 @@ MonoBehaviour:
   arrowMaxDamage: 30
   arrowMinScale: 0.75
   arrowMaxScale: 1.25
-  arrowDamageFalloffPerHit: 0.3
-  arrowDamageFalloffFloor: 0.01
+  arrowDamageFalloffPerHit: 0.5
+  arrowDamageFalloffFloor: 0.1
   overchargeTime: 5
   deathBeamPrefab: {fileID: 4926047971536815124, guid: 5b65ab245209fd5468ad11d4e38a7460, type: 3}
   overchargeColor: {r: 1, g: 0.95, b: 0.7, a: 1}
