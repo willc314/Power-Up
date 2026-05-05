@@ -335,6 +335,22 @@ public class BowWeapon : Weapon
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Apply a single damage upgrade to ALL bow damage paths (arrows + beam).
+    /// Centralized so post-max fallbacks (capped Range, AttackSpeed at floor)
+    /// route to the same fields as the regular Damage boost — Fire() reads
+    /// arrowMin/MaxDamage and deathBeamDpsBonus, NOT the base `damage` field,
+    /// so any code that just adds to `damage` would be a silent no-op.
+    /// </summary>
+    private void ApplyBowDamageBoost(float scale)
+    {
+        damageLevel++;
+        damage             += damageIncreasePerLevel    * scale;
+        arrowMinDamage     += minDamageIncreasePerLevel * scale;
+        arrowMaxDamage     += maxDamageIncreasePerLevel * scale;
+        deathBeamDpsBonus  += deathBeamDpsPerBoost      * scale;
+    }
+
     public override bool TryApplyBoost(BoostKind kind)
     {
         switch (kind)
@@ -342,11 +358,7 @@ public class BowWeapon : Weapon
             case BoostKind.Damage:
                 {
                     float scale = IsBoostMaxed(BoostKind.Damage) ? postMaxBoostScale : 1f;
-                    damageLevel++;
-                    damage             += damageIncreasePerLevel    * scale;
-                    arrowMinDamage     += minDamageIncreasePerLevel * scale;
-                    arrowMaxDamage     += maxDamageIncreasePerLevel * scale;
-                    deathBeamDpsBonus  += deathBeamDpsPerBoost      * scale;
+                    ApplyBowDamageBoost(scale);
                     return true;
                 }
 
@@ -364,11 +376,7 @@ public class BowWeapon : Weapon
                         deathBeamDurationBonus + deathBeamDurationPerBoost);
 
                     float scale = IsDamageMaxed ? postMaxBoostScale : 1f;
-                    damageLevel++;
-                    damage             += damageIncreasePerLevel    * scale;
-                    arrowMinDamage     += minDamageIncreasePerLevel * scale;
-                    arrowMaxDamage     += maxDamageIncreasePerLevel * scale;
-                    deathBeamDpsBonus  += deathBeamDpsPerBoost      * scale;
+                    ApplyBowDamageBoost(scale);
                     return true;
                 }
 
@@ -379,9 +387,12 @@ public class BowWeapon : Weapon
                     bool overFloor   = overchargeTime <= minOverchargeTime + 0.001f;
                     if (chargeFloor && overFloor)
                     {
-                        // Both floors hit — convert to scaled damage.
-                        damage     += damageIncreasePerLevel * scale;
-                        damageLevel++;
+                        // Both floors hit — convert to scaled damage. Route to
+                        // the SAME fields the regular Damage boost touches
+                        // (arrow min/max, beam DPS bonus); the base `damage`
+                        // field is unused by Fire(), so adding to it would be
+                        // a silent no-op.
+                        ApplyBowDamageBoost(scale);
                         return true;
                     }
 
@@ -407,9 +418,11 @@ public class BowWeapon : Weapon
             case BoostKind.Range:
                 if (IsBoostMaxed(BoostKind.Range))
                 {
-                    // Both pieces capped — fall back to scaled damage.
-                    damage     += damageIncreasePerLevel * postMaxBoostScale;
-                    damageLevel++;
+                    // Both pieces capped — fall back to scaled damage on the
+                    // SAME fields the regular Damage boost touches (arrow
+                    // min/max, beam DPS bonus). Adding to `damage` would have
+                    // no effect since Fire() reads from arrow/beam fields.
+                    ApplyBowDamageBoost(postMaxBoostScale);
                     return true;
                 }
                 // Bump every Range piece toward its cap. Mathf.Min keeps each

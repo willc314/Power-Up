@@ -26,6 +26,19 @@ public class GrenadeWeapon : Weapon
     [Tooltip("Cap on explosionRadiusBonus.")]
     public float maxExplosionRadiusBonus = 5f;
 
+    private void Awake()
+    {
+        weaponName = "Grenade";
+        weaponType = eWeaponType.grenade;
+        // The actual AOE damage lives on the Explosion prefab — pull it onto
+        // the weapon's own `damage` field at startup so per-weapon upgrades
+        // (which all add to `damage`) actually feed back into Fire(). Without
+        // this Fire() would read directly from the prefab and any post-max
+        // damage boosts on the weapon would be silent no-ops.
+        if (grenadePrefab != null && grenadePrefab.explosionPrefab != null)
+            damage = grenadePrefab.explosionPrefab.damage;
+    }
+
     protected override void Fire(Hero owner)
     {
         if (grenadePrefab == null) { Debug.LogWarning("GrenadeWeapon: Grenade Prefab not assigned."); return; }
@@ -39,10 +52,11 @@ public class GrenadeWeapon : Weapon
         Grenade g = Instantiate(grenadePrefab, startPos, Quaternion.identity);
         g.radiusBonus = explosionRadiusBonus;
         // Bake hero damage modifiers (general damage + crit) into the
-        // explosion's damage. The base value comes from the explosion prefab
-        // since that's where Grenade's actual AOE damage lives.
-        if (grenadePrefab.explosionPrefab != null)
-            g.damageOverride = owner.ComputeAttackDamage(grenadePrefab.explosionPrefab.damage);
+        // explosion's damage. Source is the weapon's own `damage` field,
+        // which Awake() seeded from the explosion prefab and which weapon
+        // upgrades (Range cap, Projectiles cap, Damage fallback) keep
+        // adding to via the base TryApplyBoost path.
+        g.damageOverride = owner.ComputeAttackDamage(damage);
         g.Launch(startPos, endPos, arcHeight, flightTime);
     }
 
