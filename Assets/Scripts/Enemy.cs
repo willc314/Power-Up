@@ -39,6 +39,37 @@ public class Enemy : MonoBehaviour
     public float attackDamage = 8f;
     public float moveSpeed = 3.5f;
 
+    /// <summary>
+    /// Runtime debuff applied by the Dagger's Elemental Shiv augment.
+    /// While shivDebuffEndTime is in the future, EffectiveMoveSpeed and
+    /// EffectiveAttackDamage scale moveSpeed / attackDamage by these
+    /// factors. Refresh-on-rehit semantics: every shiv hit resets
+    /// shivDebuffEndTime to now+duration but never stacks the factors.
+    /// </summary>
+    [System.NonSerialized] public float shivSlowFactor = 1f;
+    [System.NonSerialized] public float shivDamageFactor = 1f;
+    [System.NonSerialized] public float shivDebuffEndTime = -1f;
+    /// <summary>True while a shiv debuff is active on this enemy.</summary>
+    public bool IsShivDebuffActive => shivDebuffEndTime > 0f && Time.time < shivDebuffEndTime;
+    /// <summary>moveSpeed scaled by any active runtime debuffs.</summary>
+    public float EffectiveMoveSpeed => moveSpeed * (IsShivDebuffActive ? shivSlowFactor : 1f);
+    /// <summary>attackDamage scaled by any active runtime debuffs.</summary>
+    public float EffectiveAttackDamage => attackDamage * (IsShivDebuffActive ? shivDamageFactor : 1f);
+
+    /// <summary>
+    /// Apply (or refresh) the Elemental Shiv debuff on this enemy. Called
+    /// by ElementalShivClone when its strike lands. Refresh semantics
+    /// always reset duration; the slow / damage factors come from the
+    /// dagger config and aren't multiplied across re-hits.
+    /// </summary>
+    public void ApplyShivDebuff(float duration, float slowFactor, float damageFactor)
+    {
+        if (IsDead || duration <= 0f) return;
+        shivSlowFactor   = Mathf.Clamp01(slowFactor);
+        shivDamageFactor = Mathf.Clamp01(damageFactor);
+        shivDebuffEndTime = Time.time + duration;
+    }
+
     [Header("Melee")]
     [Tooltip("Distance from the player at which a melee attack lands. Ignored by Ranged.")]
     public float attackRange = 1.4f;
@@ -135,6 +166,8 @@ public class Enemy : MonoBehaviour
     public float dashSpeedMultiplier = 3f;
     [Tooltip("Seconds the enemy telegraphs (stands still) before dashing.")]
     public float dashTelegraphTime = 0.6f;
+    [Tooltip("Seconds INTO the telegraph that the dash direction is locked in. Before this point the charger continues tracking the player's current position; after this point the direction is committed and the charger will dash at that locked spot even if the player moves. The remaining (dashTelegraphTime - dashLockOnDelay) is the player's window to dodge. Set 0 = lock instantly at telegraph start (most dodgeable). Set >= dashTelegraphTime = lock at the very end (no dodge window — old behavior).")]
+    public float dashLockOnDelay = 0.15f;
     [Tooltip("Seconds the dash itself lasts.")]
     public float dashDuration = 0.4f;
     [Tooltip("Seconds of recovery after a dash before starting another telegraph.")]
@@ -267,6 +300,13 @@ public class Enemy : MonoBehaviour
     private ChargerPhase chargerPhase = ChargerPhase.Approach;
     private float chargerPhaseTimer;
     private Vector3 dashDirection;
+    /// <summary>
+    /// Tracks how much of the lock-on window remains within the current
+    /// telegraph. While > 0 the charger keeps re-aiming dashDirection at
+    /// the player's live position; once it ticks to 0 the direction is
+    /// frozen and the rest of the telegraph is the player's dodge window.
+    /// </summary>
+    private float dashLockOnTimer;
 
     public long CurrentHP => currentHP;
     public long MaxHP => maxHP;
@@ -571,15 +611,31 @@ public class Enemy : MonoBehaviour
                 {
                     chargerPhase = ChargerPhase.Telegraph;
                     chargerPhaseTimer = dashTelegraphTime;
+                    // Track player for the first dashLockOnDelay seconds of
+                    // the telegraph, then commit. Pre-seed dashDirection
+                    // with the current aim so a zero-delay setup still has
+                    // a sensible direction even if the lock-on tick fails
+                    // to run on the same frame.
+                    dashLockOnTimer = Mathf.Max(0f, dashLockOnDelay);
+                    dashDirection = GetAvoidedDirection(dir);
                     StopMoving();
                 }
                 break;
 
             case ChargerPhase.Telegraph:
                 StopMoving();
+                // While the lock-on window is open, keep re-aiming at the
+                // player's current position. Once it closes, the direction
+                // is frozen and the rest of the telegraph (= dashTelegraphTime
+                // - dashLockOnDelay) is the player's window to step out of
+                // the line — which is what makes the dash actually dodgeable.
+                if (dashLockOnTimer > 0f)
+                {
+                    dashLockOnTimer -= Time.fixedDeltaTime;
+                    dashDirection = GetAvoidedDirection(dir);
+                }
                 if (chargerPhaseTimer <= 0f)
                 {
-                    dashDirection = GetAvoidedDirection(dir);
                     chargerPhase = ChargerPhase.Dash;
                     chargerPhaseTimer = dashDuration;
                 }
@@ -950,7 +1006,13 @@ public class Enemy : MonoBehaviour
         dir.y = 0f;
         if (dir.sqrMagnitude > 0.001f) dir.Normalize();
 
-        Vector3 v = dir * speed;
+        // Apply runtime slow debuffs (Elemental Shiv) at the lowest movement
+        // chokepoint so EVERY caller gets slowed without each AI path
+        // having to remember the multiplier — chase, kite, charger dash,
+        // SlimeKing melee speed, ranged retreat, etc.
+        float effSpeed = speed * (IsShivDebuffActive ? shivSlowFactor : 1f);
+
+        Vector3 v = dir * effSpeed;
         v.y = rb.velocity.y;
         rb.velocity = v;
     }
@@ -964,7 +1026,7 @@ public class Enemy : MonoBehaviour
     private void TryMelee()
     {
         if (meleeTimer > 0f || player == null) return;
-        player.TakeDamage(attackDamage);
+        player.TakeDamage(EffectiveAttackDamage);
         meleeTimer = attackCooldown;
         if (enemyAnimator != null) enemyAnimator.OnAttack();
     }
@@ -976,7 +1038,7 @@ public class Enemy : MonoBehaviour
             : transform.position + transform.forward * 0.8f + Vector3.up * 1.0f;
         Quaternion rot = Quaternion.LookRotation(dir, Vector3.up);
         EnemyProjectile p = Instantiate(projectilePrefab, spawnPos, rot);
-        p.Launch(dir, attackDamage);
+        p.Launch(dir, EffectiveAttackDamage);
         if (enemyAnimator != null) enemyAnimator.OnAttack();
     }
 

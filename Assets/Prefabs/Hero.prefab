@@ -3063,6 +3063,22 @@ MonoBehaviour:
   thrownDamage: 30
   throwEveryNStabs: 4
   throwSpawnHeight: 1
+  elementalShivEnabled: 0
+  elementalStabPrefab: {fileID: 4135451800918885864, guid: bb77a80ca62b01d4082209f47217da37, type: 3}
+  elementalThrownDaggerPrefab: {fileID: -5115320881736233332, guid: 06b82c46265eac04fb97e730ab6e9390, type: 3}
+  elementalCloneVisualPrefab: {fileID: 323333351367080586, guid: 9b3c02a198a4196458a48e67b9a4e393, type: 3}
+  cloneVisualRotationOffset: {x: 90, y: 0, z: 0}
+  cloneColor: {r: 0.55, g: 0.85, b: 1, a: 0.3137255}
+  useRainbowCloneColor: 1
+  cloneCountMin: 2
+  cloneCountMax: 3
+  cloneSpawnDistance: 4
+  cloneTravelDuration: 0.4
+  cloneVerticalOffset: 1
+  cloneDamageMultiplier: 0.8
+  shivDebuffDuration: 3
+  shivSlowFactor: 0.7
+  shivDamageFactor: 0.7
 --- !u!1 &8206070634150816031
 GameObject:
   m_ObjectHideFlags: 0

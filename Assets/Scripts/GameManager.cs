@@ -166,6 +166,16 @@ public class GameManager : MonoBehaviour
 
         HighScore = PlayerPrefs.GetInt(PrefsHighScore, 0);
         startOfRunHighScore = HighScore;
+        // Diagnostic: confirm the inspector-bound XP / level-threshold values
+        // actually made it into the build. If you change xpPerKill or the
+        // levelThresholds array in the inspector but forget to save the
+        // scene before building, the build ships with the previous values
+        // and the augment UI silently never fires — this log line catches
+        // that scenario at startup so it's easy to spot in Player.log.
+        string thresholds = "[]";
+        if (levelThresholds != null && levelThresholds.Length > 0)
+            thresholds = "[" + string.Join(",", levelThresholds) + "]";
+        Debug.Log($"[GameManager] Awake — xpPerKill={xpPerKill}, xpPerBossKill={xpPerBossKill}, levelThresholds={thresholds}");
     }
 
     private void OnDestroy()
@@ -220,6 +230,7 @@ public class GameManager : MonoBehaviour
     {
         if (amount <= 0) return;
         CurrentXP += amount;
+        Debug.Log($"[GameManager] GrantXP +{amount} → CurrentXP={CurrentXP}, CurrentLevel={CurrentLevel}, NextThreshold={(IsMaxLevel ? "MAX" : levelThresholds[CurrentLevel - 1].ToString())}");
 
         // Cross-the-threshold loop: keep advancing while we have enough XP
         // for the next level. This handles big single XP grants (e.g. final
@@ -227,6 +238,7 @@ public class GameManager : MonoBehaviour
         while (!IsMaxLevel && CurrentXP >= levelThresholds[CurrentLevel - 1])
         {
             CurrentLevel++;
+            Debug.Log($"[GameManager] Level up! CurrentLevel={CurrentLevel}, OnLeveledUp subscribers={(OnLeveledUp?.GetInvocationList()?.Length ?? 0)}");
             try { OnLeveledUp?.Invoke(CurrentLevel); }
             catch (System.Exception e) { Debug.LogException(e); } // never let a subscriber blow up the kill chain
         }

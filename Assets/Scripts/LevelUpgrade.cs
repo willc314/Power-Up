@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Scripting;
 
 /// <summary>
 /// One picker option in the LevelUpChoiceUI. Subclasses encode the actual
@@ -98,12 +99,14 @@ public class LevelUpgradeRegistry
     /// level system) on first use. Subclasses of <see cref="LevelUpgrade"/>
     /// register themselves here.
     /// </summary>
+    [Preserve]
     public static LevelUpgradeRegistry Initialize()
     {
         Instance = new LevelUpgradeRegistry();
         Instance.GeneralUpgrades.Add(new IAmTankUpgrade());
         Instance.GeneralUpgrades.Add(new MeteorUpgrade());
         Instance.WeaponUpgrades.Add(new SwordZenithUpgrade());
+        Instance.WeaponUpgrades.Add(new DaggerElementalShivUpgrade());
         return Instance;
     }
 
@@ -176,8 +179,10 @@ public class LevelUpgradeRegistry
 ///   * Cooldown 30s; recasting in the last few seconds before expiry refreshes
 ///     the duration without breaking the +30% buff continuity.
 /// </summary>
+[Preserve]
 public class IAmTankUpgrade : LevelUpgrade
 {
+    [Preserve]
     public IAmTankUpgrade()
     {
         DisplayName = "I am Tank!";
@@ -230,8 +235,10 @@ public class IAmTankUpgrade : LevelUpgrade
 /// secondary) or the other-weapon slot (sword not equipped — player can
 /// preview the unlock before picking up a sword).
 /// </summary>
+[Preserve]
 public class SwordZenithUpgrade : LevelUpgrade
 {
+    [Preserve]
     public SwordZenithUpgrade()
     {
         DisplayName = "Zenith";
@@ -291,8 +298,10 @@ public class SwordZenithUpgrade : LevelUpgrade
 /// Slot 3 is consumed once any general buff is taken, so picking Meteor
 /// also locks out future I-am-Tank offers (and vice-versa).
 /// </summary>
+[Preserve]
 public class MeteorUpgrade : LevelUpgrade
 {
+    [Preserve]
     public MeteorUpgrade()
     {
         DisplayName = "Meteor";
@@ -321,5 +330,54 @@ public class MeteorUpgrade : LevelUpgrade
         if (LevelUpgradeRegistry.Instance != null)
             LevelUpgradeRegistry.Instance.NotifyGeneralBuffChosen();
         Debug.Log("[Level-Up] Meteor general augment activated.");
+    }
+}
+
+/// <summary>
+/// "Elemental Shiv" — dagger weapon augment. Once accepted, every dagger
+/// hit (stab + thrown) summons 2-3 ghostly elemental copies of the dagger
+/// from random angles around the target. Each clone passes through the
+/// target dealing 80% of the dagger's hit damage, and refreshes a 3s
+/// debuff that slows the target by 30% and reduces its outgoing damage
+/// by 30%. The dagger and clone visuals are also swapped to the elemental
+/// model the player wired up on DaggerWeapon.
+/// </summary>
+[Preserve]
+public class DaggerElementalShivUpgrade : LevelUpgrade
+{
+    [Preserve]
+    public DaggerElementalShivUpgrade()
+    {
+        DisplayName = "Elemental Shiv";
+        Description =
+            "Every dagger hit summons 2-3 ghostly elemental copies that strike " +
+            "the target from random angles. Each clone deals 80% of the dagger's " +
+            "damage and refreshes a 3s debuff: target moves 30% slower and deals " +
+            "30% less damage.";
+        UpgradeSlot = Slot.EquippedWeapon; // overridden by registry slot fitting
+        TargetWeapon = eWeaponType.dagger;
+    }
+
+    public override bool IsAvailable(Hero hero)
+    {
+        if (hero == null) return false;
+        DaggerWeapon dagger = hero.GetWeaponComponentForType(eWeaponType.dagger) as DaggerWeapon;
+        if (dagger == null) return false;
+        // One-shot — once active, this upgrade never re-appears.
+        if (dagger.elementalShivEnabled) return false;
+        return true;
+    }
+
+    public override void Apply(Hero hero)
+    {
+        if (hero == null) return;
+        DaggerWeapon dagger = hero.GetWeaponComponentForType(eWeaponType.dagger) as DaggerWeapon;
+        if (dagger == null)
+        {
+            Debug.LogWarning("[Elemental Shiv] No DaggerWeapon component on hero — augment no-op.");
+            return;
+        }
+        dagger.elementalShivEnabled = true;
+        Debug.Log("[Level-Up] Elemental Shiv augment activated.");
     }
 }

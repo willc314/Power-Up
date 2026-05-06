@@ -68,6 +68,12 @@ public class Projectile : MonoBehaviour
     // meteor at that enemy's position. Cached lazily on Launch since the
     // armer is added AFTER Launch by the firing weapon.
     private MeteorArmer meteorArmer;
+    // Cached reference to an optional ShivArmer — added by DaggerWeapon
+    // when the Elemental Shiv augment is active. Every enemy hit (not
+    // just the first, unlike meteor) spawns its own clone fan against
+    // that enemy. Cached lazily because the armer is attached AFTER Launch.
+    private ShivArmer shivArmer;
+    private bool shivArmerLookedUp;
 
     public void Launch(Vector3 dir, float damage, LayerMask enemyLayers)
     {
@@ -138,6 +144,12 @@ public class Projectile : MonoBehaviour
                 // piercing chain don't double-fire.
                 if (meteorArmer == null) meteorArmer = GetComponent<MeteorArmer>();
                 if (meteorArmer != null) meteorArmer.TryConsume(e.transform.position);
+                // Elemental Shiv (dagger only): EVERY enemy hit spawns a
+                // clone fan against that enemy. Unlike meteor, no disarm —
+                // a piercing thrown dagger spawns clones for each enemy
+                // it pierces, scaling the augment's value with pierce.
+                if (!shivArmerLookedUp) { shivArmer = GetComponent<ShivArmer>(); shivArmerLookedUp = true; }
+                if (shivArmer != null) shivArmer.TriggerOn(e);
                 if (damageFalloffPerHit < 1f - 0.0001f)
                 {
                     damageScale = Mathf.Max(damageFalloffFloor, damageScale * damageFalloffPerHit);

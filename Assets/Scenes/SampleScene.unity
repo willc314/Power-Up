@@ -1220,7 +1220,7 @@ MonoBehaviour:
   bossSpawnInterval: 60
   bossHpMultiplierPerSpawn: 5
   finalBossPrefab: {fileID: 2291158632217275045, guid: e5e8818af10200740981a15cfe0bc952, type: 3}
-  finalBossSpawnTime: 480
+  finalBossSpawnTime: 300
   finalBossSpawnDistance: 8
   finalBossShockwaveRadius: 60
   finalBossShockwaveShake: 0.9
@@ -1773,7 +1773,7 @@ MonoBehaviour:
   pointsForFinalBossKill: 1000
   xpPerKill: 1
   xpPerBossKill: 50
-  levelThresholds: 640000008813000040420f00
+  levelThresholds: 0a0000008813000040420f00
   stopTimerOnDeath: 1
   elapsedTime: 0
   kills: 0

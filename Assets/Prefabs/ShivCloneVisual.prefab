@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!1 &3075305834080414222
+--- !u!1 &323333351367080586
 GameObject:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -8,47 +8,47 @@ GameObject:
   m_PrefabAsset: {fileID: 0}
   serializedVersion: 6
   m_Component:
-  - component: {fileID: 5417753968640945927}
-  - component: {fileID: 7698599806916587570}
-  - component: {fileID: 8208375279522049726}
-  - component: {fileID: 6711622995299847906}
+  - component: {fileID: 1096456449144725552}
+  - component: {fileID: 4078219201087156117}
+  - component: {fileID: 2268769162478934879}
+  - component: {fileID: 4078219201087156106}
   m_Layer: 0
-  m_Name: ThrownShield
+  m_Name: ShivCloneVisual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
---- !u!4 &5417753968640945927
+  m_IsActive: 1
+--- !u!4 &1096456449144725552
 Transform:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3075305834080414222}
+  m_GameObject: {fileID: 323333351367080586}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 1, z: 0, w: 0}
-  m_LocalPosition: {x: -1.6933804, y: 0.3452405, z: -1.6751533}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 2, y: 2, z: 2}
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
---- !u!33 &7698599806916587570
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!33 &4078219201087156117
 MeshFilter:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3075305834080414222}
-  m_Mesh: {fileID: -2486986498835096196, guid: bfe52b9860bf3254b97307683c1f0d88, type: 3}
---- !u!23 &8208375279522049726
+  m_GameObject: {fileID: 323333351367080586}
+  m_Mesh: {fileID: 6625064127930017228, guid: 48c40f250cf71ae4596f990fecdf6cad, type: 3}
+--- !u!23 &2268769162478934879
 MeshRenderer:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3075305834080414222}
+  m_GameObject: {fileID: 323333351367080586}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -62,7 +62,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 348eeda6cad5d86469a42deac7177e6f, type: 2}
+  - {fileID: 2100000, guid: 1ed5c689ba8eacc4c8e9d3b8ba968880, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -84,24 +84,25 @@ MeshRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_AdditionalVertexStreams: {fileID: 0}
---- !u!114 &6711622995299847906
-MonoBehaviour:
+--- !u!64 &4078219201087156106
+MeshCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 3075305834080414222}
+  m_GameObject: {fileID: 323333351367080586}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
   m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fa6259327d84c4248b3ee9e6e8c802c1, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  throwSpeed: 14
-  returnSpeed: 20
-  outboundDuration: 1
-  catchDistance: 0.8
-  modelRotationOffset: {x: -90, y: 0, z: 0}
-  spinSpeed: 720
-  spinAxis: {x: 0, y: 1, z: 0}
-  hitRadius: 0.7
-  ownerCatchHeight: 1
+  serializedVersion: 5
+  m_Convex: 1
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 6625064127930017228, guid: 48c40f250cf71ae4596f990fecdf6cad, type: 3}

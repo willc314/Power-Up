@@ -100,6 +100,16 @@ public class LevelUpChoiceUI : MonoBehaviour
         if (Instance != null && Instance != this) { Destroy(this); return; }
         Instance = this;
 
+        // Persist the auto-spawned singleton across scene transitions.
+        // Without DontDestroyOnLoad the menu-scene-spawned UI gets destroyed
+        // when the gameplay scene loads, AND RuntimeInitializeOnLoadMethod
+        // only fires once per game launch — so the gameplay scene ends up
+        // with no LevelUpChoiceUI listening, GameManager.OnLeveledUp fires
+        // into the void (0 subscribers), and no UI ever pops. The editor
+        // doesn't hit this because Play Mode usually starts in the
+        // gameplay scene directly.
+        DontDestroyOnLoad(gameObject);
+
         // Make sure the registry exists so the first level-up has somewhere
         // to roll from. Idempotent — calling Initialize re-creates the catalog.
         if (LevelUpgradeRegistry.Instance == null) LevelUpgradeRegistry.Initialize();
@@ -120,6 +130,7 @@ public class LevelUpChoiceUI : MonoBehaviour
     /// </summary>
     private void OnLeveledUp(int newLevel)
     {
+        Debug.Log($"[LevelUpChoiceUI] OnLeveledUp received: level={newLevel}");
         if (shown)
         {
             pendingLevels.Enqueue(newLevel);
@@ -149,7 +160,11 @@ public class LevelUpChoiceUI : MonoBehaviour
 
     private void Show(int level)
     {
-        if (Hero.Instance == null || Hero.Instance.IsDead) return;
+        if (Hero.Instance == null || Hero.Instance.IsDead)
+        {
+            Debug.Log($"[LevelUpChoiceUI] Show({level}) early-out: Hero.Instance={(Hero.Instance != null ? "OK" : "null")}, IsDead={(Hero.Instance != null ? Hero.Instance.IsDead.ToString() : "n/a")}");
+            return;
+        }
 
         var registry = LevelUpgradeRegistry.Instance ?? LevelUpgradeRegistry.Initialize();
         LevelUpgrade[] offer = registry.RollOffer(Hero.Instance);
@@ -160,6 +175,7 @@ public class LevelUpChoiceUI : MonoBehaviour
         // so we don't deadlock on a future level that does have offers.
         bool anyOffer = false;
         for (int i = 0; i < offer.Length; i++) if (offer[i] != null) { anyOffer = true; break; }
+        Debug.Log($"[LevelUpChoiceUI] Show({level}) registry rolled offer: equipped={(offer.Length > 0 && offer[0] != null ? offer[0].DisplayName : "null")}, other={(offer.Length > 1 && offer[1] != null ? offer[1].DisplayName : "null")}, general={(offer.Length > 2 && offer[2] != null ? offer[2].DisplayName : "null")}");
         if (!anyOffer)
         {
             // Process the next queued level (recursive, but bounded by the
