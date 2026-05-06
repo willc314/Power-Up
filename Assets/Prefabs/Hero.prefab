@@ -2664,6 +2664,16 @@ MonoBehaviour:
   healthRegenPerSecond: 1
   healthRegenBoostAmount: 0.5
   maxHealthRegenPerSecond: 100
+  iAmTankActive: 0
+  iAmTankHpExponentialPerBoost: 0.05
+  iAmTankRegenMultiplier: 2
+  iAmTankDamageMultiplier: 1.3
+  iAmTankAbilityCooldown: 30
+  iAmTankShieldDuration: 35
+  iAmTankHealFraction: 0.2
+  tankShieldPrefab: {fileID: 1289543790355709915, guid: b99922c2f59b1a542bdd06ae8bee47ae, type: 3}
+  tankShieldVisualScale: 1.2
+  tankShieldVisualYOffset: 0
   damageMultiplier: 1
   damageBoostAmount: 0.15
   maxDamageMultiplier: 100
@@ -2770,8 +2780,16 @@ MonoBehaviour:
   arcDegreesPerBoost: 60
   maxSlashArcDegrees: 360
   bladeSizeMultiplier: 1
-  bladeSizeIncreasePerBoost: 0.25
+  bladeSizeIncreasePerBoost: 0.1
   maxBladeSizeMultiplier: 5
+  zenithUnlocked: 0
+  zenithApplied: 0
+  zenithDamageMultiplier: 2
+  zenithExtraAttacksRequired: 3
+  zenithAttackSpeedReductionRequired: 0.3
+  zenithSemiMinor: 3
+  zenithSemiMinorJitter: 0.5
+  zenithTrailAlpha: 0.098039
 --- !u!114 &8888070785139311172
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2845,11 +2863,6 @@ MonoBehaviour:
   bowSpawnDistance: 1.2
   bowSpawnHeight: 1
   bowVisualRotationOffset: {x: 0, y: -90, z: 0}
-  glowColor: {r: 1, g: 1, b: 1, a: 1}
-  emissionIntensity: 2
-  useGlowLight: 1
-  maxLightIntensity: 6
-  maxLightRange: 4
   fullChargeTime: 1.5
   slowdownWhileCharging: 0.75
   minReleaseTime: 0.1
@@ -2866,7 +2879,6 @@ MonoBehaviour:
   arrowDamageFalloffFloor: 0.2
   overchargeTime: 5
   deathBeamPrefab: {fileID: 4926047971536815124, guid: 5b65ab245209fd5468ad11d4e38a7460, type: 3}
-  overchargeColor: {r: 1, g: 0.95, b: 0.7, a: 1}
   overchargeVfxPrefab: {fileID: 0}
   fullyChargedHeroAuraPrefab: {fileID: 7131401307255788800, guid: 4d9a3b35b3bc07649b697df7fb497b6d, type: 3}
   overchargedHeroAuraPrefab: {fileID: 6063518424537689786, guid: bad5794a53f5c3645bb444b3a040ba01, type: 3}
@@ -3036,8 +3048,6 @@ MonoBehaviour:
   thrownDamage: 30
   throwEveryNStabs: 4
   throwSpawnHeight: 1
-  daggerDamageMultiplier: 1
-  daggerDamageMultiplierPerBoost: 0.15
 --- !u!1 &8206070634150816031
 GameObject:
   m_ObjectHideFlags: 0

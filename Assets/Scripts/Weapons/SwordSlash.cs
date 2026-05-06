@@ -78,8 +78,33 @@ public class SwordSlash : MonoBehaviour
     [Tooltip("Z rotation on the model. Use to flip the blade if needed.")]
     public float modelRoll = 0f;
 
+    // ---- Zenith (set by SwordWeapon at spawn time when zenithApplied) ----
+    [System.NonSerialized] public bool zenithMode = false;
+    [System.NonSerialized] public float zenithSemiMinor = 1.4f;
+    /// <summary>Major (forward / cursor) semi-axis of the zenith ellipse.
+    /// SwordWeapon snapshots the cursor's actual distance from the hero at
+    /// swing-spawn time and writes it here so the swing's apex lands
+    /// exactly on the cursor instead of at a fixed orbit radius. 0 (default)
+    /// falls back to the slash's <see cref="radius"/> field.</summary>
+    [System.NonSerialized] public float zenithMajorRadius = 0f;
+    [System.NonSerialized] public Color trailTint = Color.white;
+
     private Transform owner;
     private float damage;
+    /// <summary>
+    /// Owner rotation snapshotted at <see cref="Init"/> time so the swing's
+    /// arc stays in its initial world-facing direction even if the player
+    /// rotates mid-swing (cursor turn / dash-induced facing change).
+    /// </summary>
+    private Quaternion frozenRotation;
+    /// <summary>
+    /// Owner position snapshotted at <see cref="Init"/>. Combined with
+    /// frozenRotation this fully decouples the swing from the player —
+    /// dashing, sprinting, or being knocked across the arena mid-swing
+    /// leaves the slash committed to its original world location and
+    /// arc, so swings always complete on the spot they started.
+    /// </summary>
+    private Vector3 frozenPosition;
     private LayerMask enemyLayers;
     private bool rightToLeft;
     private float timer;
@@ -93,8 +118,26 @@ public class SwordSlash : MonoBehaviour
         this.damage = damage;
         this.enemyLayers = enemyLayers;
         this.rightToLeft = rightToLeft;
+        // Snapshot rotation AND position now — the swing is fully
+        // committed to the player's transform at the click frame and is
+        // unaffected by any subsequent movement or rotation. Mid-swing
+        // dashes, knockbacks, or cursor turns leave the slash on its
+        // original arc at its original world location.
+        this.frozenRotation = owner != null ? owner.rotation : Quaternion.identity;
+        this.frozenPosition = owner != null ? owner.position : transform.position;
 
         timer = 0f;
+
+        // Zenith trail tint: SwordWeapon picks a random rainbow color per
+        // swing and stuffs it in trailTint before Init runs. Apply it to any
+        // Tiny.Trail children — they spawn their own trailGo/MeshRenderer in
+        // their Start(), so we use the queue-tint API which the Trail picks
+        // up if it's not started yet.
+        if (zenithMode)
+        {
+            foreach (var t in GetComponentsInChildren<Tiny.Trail>(true))
+                t.RuntimeTintColor = trailTint;
+        }
 
         // Snap the visual to the arc-start pose BEFORE the first render.
         // SwordWeapon.Fire() instantiates the prefab at the hero's spawn
@@ -139,27 +182,107 @@ public class SwordSlash : MonoBehaviour
 
     private void UpdateVisual(float t)
     {
+        // Ease-out: fast start, slow finish. Same curve for Zenith and
+        // non-Zenith swings.
         float eased = 1f - Mathf.Pow(1f - t, 2f);
 
-        float startAngle = -arcDegrees * 0.5f;
-        float endAngle = arcDegrees * 0.5f;
+        // Zenith path: full 360° elliptical sweep. The sword starts BEHIND
+        // the player (-180° from forward), passes through the cursor
+        // direction (0°), and ends behind again (+180°). The path is an
+        // ellipse with its major axis aligned along owner.forward (semi-axis
+        // = radius, the longer cursor-reach) and minor axis along owner.right
+        // (semi-axis = zenithSemiMinor, the narrower side reach). This makes
+        // the sword feel like it stretches forward toward the cursor and is
+        // closer to the body when sweeping past the sides.
+        // Frozen-rotation derived basis vectors — the arc's facing is
+        // committed to the click-frame direction.
+        Vector3 frozenForward = frozenRotation * Vector3.forward;
+        Vector3 frozenRight   = frozenRotation * Vector3.right;
+
+        // Anchor interpolates from the FROZEN spawn position at swing
+        // start to the LIVE player position at swing end. This way the
+        // start of the arc reads as locked to where the player clicked
+        // (apex still lands on the original cursor target), but the
+        // sword always finishes its sweep behind the player's CURRENT
+        // position even if they walked / dashed during the swing.
+        Vector3 livePos = owner != null ? owner.position : frozenPosition;
+        Vector3 anchor  = Vector3.Lerp(frozenPosition, livePos, eased);
+
+        if (zenithMode)
+        {
+            // Always sweep the full ±180° regardless of arcDegrees. Direction
+            // alternation (rightToLeft) flips the sign so consecutive swings
+            // come from opposite sides like the regular swing.
+            float startAngle = rightToLeft ?  180f : -180f;
+            float endAngle   = rightToLeft ? -180f :  180f;
+            float angle = Mathf.Lerp(startAngle, endAngle, eased);
+            float angleRad = angle * Mathf.Deg2Rad;
+
+            // Asymmetric ellipse — front apex on the cursor, back apex at
+            // the sword's normal orbit radius BEHIND the player. We achieve
+            // this by offsetting the ellipse's center forward of the player
+            // by half the difference, so:
+            //   front end  = +centerForward + semiMajor = cursorDistance
+            //   back end   = +centerForward - semiMajor = -radius
+            // (radius here is the normal sword orbit, i.e. the start/end
+            // distance the player is used to from non-Zenith swings.)
+            float frontReach = zenithMajorRadius > 0.001f ? zenithMajorRadius : radius;
+            float backReach  = radius;
+            float semiMajor    = (frontReach + backReach) * 0.5f;
+            float centerForward = (frontReach - backReach) * 0.5f;
+
+            // Parametric ellipse: forward = centerForward + semiMajor * cos(θ),
+            //                     side    = zenithSemiMinor * sin(θ).
+            // θ=0    → sword apex at cursor (forward = +frontReach).
+            // θ=±90  → sword at ±zenithSemiMinor on the side, slightly
+            //           forward of the player (centerForward offset).
+            // θ=±180 → sword at the normal start/return point behind the
+            //           player (forward = -backReach = -radius).
+            float forward = centerForward + semiMajor * Mathf.Cos(angleRad);
+            float side    = zenithSemiMinor * Mathf.Sin(angleRad);
+
+            Vector3 dir = frozenForward * forward + frozenRight * side;
+            transform.position = anchor + dir + Vector3.up * verticalOffset;
+
+            // Outward-yaw is derived from the ELLIPSE CENTER, not the player.
+            // The asymmetric ellipse's center sits forward of the player by
+            // centerForward, so a rotation based on (sword - player) would
+            // skew the sword's facing — particularly at the sides and back.
+            // Vector from center to sword position equals the parametric
+            // tangent-perpendicular, which is the natural outward direction:
+            //   outward = forward.center * (semiMajor cosθ) + right * (semiMinor sinθ)
+            Vector3 outwardFromCenter = frozenForward * (semiMajor * Mathf.Cos(angleRad))
+                                       + frozenRight   * (zenithSemiMinor * Mathf.Sin(angleRad));
+            Quaternion radial = Quaternion.LookRotation(
+                outwardFromCenter.sqrMagnitude > 0.0001f ? outwardFromCenter.normalized : frozenForward,
+                Vector3.up);
+            float effectiveYaw = rightToLeft ? -modelYaw : modelYaw;
+            transform.rotation = radial * Quaternion.Euler(modelPitch, effectiveYaw, modelRoll);
+            return;
+        }
+
+        // Default circular path (pre-Zenith / non-Zenith swords). Uses the
+        // frozen rotation so the swing's arc stays in its initial world
+        // direction even if the player rotates mid-swing.
+        float startAngleC = -arcDegrees * 0.5f;
+        float endAngleC = arcDegrees * 0.5f;
 
         if (rightToLeft)
         {
-            float tmp = startAngle;
-            startAngle = endAngle;
-            endAngle = tmp;
+            float tmp = startAngleC;
+            startAngleC = endAngleC;
+            endAngleC = tmp;
         }
 
-        float angle = Mathf.Lerp(startAngle, endAngle, eased);
+        float angleC = Mathf.Lerp(startAngleC, endAngleC, eased);
 
-        Quaternion radial = owner.rotation * Quaternion.Euler(0f, angle, 0f);
-        Vector3 dir = radial * Vector3.forward;
+        Quaternion radialC = frozenRotation * Quaternion.Euler(0f, angleC, 0f);
+        Vector3 dirC = radialC * Vector3.forward;
 
-        transform.position = owner.position + dir * radius + Vector3.up * verticalOffset;
+        transform.position = anchor + dirC * radius + Vector3.up * verticalOffset;
 
-        float effectiveYaw = rightToLeft ? -modelYaw : modelYaw;
-        transform.rotation = radial * Quaternion.Euler(modelPitch, effectiveYaw, modelRoll);
+        float effectiveYawC = rightToLeft ? -modelYaw : modelYaw;
+        transform.rotation = radialC * Quaternion.Euler(modelPitch, effectiveYawC, modelRoll);
     }
 
     private void DamageUsingFanArea()

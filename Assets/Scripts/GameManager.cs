@@ -24,6 +24,55 @@ public class GameManager : MonoBehaviour
     [Tooltip("Lump-sum points awarded when the player kills the SlimeGod final boss.")]
     public int pointsForFinalBossKill = 1000;
 
+    [Header("Character Level / XP")]
+    [Tooltip("XP granted per regular enemy kill.")]
+    public int xpPerKill = 1;
+    [Tooltip("XP granted per boss kill (SlimeKing & SlimeGod).")]
+    public int xpPerBossKill = 50;
+    [Tooltip("Cumulative XP thresholds for each level above 1. Index 0 = XP needed to reach level 2, index 1 = level 3, index 2 = level 4 (max). Length defines max level.")]
+    public int[] levelThresholds = new int[] { 50, 5000, 1000000 };
+
+    /// <summary>Cumulative XP earned this run.</summary>
+    public int CurrentXP { get; private set; }
+    /// <summary>1-indexed character level this run. Starts at 1; advances when CurrentXP crosses each threshold.</summary>
+    public int CurrentLevel { get; private set; } = 1;
+    /// <summary>True if at the highest possible level (no further thresholds).</summary>
+    public bool IsMaxLevel => CurrentLevel > levelThresholds.Length;
+    /// <summary>XP threshold (cumulative) the player needs to reach the NEXT level. Returns CurrentXP at max level.</summary>
+    public int NextLevelXP => IsMaxLevel ? CurrentXP : levelThresholds[CurrentLevel - 1];
+    /// <summary>XP threshold (cumulative) the previous level required (0 for level 1).</summary>
+    public int PreviousLevelXP => CurrentLevel <= 1 ? 0 : levelThresholds[CurrentLevel - 2];
+    /// <summary>0..1 progress through the current level, useful for the HUD bar. Returns 1 at max.</summary>
+    public float LevelProgress
+    {
+        get
+        {
+            if (IsMaxLevel) return 1f;
+            int span = NextLevelXP - PreviousLevelXP;
+            if (span <= 0) return 1f;
+            return Mathf.Clamp01((CurrentXP - PreviousLevelXP) / (float)span);
+        }
+    }
+
+    /// <summary>
+    /// Fires once per level-up, AFTER CurrentLevel has advanced. Argument is
+    /// the new level. LevelUpChoiceUI subscribes to this to pop the upgrade
+    /// picker. If multiple thresholds are crossed in a single XP grant (e.g.
+    /// the final-boss kill), this fires once per level — the UI is expected
+    /// to queue them (the same pattern PowerUpChoiceUI uses for back-to-back
+    /// powerup pickups).
+    /// </summary>
+    public static event System.Action<int> OnLeveledUp;
+
+    /// <summary>
+    /// Fires whenever any boss-tier enemy dies (SlimeKing or the SlimeGod
+    /// final boss). Used by the Zenith curse to detect "defeat a boss
+    /// after taking the upgrade" — subscribe in Awake, unsubscribe in
+    /// OnDestroy. Both routes converge here so subscribers don't need to
+    /// know whether the kill was a regular boss or the final boss.
+    /// </summary>
+    public static event System.Action OnAnyBossKilled;
+
     [Header("Behavior")]
     [Tooltip("If true, the timer pauses once the hero dies.")]
     public bool stopTimerOnDeath = true;
@@ -149,11 +198,38 @@ public class GameManager : MonoBehaviour
     public void OnEnemyKilled(Enemy enemy)
     {
         if (!IsRunning) return;
-        if (enemy == null) { kills++; return; }
+        if (enemy == null) { kills++; GrantXP(xpPerKill); return; }
         // SlimeGod is credited via OnFinalBossKilled, not the regular kill counter.
         if (enemy.behavior == Enemy.Behavior.SlimeGod) return;
-        if (enemy.behavior == Enemy.Behavior.SlimeKing) bossKills++;
-        else                                            kills++;
+        if (enemy.behavior == Enemy.Behavior.SlimeKing)
+        {
+            bossKills++;
+            GrantXP(xpPerBossKill);
+            try { OnAnyBossKilled?.Invoke(); }
+            catch (System.Exception e) { Debug.LogException(e); }
+        }
+        else { kills++; GrantXP(xpPerKill); }
+    }
+
+    /// <summary>
+    /// Add XP and advance level if any thresholds are crossed. Fires
+    /// <see cref="OnLeveledUp"/> once per level gained (so a single big XP
+    /// drop that crosses two thresholds fires the event twice in order).
+    /// </summary>
+    private void GrantXP(int amount)
+    {
+        if (amount <= 0) return;
+        CurrentXP += amount;
+
+        // Cross-the-threshold loop: keep advancing while we have enough XP
+        // for the next level. This handles big single XP grants (e.g. final
+        // boss kill at lower play levels) cleanly.
+        while (!IsMaxLevel && CurrentXP >= levelThresholds[CurrentLevel - 1])
+        {
+            CurrentLevel++;
+            try { OnLeveledUp?.Invoke(CurrentLevel); }
+            catch (System.Exception e) { Debug.LogException(e); } // never let a subscriber blow up the kill chain
+        }
     }
 
     /// <summary>
@@ -200,6 +276,14 @@ public class GameManager : MonoBehaviour
         finalBossKilled = true;
         bonusPoints += pointsForFinalBossKill;
         activeFinalBoss = null;
+        // Final-boss kill counts toward XP just like a SlimeKing — it's not
+        // routed through OnEnemyKilled (intentionally, so the regular kill
+        // counter stays untouched), so grant XP explicitly here.
+        GrantXP(xpPerBossKill);
+        // Fire OnAnyBossKilled too so Zenith curse subscribers see this
+        // as a valid "defeat a boss" condition.
+        try { OnAnyBossKilled?.Invoke(); }
+        catch (System.Exception e) { Debug.LogException(e); }
 
         // Wave the win flag through PlayerPrefs so a fallback EndScreen
         // load (no WinMenu in the scene) reads correctly.

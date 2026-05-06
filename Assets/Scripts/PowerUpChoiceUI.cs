@@ -66,6 +66,16 @@ public class PowerUpChoiceUI : MonoBehaviour
     // to make a choice for every powerup they grabbed (no silent overwrite).
     private readonly Queue<eWeaponType> pendingQueue = new Queue<eWeaponType>();
 
+    /// <summary>
+    /// Fires every time this UI fully closes (drained queue, time unpaused).
+    /// LevelUpChoiceUI subscribes so it can drain its own pending level-ups
+    /// once the powerup chain finishes — and vice-versa via its mirror event.
+    /// </summary>
+    public static event System.Action OnClosed;
+
+    /// <summary>True while this UI is currently shown OR has queued pickups still to drain.</summary>
+    public bool IsActive => IsOpen || pendingQueue.Count > 0;
+
     /// <summary>True while the choice panel is currently visible to the player.</summary>
     public bool IsOpen => panelRoot != null && panelRoot.activeSelf;
 
@@ -144,6 +154,21 @@ public class PowerUpChoiceUI : MonoBehaviour
             return;
         }
 
+        // Cross-UI deferral: if a level-up picker is currently open, sit on
+        // this powerup until the level-up closes. We enqueue it (so existing
+        // queue-drain logic picks it up) and subscribe to the level-up's
+        // close event ONCE — when it fires, we drain into Show via Close()'s
+        // dequeue path. The hero pointer is already cached so we don't need
+        // it across the boundary.
+        if (LevelUpChoiceUI.Instance != null && LevelUpChoiceUI.Instance.IsActive)
+        {
+            this.hero = hero;
+            pendingQueue.Enqueue(type);
+            LevelUpChoiceUI.OnClosed -= OnExternalUIClosed;
+            LevelUpChoiceUI.OnClosed += OnExternalUIClosed;
+            return;
+        }
+
         this.hero = hero;
         this.pendingType = type;
 
@@ -153,6 +178,23 @@ public class PowerUpChoiceUI : MonoBehaviour
         // Dim the music while the player is choosing a powerup. EndDuck pairs with this in Close().
         if (MusicManager.Instance != null) MusicManager.Instance.BeginDuck();
 
+        Refresh();
+    }
+
+    /// <summary>
+    /// Subscribed to LevelUpChoiceUI.OnClosed when we deferred a pickup. On
+    /// the close event we unsubscribe and try to drain our own queue (which
+    /// runs through Close → Refresh).
+    /// </summary>
+    private void OnExternalUIClosed()
+    {
+        LevelUpChoiceUI.OnClosed -= OnExternalUIClosed;
+        if (IsOpen || pendingQueue.Count == 0) return;
+        // Mirror the body of Show()'s "open" path with the front of the queue.
+        pendingType = pendingQueue.Dequeue();
+        Time.timeScale = 0f;
+        panelRoot.SetActive(true);
+        if (MusicManager.Instance != null) MusicManager.Instance.BeginDuck();
         Refresh();
     }
 
@@ -200,6 +242,19 @@ public class PowerUpChoiceUI : MonoBehaviour
         Weapon otherSlotWeapon = (slotIndex == 0) ? hero.secondaryWeapon : hero.primaryWeapon;
         bool otherHasSameType  = otherSlotWeapon != null && otherSlotWeapon.weaponType == pendingType;
 
+        // Zenith dual-wield exception: as soon as the player has UNLOCKED
+        // Zenith via the level-up choice (zenithUnlocked = true), dual-wield
+        // is allowed. The actual Zenith activation (damage doubling, ellipse
+        // path, rainbow trail) happens automatically once stat thresholds
+        // are met — see SwordWeapon.CheckZenithAutoActivation. Until then
+        // the player can equip two swords and they share upgrades but
+        // attack independently per slot.
+        bool zenithDualWieldOk =
+            pendingType == eWeaponType.sword
+            && otherSlotWeapon is SwordWeapon otherSword
+            && otherSword.zenithUnlocked;
+        if (zenithDualWieldOk) otherHasSameType = false;
+
         if (equipped == null)
         {
             // Empty slot: show placeholder + single Equip button.
@@ -224,6 +279,12 @@ public class PowerUpChoiceUI : MonoBehaviour
             if (otherHasSameType)
             {
                 slot.equipButtonText.text = "Already Equipped";
+                slot.equipButton.interactable = false;
+                slot.equipButton.onClick.RemoveAllListeners();
+            }
+            else if (hero.IsZenithCursed && pendingType != eWeaponType.sword)
+            {
+                slot.equipButtonText.text = "Cursed — Sword Only";
                 slot.equipButton.interactable = false;
                 slot.equipButton.onClick.RemoveAllListeners();
             }
@@ -296,6 +357,12 @@ public class PowerUpChoiceUI : MonoBehaviour
                 slot.replaceButton.interactable = false;
                 slot.replaceButton.onClick.RemoveAllListeners();
             }
+            else if (hero.IsZenithCursed && pendingType != eWeaponType.sword)
+            {
+                slot.replaceButtonText.text = "Cursed — Sword Only";
+                slot.replaceButton.interactable = false;
+                slot.replaceButton.onClick.RemoveAllListeners();
+            }
             else
             {
                 slot.replaceButtonText.text = "Replace with " + GetWeaponName(pendingType);
@@ -319,6 +386,10 @@ public class PowerUpChoiceUI : MonoBehaviour
             Weapon weaponRef = equipped;
             BoostKind kindRef = boostKind;
 
+            // (Zenith is no longer triggered via a Grenade pickup option —
+            // it auto-activates once the sword meets all four stat
+            // requirements: dual-wielded, 360° arc, >3 extra projectiles,
+            // >30% cooldown reduction. See SwordWeapon.CheckZenithAutoActivation.)
             string boostPrefix = maxed ? "Boost " + equipped.weaponName + " (post-max):  "
                                        : "Boost " + equipped.weaponName + ":  ";
             slot.boostButtonText.text = boostPrefix + equipped.DescribeBoost(boostKind);
@@ -364,6 +435,10 @@ public class PowerUpChoiceUI : MonoBehaviour
 
         // Restore the music level (paired with BeginDuck in Show).
         if (MusicManager.Instance != null) MusicManager.Instance.EndDuck();
+
+        // Notify any UI waiting on us (level-up picker that came in mid-pickup).
+        try { OnClosed?.Invoke(); }
+        catch (System.Exception e) { Debug.LogException(e); }
     }
 
     private void Hide()

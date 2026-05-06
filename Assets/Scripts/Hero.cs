@@ -77,6 +77,28 @@ public class Hero : MonoBehaviour
     [Tooltip("Cap on healthRegenPerSecond.")]
     public float maxHealthRegenPerSecond = 10f;
 
+    [Header("I am Tank! General Buff (level-up unlock)")]
+    [Tooltip("Set to true by IAmTankUpgrade.Apply when the player picks the buff. Unlocks the MMB ability and switches HP/regen scaling rules.")]
+    public bool iAmTankActive = false;
+    [Tooltip("Per-MaxHP-boost exponential multiplier replacement when iAmTankActive. 0.05 = MaxHP scales ×1.05 per pickup instead of the default flat +maxHPBoostAmount. Compounds across pickups.")]
+    public float iAmTankHpExponentialPerBoost = 0.05f;
+    [Tooltip("Multiplier applied to BOTH the passive regen tick AND each HealthRegen boost while iAmTankActive. 2 = regen and regen-boost gains are doubled.")]
+    public float iAmTankRegenMultiplier = 2f;
+    [Tooltip("Outgoing damage multiplier active for the duration of an I-am-Tank shield. Stacks multiplicatively on top of damageMultiplier and crit. Multiple stacked shields don't increase this — it's a flat 'shield up' buff.")]
+    public float iAmTankDamageMultiplier = 1.30f;
+    [Tooltip("Cooldown (seconds) between shield ability casts.")]
+    public float iAmTankAbilityCooldown = 30f;
+    [Tooltip("Shield duration (seconds). Absorbs ONE incoming hit of any size, then breaks. Recasting within the last few seconds before expiry refreshes duration to full.")]
+    public float iAmTankShieldDuration = 35f;
+    [Tooltip("Heal applied as a fraction of MaxHP each time the ability is cast.")]
+    [Range(0f, 1f)] public float iAmTankHealFraction = 0.20f;
+    [Tooltip("Optional shield visual (Hovl Magic Shield Blue). Spawned as a child of the hero while the shield is up; destroyed on break / expiry.")]
+    public GameObject tankShieldPrefab;
+    [Tooltip("Uniform scale applied to the spawned shield visual. Tweak to fit the hero's body size.")]
+    public float tankShieldVisualScale = 1.2f;
+    [Tooltip("Vertical offset for the shield visual relative to hero pivot.")]
+    public float tankShieldVisualYOffset = 0.9f;
+
     [Header("Damage Modifiers")]
     [Tooltip("Multiplier applied to ALL weapon damage at attack time. 1 = no change.")]
     public float damageMultiplier = 1f;
@@ -277,6 +299,46 @@ public class Hero : MonoBehaviour
     /// </summary>
     public bool IsInvulnerable => dashInvulnerability && invulnerabilityTimer > 0f;
 
+    // ---- I am Tank! runtime state ----
+    private float tankCooldownTimer;          // seconds remaining before MMB can re-cast (0 = ready)
+    private float tankShieldTimer;            // seconds remaining on active shield (0 = no shield)
+    private GameObject tankShieldInstance;    // spawned shield visual (parented to hero)
+
+    // ---- Zenith curse retroactive refunds ----
+    // While the Zenith curse is active, hero stat boosts apply at half
+    // efficiency and the missing half is banked here per-stat. When
+    // SwordWeapon.ApplyZenith fires (curse ends), RefundZenithCurseGains()
+    // applies all banked deltas so the player retroactively gets the
+    // full-strength versions of every powerup taken during the curse.
+    private float pendingHPRefund;
+    private float pendingRegenRefund;
+    private float pendingDamageMultRefund;
+    private float pendingCritRateRefund;
+    private float pendingCritDamageRefund;
+    private float pendingMoveSpeedRefund;
+    private float pendingDashCooldownRefund;  // POSITIVE = subtract more from dashCooldown
+    /// <summary>
+    /// True while the Zenith curse is active: the player has chosen the
+    /// upgrade but the four stat thresholds + boss-defeat gate haven't
+    /// been satisfied yet. Drives the 1/4 outgoing damage, 2× incoming
+    /// damage, 50% powerup efficiency, and weapon-switch lockout.
+    /// </summary>
+    public bool IsZenithCursed
+    {
+        get
+        {
+            SwordWeapon sw = GetWeaponComponentForType(eWeaponType.sword) as SwordWeapon;
+            return sw != null && sw.zenithUnlocked && !sw.zenithApplied;
+        }
+    }
+
+    /// <summary>True while the I-am-Tank shield is up. While true, ComputeAttackDamage applies iAmTankDamageMultiplier and TakeDamage absorbs the next hit.</summary>
+    public bool IsTankShieldActive => tankShieldTimer > 0f;
+    /// <summary>0..1 progress for HUD ring; 1 = ready.</summary>
+    public float TankAbilityCooldownProgress => iAmTankAbilityCooldown <= 0f ? 1f : Mathf.Clamp01(1f - tankCooldownTimer / iAmTankAbilityCooldown);
+    /// <summary>Seconds remaining on the active shield, 0 if none.</summary>
+    public float TankShieldTimeRemaining => Mathf.Max(0f, tankShieldTimer);
+
     private void Awake()
     {
         Instance = this;
@@ -393,9 +455,28 @@ public class Hero : MonoBehaviour
         DispatchWeaponInput(0, primaryWeapon);
         DispatchWeaponInput(1, secondaryWeapon);
 
-        // Passive health regen from hero stat boosts.
+        // Passive health regen from hero stat boosts. While I-am-Tank is
+        // active the regen rate is doubled (per buff spec).
         if (healthRegenPerSecond > 0f && currentHP < maxHP)
-            currentHP = Mathf.Min(maxHP, currentHP + healthRegenPerSecond * Time.deltaTime);
+        {
+            float rate = healthRegenPerSecond;
+            if (iAmTankActive) rate *= Mathf.Max(0f, iAmTankRegenMultiplier);
+            currentHP = Mathf.Min(maxHP, currentHP + rate * Time.deltaTime);
+        }
+
+        // ---- I am Tank! ability tick ----
+        if (iAmTankActive)
+        {
+            if (tankCooldownTimer > 0f) tankCooldownTimer -= Time.deltaTime;
+            if (tankShieldTimer  > 0f)
+            {
+                tankShieldTimer -= Time.deltaTime;
+                if (tankShieldTimer <= 0f) BreakTankShield();
+            }
+            // MMB to cast/refresh. Old Input Manager: button index 2.
+            if (Input.GetMouseButtonDown(2) && tankCooldownTimer <= 0f && !IsDead)
+                CastTankAbility();
+        }
 
         if (animator != null)
         {
@@ -592,6 +673,27 @@ public class Hero : MonoBehaviour
         if (weapon == null)
             return;
 
+        // Sword dual-wield: when the SAME SwordWeapon component occupies
+        // BOTH primary and secondary slots (post-Zenith-unlock), the
+        // secondary mouse button (RMB) needs its own cooldown so the
+        // player can spam-attack out of sync with LMB. Route the secondary
+        // slot through TryFireSecondary, which uses the sword's
+        // secondaryCooldownTimer instead of the shared cooldownTimer that
+        // the primary slot drives. The check `weapon == primaryWeapon`
+        // is enough to detect the dual-wield case — if both slots
+        // reference the same component, dual-wielding is active.
+        if (mouseButton == 1 && weapon == primaryWeapon && weapon is SwordWeapon dualSword)
+        {
+            // Sword fires on hold (auto-repeat). Skip the down/up paths since
+            // the regular sword has no charging behavior.
+            if (Input.GetMouseButton(1))
+            {
+                if (dualSword.TryFireSecondary(this) && animator != null)
+                    animator.SetTrigger(kAttack);
+            }
+            return;
+        }
+
         bool playedAttack = false;
 
         if (Input.GetMouseButtonDown(mouseButton))
@@ -631,6 +733,25 @@ public class Hero : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Project the mouse cursor onto the hero's aim-plane and return the
+    /// world-space hit point. Returns false if the camera or the raycast
+    /// missed (cursor is off-plane / behind the camera). Used by Sword
+    /// Zenith to make the swing's elliptical major axis match the cursor's
+    /// actual distance instead of a fixed orbit radius.
+    /// </summary>
+    public bool TryGetCursorWorldPosition(out Vector3 cursorWorld)
+    {
+        cursorWorld = Vector3.zero;
+        if (cam == null) cam = Camera.main;
+        if (cam == null) return false;
+        Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+        Plane ground = new Plane(Vector3.up, new Vector3(0f, aimPlaneY, 0f));
+        if (!ground.Raycast(ray, out float dist)) return false;
+        cursorWorld = ray.GetPoint(dist);
+        return true;
+    }
+
     public void TakeDamage(float amount)
     {
         if (IsDead)
@@ -648,6 +769,19 @@ public class Hero : MonoBehaviour
         if (IsInvulnerable)
             return;
 
+        // I am Tank! shield: absorb ONE hit of any size and pop. Per spec
+        // the shield drops the entire incoming amount (not partial), which
+        // also ends the +30% damage buff via IsTankShieldActive flipping
+        // false. Triggers the same body/vignette flash as a real hit so
+        // the player gets visual confirmation the shield broke.
+        if (IsTankShieldActive)
+        {
+            BreakTankShield();
+            if (damageFlash != null) damageFlash.Flash();
+            if (HealthVignette.Instance != null) HealthVignette.Instance.Flash();
+            return;
+        }
+
         // Charging-bow damage reduction. Both slots are checked because the
         // player can hold the bow on either LMB or RMB; whichever bow is
         // currently charging wins (the higher reduction if both somehow are).
@@ -658,6 +792,12 @@ public class Hero : MonoBehaviour
             chargeReduction = Mathf.Max(chargeReduction, bowB.chargingDamageReduction);
         if (chargeReduction > 0f)
             amount *= 1f - Mathf.Clamp01(chargeReduction);
+
+        // Zenith curse: incoming damage doubled until the player completes
+        // the trial. Applied AFTER bow charge reduction so the reduction
+        // still meaningfully softens the doubled hit.
+        if (IsZenithCursed)
+            amount *= 2f;
 
         currentHP = Mathf.Max(0f, currentHP - amount);
 
@@ -699,6 +839,57 @@ public class Hero : MonoBehaviour
             return;
 
         currentHP = Mathf.Min(maxHP, currentHP + amount);
+    }
+
+    /// <summary>
+    /// Cast the I-am-Tank shield ability. Heals 20% MaxHP, spawns/refreshes
+    /// the shield visual, sets shield duration. Uses cooldown gates in the
+    /// Update tick — this method assumes the cooldown check has already
+    /// been done by the caller (Hero.Update on MMB press).
+    ///
+    /// Refresh semantics: pressing again while a shield is up overrides its
+    /// remaining time with the full duration. This naturally supports the
+    /// player using the ability in the last seconds of the shield to keep
+    /// the +30% damage buff continuous (no gap means no damage-multiplier reset).
+    /// </summary>
+    private void CastTankAbility()
+    {
+        if (!iAmTankActive || IsDead) return;
+        // Heal — 20% of MaxHP, capped at MaxHP.
+        Heal(maxHP * Mathf.Clamp01(iAmTankHealFraction));
+        // Reset cooldown.
+        tankCooldownTimer = Mathf.Max(0f, iAmTankAbilityCooldown);
+        // Refresh-or-start shield duration. This single line covers both
+        // "first cast" (timer was 0) and "recast within last 5s" (timer was
+        // small) — full duration always wins.
+        tankShieldTimer = Mathf.Max(0.01f, iAmTankShieldDuration);
+        // Spawn the visual if not already spawned. Recasts keep the same
+        // instance (no flicker between despawn / respawn).
+        if (tankShieldInstance == null && tankShieldPrefab != null)
+        {
+            Vector3 pos = transform.position + Vector3.up * tankShieldVisualYOffset;
+            tankShieldInstance = Instantiate(tankShieldPrefab, pos, transform.rotation, transform);
+            tankShieldInstance.transform.localPosition = Vector3.up * tankShieldVisualYOffset;
+            tankShieldInstance.transform.localRotation = Quaternion.identity;
+            tankShieldInstance.transform.localScale = Vector3.one * Mathf.Max(0.0001f, tankShieldVisualScale);
+            // Disable any colliders so the shield can't shove enemies / the hero.
+            foreach (var c in tankShieldInstance.GetComponentsInChildren<Collider>()) c.enabled = false;
+        }
+    }
+
+    /// <summary>
+    /// End the shield: clear timer, destroy visual, drop the +30% damage
+    /// buff (it's tied to IsTankShieldActive). Called when the shield
+    /// absorbs a hit OR when its duration expires.
+    /// </summary>
+    private void BreakTankShield()
+    {
+        tankShieldTimer = 0f;
+        if (tankShieldInstance != null)
+        {
+            Destroy(tankShieldInstance);
+            tankShieldInstance = null;
+        }
     }
 
     public void ApplyPowerUp(eWeaponType type)
@@ -771,7 +962,26 @@ public class Hero : MonoBehaviour
             return;
         }
 
-        TransferMaxedWeaponStats(oldWeapon, newWeapon);
+        // Zenith curse: lockout to swords only. The player can still equip
+        // a SECOND sword (that's what completes dual-wield), but anything
+        // else is rejected so the player has to commit to the sword trial.
+        if (IsZenithCursed && newType != eWeaponType.sword)
+        {
+            Debug.Log("[Zenith Curse] Cannot switch to " + newType + " — must complete the trial.");
+            ApplyHeroStatBoost();
+            return;
+        }
+
+        // Previously this called TransferMaxedWeaponStats(oldWeapon, newWeapon),
+        // which auto-promoted the NEW weapon all the way to its damage cap if
+        // the OLD weapon had been maxed. That meant swapping out a fully-
+        // upgraded sword would hand the new bow / shield / whatever an
+        // instant max-damage promotion, and every subsequent boost on it
+        // would land in the post-max scaled-damage path instead of showing
+        // fresh "+5 Damage" pickups. Disabled so a swap leaves the new
+        // weapon at whatever progress it already had on its persistent
+        // component (fresh if never equipped before, or the level it was
+        // at the last time the player used it).
 
         if (replacePrimary)
         {
@@ -868,6 +1078,14 @@ public class Hero : MonoBehaviour
             return;
         }
 
+        // Zenith curse: only swords are allowed to be equipped.
+        if (IsZenithCursed && type != eWeaponType.sword)
+        {
+            Debug.Log("[Zenith Curse] Cannot equip " + type + " — must complete the trial.");
+            ApplyHeroStatBoost();
+            return;
+        }
+
         if (slotIndex == 0) primaryWeapon = w;
         else                secondaryWeapon = w;
 
@@ -924,6 +1142,15 @@ public class Hero : MonoBehaviour
         switch (stat)
         {
             case HeroStatBoostMode.MaxHP:
+                if (iAmTankActive)
+                {
+                    // Tank: ×(1 + iAmTankHpExponentialPerBoost) per pickup.
+                    // Show both percent and the actual HP gained at the
+                    // current MaxHP so the player can see the live impact.
+                    float pct = Mathf.Max(0f, iAmTankHpExponentialPerBoost) * 100f;
+                    float gain = maxHP * Mathf.Max(0f, iAmTankHpExponentialPerBoost);
+                    return $"+{pct:0.#}% Max HP  (+{gain:0.#})";
+                }
                 return $"+{maxHPBoostAmount:0.#} Max HP";
 
             case HeroStatBoostMode.MoveSpeed:
@@ -943,8 +1170,14 @@ public class Hero : MonoBehaviour
 
             case HeroStatBoostMode.HealthRegen:
                 if (healthRegenPerSecond >= maxHealthRegenPerSecond - 0.001f) return "Regen Maxed";
-                float regenDelta = Mathf.Min(maxHealthRegenPerSecond, healthRegenPerSecond + healthRegenBoostAmount) - healthRegenPerSecond;
-                return $"+{regenDelta:0.##} HP/sec";
+                {
+                    // Tank: regen pickups gain ×iAmTankRegenMultiplier (defaults
+                    // to 2). Show the actual delta the player will get.
+                    float perBoost = healthRegenBoostAmount;
+                    if (iAmTankActive) perBoost *= Mathf.Max(0f, iAmTankRegenMultiplier);
+                    float regenDelta = Mathf.Min(maxHealthRegenPerSecond, healthRegenPerSecond + perBoost) - healthRegenPerSecond;
+                    return $"+{regenDelta:0.##} HP/sec";
+                }
 
             case HeroStatBoostMode.DamageBoost:
                 if (damageMultiplier >= maxDamageMultiplier - 0.001f) return "Damage Maxed";
@@ -969,52 +1202,160 @@ public class Hero : MonoBehaviour
     /// <summary>Apply a specific hero stat boost (no random roll). Used by the UI when a maxed weapon's boost is converted.</summary>
     public void ApplyHeroStatBoost(HeroStatBoostMode stat)
     {
+        // While the Zenith curse is active, every powerup applies at HALF
+        // efficiency — and the missing half is BANKED per-stat so when the
+        // curse lifts (RefundZenithCurseGains), the player retroactively
+        // gets the full-strength version of every powerup taken during
+        // the trial.
+        bool cursed = IsZenithCursed;
+        float effEff = cursed ? 0.5f : 1f;     // efficiency multiplier
+        float refundEff = cursed ? 0.5f : 0f;  // amount to bank for refund
+
         switch (stat)
         {
             case HeroStatBoostMode.MaxHP:
-                maxHP     += maxHPBoostAmount;
-                currentHP += maxHPBoostAmount;
-                Debug.Log("Hero max HP increased to " + maxHP + ".");
+                if (iAmTankActive)
+                {
+                    // Exponential scaling: each pickup multiplies MaxHP by
+                    // (1 + iAmTankHpExponentialPerBoost × eff).
+                    float fullPct = Mathf.Max(0f, iAmTankHpExponentialPerBoost);
+                    float effPct  = fullPct * effEff;
+                    float oldMax  = maxHP;
+                    maxHP        *= (1f + effPct);
+                    currentHP   += (maxHP - oldMax);
+                    if (currentHP > maxHP) currentHP = maxHP;
+                    // Bank the missing flat-equivalent gain at refund time.
+                    pendingHPRefund += oldMax * fullPct * refundEff;
+                    Debug.Log($"Hero max HP scaled ×{1f + effPct:0.000} (Tank{(cursed ? ", cursed" : "")}): {oldMax:0.#} → {maxHP:0.#}.");
+                }
+                else
+                {
+                    float gain   = maxHPBoostAmount * effEff;
+                    float refund = maxHPBoostAmount * refundEff;
+                    maxHP     += gain;
+                    currentHP += gain;
+                    pendingHPRefund += refund;
+                    Debug.Log($"Hero max HP +{gain:0.#}{(cursed ? " (cursed)" : "")} → {maxHP}.");
+                }
                 break;
 
             case HeroStatBoostMode.MoveSpeed:
-                moveSpeed = Mathf.Min(maxMoveSpeed, moveSpeed + moveSpeedBoostAmount);
-                // Same boost also chips away at the dash cooldown with
-                // diminishing returns (each step is a percentage of the
-                // CURRENT cooldown, floored at minDashCooldown). The dash
-                // i-frame window shrinks by the SAME ratio so faster dashing
-                // costs the player some invulnerability per dash.
-                if (dashCooldownReductionPercent > 0f)
                 {
-                    float oldCooldown = dashCooldown;
-                    dashCooldown = Mathf.Max(minDashCooldown, dashCooldown / (1f + dashCooldownReductionPercent));
-                    if (dashCooldown < oldCooldown - 0.0001f && oldCooldown > 0f)
-                        dashIFrameMultiplier *= dashCooldown / oldCooldown;
+                    float speedGain   = moveSpeedBoostAmount * effEff;
+                    float speedRefund = moveSpeedBoostAmount * refundEff;
+                    float prev = moveSpeed;
+                    moveSpeed = Mathf.Min(maxMoveSpeed, moveSpeed + speedGain);
+                    pendingMoveSpeedRefund += speedRefund;
+                    if (dashCooldownReductionPercent > 0f)
+                    {
+                        // Curse: cooldown reduction is also halved. Refund
+                        // tracks the EXTRA reduction we'd have applied
+                        // (delta between full and half) so the refund pass
+                        // can knock more off later.
+                        float pct       = dashCooldownReductionPercent;
+                        float effPct    = pct * effEff;
+                        float oldCD     = dashCooldown;
+                        dashCooldown    = Mathf.Max(minDashCooldown, dashCooldown / (1f + effPct));
+                        // Hypothetical full-effect new cooldown for refund accounting.
+                        float fullCD    = Mathf.Max(minDashCooldown, oldCD / (1f + pct));
+                        pendingDashCooldownRefund += Mathf.Max(0f, dashCooldown - fullCD);
+                        if (dashCooldown < oldCD - 0.0001f && oldCD > 0f)
+                            dashIFrameMultiplier *= dashCooldown / oldCD;
+                    }
+                    Debug.Log($"Hero move speed → {moveSpeed}, dash cooldown → {dashCooldown}, i-frame ×{dashIFrameMultiplier:F2}{(cursed ? " (cursed)" : "")}");
                 }
-                Debug.Log($"Hero move speed → {moveSpeed}, dash cooldown → {dashCooldown}, i-frame ×{dashIFrameMultiplier:F2}");
                 break;
 
             case HeroStatBoostMode.HealthRegen:
-                healthRegenPerSecond = Mathf.Min(maxHealthRegenPerSecond,
-                    healthRegenPerSecond + healthRegenBoostAmount);
-                Debug.Log("Hero health regen increased to " + healthRegenPerSecond + " HP/sec.");
+                {
+                    float gainBase = healthRegenBoostAmount;
+                    if (iAmTankActive) gainBase *= Mathf.Max(0f, iAmTankRegenMultiplier);
+                    float gain   = gainBase * effEff;
+                    float refund = gainBase * refundEff;
+                    healthRegenPerSecond = Mathf.Min(maxHealthRegenPerSecond,
+                        healthRegenPerSecond + gain);
+                    pendingRegenRefund += refund;
+                    Debug.Log($"Hero health regen +{gain:0.##}{(cursed ? " (cursed)" : "")} → {healthRegenPerSecond} HP/sec.");
+                }
                 break;
 
             case HeroStatBoostMode.DamageBoost:
-                damageMultiplier = Mathf.Min(maxDamageMultiplier, damageMultiplier + damageBoostAmount);
-                Debug.Log("Hero damage multiplier is now " + damageMultiplier + "×.");
+                {
+                    float gain   = damageBoostAmount * effEff;
+                    float refund = damageBoostAmount * refundEff;
+                    damageMultiplier = Mathf.Min(maxDamageMultiplier, damageMultiplier + gain);
+                    pendingDamageMultRefund += refund;
+                    Debug.Log($"Hero damage multiplier +{gain:0.##}{(cursed ? " (cursed)" : "")} → {damageMultiplier}×.");
+                }
                 break;
 
             case HeroStatBoostMode.CritRate:
-                critRate = Mathf.Min(maxCritRate, critRate + critRateBoostAmount);
-                Debug.Log("Hero crit rate is now " + (critRate * 100f) + "%.");
+                {
+                    float gain   = critRateBoostAmount * effEff;
+                    float refund = critRateBoostAmount * refundEff;
+                    critRate = Mathf.Min(maxCritRate, critRate + gain);
+                    pendingCritRateRefund += refund;
+                    Debug.Log($"Hero crit rate +{gain * 100f:0.#}%{(cursed ? " (cursed)" : "")} → {critRate * 100f}%.");
+                }
                 break;
 
             case HeroStatBoostMode.CritDamage:
-                critDamage = Mathf.Min(maxCritDamage, critDamage + critDamageBoostAmount);
-                Debug.Log("Hero crit damage is now " + critDamage + "×.");
+                {
+                    float gain   = critDamageBoostAmount * effEff;
+                    float refund = critDamageBoostAmount * refundEff;
+                    critDamage = Mathf.Min(maxCritDamage, critDamage + gain);
+                    pendingCritDamageRefund += refund;
+                    Debug.Log($"Hero crit damage +{gain:0.##}×{(cursed ? " (cursed)" : "")} → {critDamage}×.");
+                }
                 break;
         }
+    }
+
+    /// <summary>
+    /// Drain every pending Zenith-curse refund into the live stats so all
+    /// powerups taken DURING the curse retroactively read as 100%-effective.
+    /// Called by SwordWeapon.ApplyZenith the instant the curse lifts.
+    /// </summary>
+    public void RefundZenithCurseGains()
+    {
+        if (pendingHPRefund > 0f)
+        {
+            maxHP     += pendingHPRefund;
+            currentHP += pendingHPRefund;
+            if (currentHP > maxHP) currentHP = maxHP;
+        }
+        if (pendingMoveSpeedRefund > 0f)
+            moveSpeed = Mathf.Min(maxMoveSpeed, moveSpeed + pendingMoveSpeedRefund);
+        if (pendingDashCooldownRefund > 0f)
+        {
+            float oldCd = dashCooldown;
+            dashCooldown = Mathf.Max(minDashCooldown, dashCooldown - pendingDashCooldownRefund);
+            if (dashCooldown < oldCd - 0.0001f && oldCd > 0f)
+                dashIFrameMultiplier *= dashCooldown / oldCd;
+        }
+        if (pendingRegenRefund > 0f)
+            healthRegenPerSecond = Mathf.Min(maxHealthRegenPerSecond,
+                healthRegenPerSecond + pendingRegenRefund);
+        if (pendingDamageMultRefund > 0f)
+            damageMultiplier = Mathf.Min(maxDamageMultiplier, damageMultiplier + pendingDamageMultRefund);
+        if (pendingCritRateRefund > 0f)
+            critRate = Mathf.Min(maxCritRate, critRate + pendingCritRateRefund);
+        if (pendingCritDamageRefund > 0f)
+            critDamage = Mathf.Min(maxCritDamage, critDamage + pendingCritDamageRefund);
+
+        Debug.Log("[Zenith] Curse lifted — refunded pending stat gains: " +
+                  $"HP+{pendingHPRefund:0.#}, Spd+{pendingMoveSpeedRefund:0.##}, " +
+                  $"DashCdRef+{pendingDashCooldownRefund:0.##}, " +
+                  $"Regen+{pendingRegenRefund:0.##}, Dmg+{pendingDamageMultRefund:0.##}, " +
+                  $"Crit+{pendingCritRateRefund * 100f:0.#}%, CritDmg+{pendingCritDamageRefund:0.##}×.");
+
+        pendingHPRefund = 0f;
+        pendingMoveSpeedRefund = 0f;
+        pendingDashCooldownRefund = 0f;
+        pendingRegenRefund = 0f;
+        pendingDamageMultRefund = 0f;
+        pendingCritRateRefund = 0f;
+        pendingCritDamageRefund = 0f;
     }
 
     /// <summary>
@@ -1029,6 +1370,17 @@ public class Hero : MonoBehaviour
         float dmg = baseDamage * Mathf.Max(0f, damageMultiplier);
         if (critRate > 0f && Random.value < critRate)
             dmg *= Mathf.Max(1f, critDamage);
+        // I am Tank! shield buff: +30% damage (tunable) while the shield
+        // is up. Multiplicative on top of damage multiplier and crit. Multiple
+        // re-casts within the duration don't stack — the buff is a flat "shield
+        // is alive" flag, not per-stack.
+        if (IsTankShieldActive)
+            dmg *= Mathf.Max(0f, iAmTankDamageMultiplier);
+        // Zenith curse: outgoing damage is QUARTERED until the player
+        // satisfies the activation gates and Zenith fires. Multiplied
+        // last so it stacks on top of every other modifier.
+        if (IsZenithCursed)
+            dmg *= 0.25f;
         return dmg;
     }
 
@@ -1137,6 +1489,10 @@ public class Hero : MonoBehaviour
         IsDead = true;
         moveInput = Vector3.zero;
         speedMultiplier = 1f;
+
+        // Clean up the tank shield visual on death so it doesn't sit there
+        // glowing on the corpse.
+        if (tankShieldInstance != null) BreakTankShield();
 
         if (rb != null)
             rb.velocity = Vector3.zero;

@@ -166,7 +166,7 @@ public abstract class Weapon : MonoBehaviour
     public int extraAttackCount = 0;
     [Tooltip("Cap on extraAttackCount. Past this, Projectiles boosts fall back to scaled damage.")]
     public int maxExtraAttackCount = 4;
-    [Tooltip("Lower bound on the time between extra attacks. Used when cooldown / (extraAttackCount + 1) would otherwise be too small to be visible.")]
+    [Tooltip("Lower bound on the time between extra attacks. Used when cooldown / (extraAttackCount + 1) would otherwise be too small to be visible. Subclasses can raise this floor for visual coherence (e.g. SwordWeapon enforces it ≥ slash duration so the per-swing animation always finishes before the next swing starts).")]
     public float extraAttackMinSpacing = 0.05f;
 
     // ---- Boost API ----
@@ -340,7 +340,7 @@ public abstract class Weapon : MonoBehaviour
     /// complete before the next normal attack is allowed. Spacing is derived
     /// from the current cooldown — faster weapons fire their extras faster.
     /// </summary>
-    private IEnumerator FireExtras(Hero owner)
+    protected IEnumerator FireExtras(Hero owner)
     {
         // Snapshot count + cooldown so live mutations during the sequence
         // (a boost picked up mid-run, etc.) don't change the schedule.

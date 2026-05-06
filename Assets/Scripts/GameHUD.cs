@@ -61,6 +61,8 @@ public class GameHUD : MonoBehaviour
     private Canvas canvas;
     private Text timerText;
     private Text bossTimerText;
+    private Image xpBarFill;
+    private Text  xpBarLabel;
     private Text scoreText;
     private Text highScoreText;
     private Text newHighScoreText;
@@ -88,6 +90,19 @@ public class GameHUD : MonoBehaviour
         public Text labelText;          // "DASH" when ready, "0.5" when on cooldown
     }
     private DashWidgets dashSlot;
+
+    // Tank ability slot widgets (square ABOVE the dash slot). Hidden until
+    // Hero.iAmTankActive flips true (player accepts the I-am-Tank upgrade).
+    private struct TankWidgets
+    {
+        public GameObject root;
+        public Image      cooldownOverlay;
+        public Image      iconImage;     // optional sprite shown behind the label
+        public Text       labelText;     // "TANK" when ready, "12.5" while on cooldown
+    }
+    private TankWidgets tankSlot;
+    [Tooltip("Optional icon for the I-am-Tank shield ability HUD slot. Square sprite (e.g. shield icon). Leave null for text-only.")]
+    public Sprite tankAbilityIcon;
 
     // Boss HP bar (bottom-center; only shown while a SlimeGod is alive).
     private GameObject bossBarRoot;
@@ -125,7 +140,9 @@ public class GameHUD : MonoBehaviour
         UpdateHealth();
         UpdateWeaponSlots();
         UpdateDashSlot();
+        UpdateTankSlot();
         UpdateBossBar();
+        UpdateXPBar();
     }
 
     // -------------------- Per-frame updates --------------------
@@ -449,6 +466,84 @@ public class GameHUD : MonoBehaviour
         BuildHealth(canvasGo.transform);
         BuildWeaponSlots(canvasGo.transform);
         BuildBossBar(canvasGo.transform);
+        BuildXPBar(canvasGo.transform);
+    }
+
+    /// <summary>
+    /// Slim XP bar pinned just under the timer (and the boss sub-timer when
+    /// it's visible). Reads GameManager.LevelProgress for fill and shows the
+    /// current character level on the right end of the bar.
+    /// </summary>
+    private void BuildXPBar(Transform parent)
+    {
+        // Sit a small gap below the boss-timer's vertical slot so the layout
+        // stays clean whether or not the boss timer is visible (the boss
+        // timer text is just empty when hidden — same vertical real estate).
+        int bossFontSize = Mathf.Max(18, timerFontSize / 2);
+        float yOffset = margin + timerFontSize + 6 + bossFontSize + 14;
+
+        const float barW = 320f;
+        const float barH = 14f;
+
+        GameObject bgGo = MakeUIObject("XPBarBG", parent);
+        RectTransform bgRt = (RectTransform)bgGo.transform;
+        AnchorTopLeft(bgRt, margin, yOffset, barW, barH);
+        Image bg = bgGo.AddComponent<Image>();
+        bg.color = new Color(0f, 0f, 0f, 0.55f);
+        bg.raycastTarget = false;
+
+        // Fill rect: anchored bottom-left of the bg, top edge at full
+        // height. The RIGHT edge is set every frame in UpdateXPBar via
+        // anchorMax.x = progress (0..1). Using anchor-based scaling
+        // instead of Image.Type.Filled so we don't depend on a sprite.
+        GameObject fillGo = MakeUIObject("XPBarFill", bgGo.transform);
+        RectTransform fillRt = (RectTransform)fillGo.transform;
+        fillRt.anchorMin = new Vector2(0f, 0f);
+        fillRt.anchorMax = new Vector2(0f, 1f); // anchorMax.x updated per-frame
+        fillRt.pivot     = new Vector2(0f, 0.5f);
+        fillRt.offsetMin = new Vector2(2f, 2f);
+        fillRt.offsetMax = new Vector2(0f, -2f);
+        xpBarFill = fillGo.AddComponent<Image>();
+        xpBarFill.color = new Color(1f, 0.85f, 0.3f, 1f);  // gold (matches the LEVEL UP! header)
+        xpBarFill.raycastTarget = false;
+
+        GameObject lblGo = MakeUIObject("XPBarLabel", bgGo.transform);
+        RectTransform lblRt = (RectTransform)lblGo.transform;
+        lblRt.anchorMin = new Vector2(0f, 0f);
+        lblRt.anchorMax = new Vector2(1f, 1f);
+        lblRt.offsetMin = new Vector2(8f, 0f);
+        lblRt.offsetMax = new Vector2(-8f, 0f);
+        xpBarLabel = lblGo.AddComponent<Text>();
+        xpBarLabel.font = defaultFont;
+        xpBarLabel.fontSize = 12;
+        xpBarLabel.color = textColor;
+        xpBarLabel.alignment = TextAnchor.MiddleRight;
+        xpBarLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+        xpBarLabel.raycastTarget = false;
+        xpBarLabel.text = "Lv 1   0 / 50";
+        AddTextOutline(lblGo);
+    }
+
+    private void UpdateXPBar()
+    {
+        if (xpBarFill == null) return;
+        if (gameManager == null) gameManager = GameManager.Instance;
+        if (gameManager == null) return;
+        // Drive the fill via anchor scaling — anchorMax.x = progress (0..1).
+        // This grows the gold rect from left to right as XP accumulates.
+        var rt = (RectTransform)xpBarFill.transform;
+        Vector2 max = rt.anchorMax;
+        max.x = Mathf.Clamp01(gameManager.LevelProgress);
+        rt.anchorMax = max;
+        if (xpBarLabel != null)
+        {
+            if (gameManager.IsMaxLevel)
+                xpBarLabel.text = "Lv " + gameManager.CurrentLevel + "  MAX";
+            else
+                xpBarLabel.text = "Lv " + gameManager.CurrentLevel
+                                + "   " + gameManager.CurrentXP
+                                + " / " + gameManager.NextLevelXP;
+        }
     }
 
     private void BuildTimer(Transform parent)
@@ -617,6 +712,147 @@ public class GameHUD : MonoBehaviour
         primarySlot   = BuildSlot(container.transform, x, "PrimarySlot");
         x += weaponSlotSize + weaponSlotSpacing;
         secondarySlot = BuildSlot(container.transform, x, "SecondarySlot");
+
+        // Tank ability slot — top-level canvas child so it sits ABOVE the
+        // weapon-slots container without changing its layout. Aligned in X
+        // with the dash slot and offset upward by one slot height + gap.
+        tankSlot = BuildTankSlot(parent, totalWidth, totalHeight);
+        tankSlot.root.SetActive(false); // hidden until iAmTankActive
+    }
+
+    private TankWidgets BuildTankSlot(Transform parent, int weaponContainerWidth, int weaponContainerHeight)
+    {
+        TankWidgets ts = new TankWidgets();
+
+        // Square slot positioned to the LEFT of the dash slot at the same
+        // vertical Y. The dash slot sits at the WeaponSlots container's
+        // top-left, with the container itself anchored bottom-right at
+        // (margin, margin) with size (totalWidth, totalHeight = weaponSlot
+        // + caption). Tank's right edge is one slotWidth+spacing to the
+        // left of the container; bottom Y matches the dash slot's bottom.
+        int captionRow = weaponNameFontSize + 8; // height of the "MMB" / "Space" caption row beneath each slot
+        GameObject slotGo = MakeUIObject("TankAbilitySlot", parent);
+        RectTransform rt = (RectTransform)slotGo.transform;
+        AnchorBottomRight(
+            rt,
+            margin + weaponContainerWidth + weaponSlotSpacing,
+            margin + captionRow,
+            weaponSlotSize,
+            weaponSlotSize);
+
+        Image bgImg = slotGo.AddComponent<Image>();
+        bgImg.color = panelColor;
+        bgImg.raycastTarget = false;
+        AddOutline(slotGo);
+        ts.root = slotGo;
+
+        // Optional sprite icon (sits behind the cooldown overlay so it dims
+        // while the ability is recharging).
+        GameObject iconGo = MakeUIObject("Icon", slotGo.transform);
+        RectTransform iconRt = (RectTransform)iconGo.transform;
+        iconRt.anchorMin = Vector2.zero;
+        iconRt.anchorMax = Vector2.one;
+        iconRt.offsetMin = new Vector2(8f, 8f);
+        iconRt.offsetMax = new Vector2(-8f, -8f);
+        ts.iconImage = iconGo.AddComponent<Image>();
+        ts.iconImage.preserveAspect = true;
+        ts.iconImage.raycastTarget = false;
+        ts.iconImage.color = new Color(1f, 1f, 1f, 0.85f);
+        if (tankAbilityIcon != null) ts.iconImage.sprite = tankAbilityIcon;
+        else                         ts.iconImage.color = new Color(0.4f, 0.7f, 1f, 0.18f); // faint cyan placeholder
+
+        // Cooldown overlay drains top-down (matches dash + weapon slots).
+        GameObject cdGo = MakeUIObject("Cooldown", slotGo.transform);
+        RectTransform cdRt = (RectTransform)cdGo.transform;
+        cdRt.anchorMin = Vector2.zero;
+        cdRt.anchorMax = Vector2.one;
+        cdRt.offsetMin = Vector2.zero;
+        cdRt.offsetMax = Vector2.zero;
+
+        ts.cooldownOverlay = cdGo.AddComponent<Image>();
+        ts.cooldownOverlay.color = cooldownOverlayColor;
+        ts.cooldownOverlay.type = Image.Type.Filled;
+        ts.cooldownOverlay.fillMethod = Image.FillMethod.Vertical;
+        ts.cooldownOverlay.fillOrigin = (int)Image.OriginVertical.Top;
+        ts.cooldownOverlay.fillAmount = 0f;
+        ts.cooldownOverlay.raycastTarget = false;
+
+        // Label — "TANK" when ready, seconds-remaining while cooling down.
+        GameObject labelGo = MakeUIObject("Label", slotGo.transform);
+        RectTransform lblRt = (RectTransform)labelGo.transform;
+        lblRt.anchorMin = Vector2.zero;
+        lblRt.anchorMax = Vector2.one;
+        lblRt.offsetMin = Vector2.zero;
+        lblRt.offsetMax = Vector2.zero;
+
+        ts.labelText = labelGo.AddComponent<Text>();
+        ts.labelText.font = defaultFont;
+        ts.labelText.fontSize = 22;
+        ts.labelText.color = textColor;
+        ts.labelText.alignment = TextAnchor.MiddleCenter;
+        ts.labelText.fontStyle = FontStyle.Bold;
+        ts.labelText.text = "TANK";
+        ts.labelText.raycastTarget = false;
+        AddTextOutline(labelGo);
+
+        // Caption underneath: "MMB" so the player learns the keybind.
+        GameObject captionGo = MakeUIObject("Caption", slotGo.transform);
+        RectTransform capRt = (RectTransform)captionGo.transform;
+        capRt.anchorMin = new Vector2(0f, 0f);
+        capRt.anchorMax = new Vector2(1f, 0f);
+        capRt.pivot = new Vector2(0.5f, 1f);
+        capRt.anchoredPosition = new Vector2(0f, -4f);
+        capRt.sizeDelta = new Vector2(0f, weaponNameFontSize + 4f);
+
+        Text caption = captionGo.AddComponent<Text>();
+        caption.font = defaultFont;
+        caption.fontSize = weaponNameFontSize;
+        caption.color = textColor;
+        caption.alignment = TextAnchor.UpperCenter;
+        caption.text = "MMB";
+        caption.raycastTarget = false;
+        AddTextOutline(captionGo);
+
+        return ts;
+    }
+
+    private void UpdateTankSlot()
+    {
+        if (tankSlot.root == null || hero == null) return;
+
+        // Show only after the player has accepted the I-am-Tank upgrade.
+        bool active = hero.iAmTankActive;
+        if (tankSlot.root.activeSelf != active) tankSlot.root.SetActive(active);
+        if (!active) return;
+
+        float total = Mathf.Max(0.001f, hero.iAmTankAbilityCooldown);
+        float remaining = total * (1f - hero.TankAbilityCooldownProgress);
+
+        if (hero.IsTankShieldActive)
+        {
+            // Shield up — show shield duration countdown in green-ish so it
+            // reads as a buff state, not a disabled state.
+            float shieldLeft = hero.TankShieldTimeRemaining;
+            tankSlot.labelText.text = shieldLeft >= 1f ? shieldLeft.ToString("0") : shieldLeft.ToString("0.0");
+            tankSlot.labelText.color = new Color(0.6f, 1f, 0.6f, 1f);
+            // No cooldown overlay while shield is up — recasting refreshes anyway.
+            if (tankSlot.cooldownOverlay != null) tankSlot.cooldownOverlay.fillAmount = 0f;
+        }
+        else if (remaining > 0.05f)
+        {
+            // On cooldown.
+            tankSlot.labelText.text = remaining >= 1f ? remaining.ToString("0") : remaining.ToString("0.0");
+            tankSlot.labelText.color = textColor;
+            if (tankSlot.cooldownOverlay != null)
+                tankSlot.cooldownOverlay.fillAmount = Mathf.Clamp01(remaining / total);
+        }
+        else
+        {
+            // Ready.
+            tankSlot.labelText.text = "TANK";
+            tankSlot.labelText.color = textColor;
+            if (tankSlot.cooldownOverlay != null) tankSlot.cooldownOverlay.fillAmount = 0f;
+        }
     }
 
     private DashWidgets BuildDashSlot(Transform parent, int xOffset)

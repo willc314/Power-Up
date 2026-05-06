@@ -46,7 +46,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   material: {fileID: 2100000, guid: 4a9fe9e273a8462b95f0b601ec4c61af, type: 2}
   duration: 0.25
-  corner: 4
+  corner: 10
   loop: 0
   points:
   - {x: 0, y: 0.15, z: 0}
@@ -151,7 +151,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   arcDegrees: 140
-  duration: 0.25
+  duration: 0.24
   radius: 1.5
   verticalOffset: 0.5
   hitArcDegrees: 140

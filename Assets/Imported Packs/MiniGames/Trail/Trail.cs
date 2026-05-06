@@ -41,6 +41,22 @@ namespace Tiny
 		[SerializeField, Tooltip("Increase this value to make the trail corners appear rounder.")]
 		private int corner = 1;
 
+		// --- Power-Up project customization: runtime override accessors ---
+		// Both fields below feed Initialize() in Start(), so callers (e.g.
+		// SwordWeapon when Zenith is active) can override them between
+		// Instantiate and Start to give Zenith trails their own duration /
+		// corner-smoothness without modifying the BladeTrail prefab.
+		public float Duration
+		{
+			get => duration;
+			set => duration = Mathf.Max(0.001f, value);
+		}
+		public int Corner
+		{
+			get => corner;
+			set => corner = Mathf.Max(0, value);
+		}
+
 		[SerializeField, Tooltip("Enable this to connect the first and last positions of the line, and form a closed loop.")]
 		private bool loop = false;
 
@@ -64,6 +80,32 @@ namespace Tiny
 
 		[NonSerialized] GameObject trailGo = null;
 		[NonSerialized] Mesh mesh = null;
+		[NonSerialized] MeshRenderer meshRenderer = null;
+
+		// --- Power-Up customization: per-instance runtime tint ---
+		// Set this before Start() runs (or any time after) to override the
+		// trail's material color for this single instance. Used by Sword
+		// Zenith to give every swing a random rainbow color without ever
+		// touching the shared SwordTrail.mat asset.
+		[NonSerialized] private Color? runtimeTintColor;
+		public Color? RuntimeTintColor
+		{
+			get => runtimeTintColor;
+			set
+			{
+				runtimeTintColor = value;
+				ApplyRuntimeTint();
+			}
+		}
+
+		private void ApplyRuntimeTint()
+		{
+			if (!runtimeTintColor.HasValue || meshRenderer == null) return;
+			// material returns an instanced copy on first access, so each
+			// trail gets its own tint without leaking back to the shared asset.
+			if (meshRenderer.material != null)
+				meshRenderer.material.color = runtimeTintColor.Value;
+		}
 
 		[NonSerialized] Vector3[] vertices = null;
 		[NonSerialized] Transform cacheTM = null;
@@ -116,9 +158,14 @@ namespace Tiny
 			trailGo.GetComponent<MeshFilter>().sharedMesh = mesh;
 			trailGo.layer = gameObject.layer;
 
-			MeshRenderer meshRenderer = trailGo.GetComponent<MeshRenderer>();
+			meshRenderer = trailGo.GetComponent<MeshRenderer>();
 			meshRenderer.material = material;
 			meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+			// If a per-instance tint was queued before Start ran (e.g. set in
+			// SwordSlash.Init right after Instantiate), apply it now that
+			// meshRenderer + material exist.
+			ApplyRuntimeTint();
 
 			Initialize((int)(duration / Time.fixedDeltaTime));
 		}
