@@ -53,6 +53,12 @@ public class DaggerStab : MonoBehaviour
     private readonly HashSet<Enemy> alreadyHit = new HashSet<Enemy>();
     private readonly RaycastHit[] hitBuffer = new RaycastHit[24];
 
+    // Cached lookup for the Meteor general augment (see MeteorArmer). If the
+    // stab was rolled at fire time, the first valid enemy hit consumes it
+    // and spawns a meteor at the enemy's position. Lazily fetched because
+    // the armer component is attached AFTER Init runs.
+    private MeteorArmer meteorArmer;
+
     public void Init(Transform owner, float damage, LayerMask enemyLayers, float startForwardOffset)
     {
         this.owner = owner;
@@ -129,7 +135,11 @@ public class DaggerStab : MonoBehaviour
             Enemy enemy = hitCollider.GetComponentInParent<Enemy>();
 
             if (enemy != null && alreadyHit.Add(enemy))
+            {
                 enemy.TakeDamage(damage);
+                if (meteorArmer == null) meteorArmer = GetComponent<MeteorArmer>();
+                if (meteorArmer != null) meteorArmer.TryConsume(enemy.transform.position);
+            }
         }
 
         if (debugDrawHitbox)

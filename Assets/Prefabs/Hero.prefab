@@ -2674,6 +2674,13 @@ MonoBehaviour:
   tankShieldPrefab: {fileID: 1289543790355709915, guid: b99922c2f59b1a542bdd06ae8bee47ae, type: 3}
   tankShieldVisualScale: 1.2
   tankShieldVisualYOffset: 0
+  meteorEnabled: 0
+  meteorChanceOnCrit: 0.25
+  meteorDamageMultiplier: 2
+  meteorVfxPrefab: {fileID: 100006, guid: 4b3e2799610ded5468bd161b5a26975b, type: 3}
+  meteorVfxRotationOffset: {x: 90, y: 0, z: 0}
+  meteorFallDuration: 0.3
+  meteorAOERadius: 3
   damageMultiplier: 1
   damageBoostAmount: 0.15
   maxDamageMultiplier: 100
@@ -2789,7 +2796,11 @@ MonoBehaviour:
   zenithAttackSpeedReductionRequired: 0.3
   zenithSemiMinor: 3
   zenithSemiMinorJitter: 0.5
+  zenithSemiMinorWidenStrength: 0
+  zenithBladeMidOffset: 2.1
   zenithTrailAlpha: 0.098039
+  zenithTrailDuration: 0.1
+  zenithTrailCorner: 16
 --- !u!114 &8888070785139311172
 MonoBehaviour:
   m_ObjectHideFlags: 0

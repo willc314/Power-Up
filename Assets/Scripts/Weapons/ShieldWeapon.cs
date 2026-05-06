@@ -29,7 +29,10 @@ public class ShieldWeapon : Weapon
 
         ShieldThrow shield = Instantiate(shieldPrefab, spawnPos, owner.transform.rotation);
         // Apply hero damage multipliers + crit roll (one roll per throw).
-        shield.Init(owner.transform, owner.ComputeAttackDamage(damage), enemyLayers, owner.transform.forward);
+        // WithCrit overload feeds the Meteor general augment.
+        float dmg = owner.ComputeAttackDamageWithCrit(damage, out bool wasCrit);
+        shield.Init(owner.transform, dmg, enemyLayers, owner.transform.forward);
+        owner.TryArmMeteorOnProjectile(shield.gameObject, dmg, wasCrit, enemyLayers);
     }
 
     public override string GetExtraStatsBlock()

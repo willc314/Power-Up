@@ -68,19 +68,24 @@ public class CrossbowWeapon : Weapon
                       + Vector3.up * spawnHeight;
 
         // One crit roll for the entire volley so all arrows in the fan share it.
-        float finalDamage = owner.ComputeAttackDamage(damage);
+        // Use the crit-aware overload so the Meteor general augment can gate
+        // its per-fire chance roll on crit (no duplicate roll).
+        float finalDamage = owner.ComputeAttackDamageWithCrit(damage, out bool wasCrit);
 
         int n = Mathf.Max(1, projectileCount);
         if (n == 1)
         {
             Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
             p.Launch(owner.transform.forward, finalDamage, enemyLayers);
+            owner.TryArmMeteorOnProjectile(p.gameObject, finalDamage, wasCrit, enemyLayers);
             return;
         }
 
         // Fan the arrows evenly across [-spread/2, +spread/2] around forward.
         // For odd counts the middle arrow goes straight; for even counts the
-        // pair straddles the forward direction.
+        // pair straddles the forward direction. Meteor arms the FIRST arrow
+        // in the fan only — semantics are "one meteor per fire-event" so
+        // multi-shot doesn't multiply meteors.
         float half = spreadAngle * 0.5f;
         for (int i = 0; i < n; i++)
         {
@@ -89,6 +94,7 @@ public class CrossbowWeapon : Weapon
             Vector3 dir = Quaternion.AngleAxis(angle, Vector3.up) * owner.transform.forward;
             Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
             p.Launch(dir, finalDamage, enemyLayers);
+            if (i == 0) owner.TryArmMeteorOnProjectile(p.gameObject, finalDamage, wasCrit, enemyLayers);
         }
     }
 

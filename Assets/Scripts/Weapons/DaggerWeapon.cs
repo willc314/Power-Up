@@ -195,7 +195,10 @@ public class DaggerWeapon : Weapon
 
             DaggerStab stab = Instantiate(stabPrefab, spawn, owner.transform.rotation, owner.transform);
             // One crit roll per stab so all hits from this thrust crit (or don't) together.
-            stab.Init(owner.transform, owner.ComputeAttackDamage(damage), enemyLayers, stabStartDistance);
+            // WithCrit overload feeds the Meteor general augment.
+            float stabDmg = owner.ComputeAttackDamageWithCrit(damage, out bool stabCrit);
+            stab.Init(owner.transform, stabDmg, enemyLayers, stabStartDistance);
+            owner.TryArmMeteorOnProjectile(stab.gameObject, stabDmg, stabCrit, enemyLayers);
             return;
         }
 
@@ -210,8 +213,10 @@ public class DaggerWeapon : Weapon
                       + Vector3.up * throwSpawnHeight;
 
         Projectile p = Instantiate(thrownDaggerPrefab, spawn, Quaternion.identity);
-        // One crit roll per throw.
-        p.Launch(owner.transform.forward, owner.ComputeAttackDamage(thrownDamage), enemyLayers);
+        // One crit roll per throw. WithCrit overload feeds the Meteor general augment.
+        float dmg = owner.ComputeAttackDamageWithCrit(thrownDamage, out bool wasCrit);
+        p.Launch(owner.transform.forward, dmg, enemyLayers);
+        owner.TryArmMeteorOnProjectile(p.gameObject, dmg, wasCrit, enemyLayers);
     }
 
     private void FallbackStabDamage(Hero owner)

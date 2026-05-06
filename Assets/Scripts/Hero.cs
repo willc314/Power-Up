@@ -98,6 +98,24 @@ public class Hero : MonoBehaviour
     public float tankShieldVisualScale = 1.2f;
     [Tooltip("Vertical offset for the shield visual relative to hero pivot.")]
     public float tankShieldVisualYOffset = 0.9f;
+    [Tooltip("Seconds to simulate the shield prefab forward into its lifecycle before freezing it. Tune until the freeze lands on a fully-formed shield silhouette — too low captures the intro animation, too high captures the outro / fade-out. Most shield packs settle into their 'active' pose ~1-2s in.")]
+    public float tankShieldFreezeTime = 1.5f;
+
+    [Header("Meteor General Augment (level-up unlock)")]
+    [Tooltip("Set to true by MeteorUpgrade.Apply when the player picks the augment. While true, every CRIT attack from any weapon has meteorChanceOnCrit chance to call down a meteor on the first enemy that fire-event hits.")]
+    public bool meteorEnabled = false;
+    [Tooltip("Chance (0..1) per crit attack to arm a meteor on the resulting projectile/swing. Default 0.5 = 50%.")]
+    [Range(0f, 1f)] public float meteorChanceOnCrit = 0.5f;
+    [Tooltip("Damage multiplier applied to the attack's per-hit damage to compute the meteor's AOE damage. Default 4 = quadrupled damage.")]
+    public float meteorDamageMultiplier = 4f;
+    [Tooltip("Meteor visual prefab spawned at the impact point. Drop in vfx_MeteorRain_01 (or another) from GabrielAguiarProductions/FreeQuickEffectsVol1/Prefabs, or ppfxRay from ParticleProFX.")]
+    public GameObject meteorVfxPrefab;
+    [Tooltip("Local Euler rotation applied to the spawned meteor VFX so its trail points in the right direction. Most ray/beam prefabs (e.g. ppfxRay) point along their local +Z; setting this to (90,0,0) re-aims that axis along world -Y, i.e. straight down. Drop-in self-contained meteor prefabs (vfx_MeteorRain_01) usually want (0,0,0). Tweak in 90° increments — (-90,0,0), (0,90,0), etc — until the trail visually falls from sky to ground.")]
+    public Vector3 meteorVfxRotationOffset = new Vector3(90f, 0f, 0f);
+    [Tooltip("Delay (seconds) between the meteor spawn (which immediately starts the prefab's visual fall) and the AOE damage application. Tune this to match the prefab's natural impact moment so the damage lands when the visual lands.")]
+    public float meteorFallDuration = 0.7f;
+    [Tooltip("AOE damage radius around the meteor's impact point. Every enemy whose collider overlaps this sphere takes the full meteor damage once.")]
+    public float meteorAOERadius = 3f;
 
     [Header("Damage Modifiers")]
     [Tooltip("Multiplier applied to ALL weapon damage at attack time. 1 = no change.")]
@@ -872,8 +890,18 @@ public class Hero : MonoBehaviour
             tankShieldInstance.transform.localPosition = Vector3.up * tankShieldVisualYOffset;
             tankShieldInstance.transform.localRotation = Quaternion.identity;
             tankShieldInstance.transform.localScale = Vector3.one * Mathf.Max(0.0001f, tankShieldVisualScale);
-            // Disable any colliders so the shield can't shove enemies / the hero.
-            foreach (var c in tankShieldInstance.GetComponentsInChildren<Collider>()) c.enabled = false;
+            // Tame the prefab: kill physics interference (so the shield
+            // can't shove enemies / hero) AND simulate the prefab forward
+            // to its "fully formed shield" pose, then freeze it. Looping
+            // didn't work for shield packs whose ParticleSystem itself has
+            // built-in cycle behavior (timed bursts, sub-emitters keyed
+            // off cycle end, particle lifetimes producing visible waves)
+            // — Simulate + Pause halts the entire system mid-animation
+            // so what the player sees is a static silhouette of the shield
+            // instead of a recurring intro→outro sequence. Tune
+            // tankShieldFreezeTime in the inspector to dial in the frame.
+            VfxHelpers.DisablePhysicsInterference(tankShieldInstance);
+            VfxHelpers.FreezeVfxAtTime(tankShieldInstance, tankShieldFreezeTime);
         }
     }
 
@@ -1367,21 +1395,81 @@ public class Hero : MonoBehaviour
     /// </summary>
     public float ComputeAttackDamage(float baseDamage)
     {
+        return ComputeAttackDamageWithCrit(baseDamage, out _);
+    }
+
+    /// <summary>
+    /// Same logic as <see cref="ComputeAttackDamage"/> but exposes whether
+    /// the crit roll succeeded. Used by ShieldWeapon (Shield Meteor augment)
+    /// to gate a 50% meteor-spawn chance on crit hits without a duplicate
+    /// crit roll. <paramref name="wasCrit"/> is set BEFORE the I-am-Tank /
+    /// Zenith-curse multipliers are applied, so it reflects the raw crit
+    /// outcome irrespective of late-stage damage modifiers.
+    /// </summary>
+    public float ComputeAttackDamageWithCrit(float baseDamage, out bool wasCrit)
+    {
+        wasCrit = false;
         float dmg = baseDamage * Mathf.Max(0f, damageMultiplier);
         if (critRate > 0f && Random.value < critRate)
+        {
             dmg *= Mathf.Max(1f, critDamage);
-        // I am Tank! shield buff: +30% damage (tunable) while the shield
-        // is up. Multiplicative on top of damage multiplier and crit. Multiple
-        // re-casts within the duration don't stack — the buff is a flat "shield
-        // is alive" flag, not per-stack.
+            wasCrit = true;
+        }
         if (IsTankShieldActive)
             dmg *= Mathf.Max(0f, iAmTankDamageMultiplier);
-        // Zenith curse: outgoing damage is QUARTERED until the player
-        // satisfies the activation gates and Zenith fires. Multiplied
-        // last so it stacks on top of every other modifier.
         if (IsZenithCursed)
             dmg *= 0.25f;
         return dmg;
+    }
+
+    /// <summary>
+    /// Same multipliers as <see cref="ComputeAttackDamage"/> but skips the
+    /// crit roll. Used for friendly-fire damage (e.g. the hero standing in
+    /// their own grenade's AOE) so a player crit doesn't amplify self-damage.
+    /// All other modifiers — damageMultiplier, the I-am-Tank shield buff,
+    /// the Zenith curse — DO still apply, since those are general "your
+    /// attacks are stronger / weaker" multipliers and friendly fire should
+    /// reflect that consistently.
+    /// </summary>
+    public float ComputeAttackDamageNoCrit(float baseDamage)
+    {
+        float dmg = baseDamage * Mathf.Max(0f, damageMultiplier);
+        if (IsTankShieldActive)
+            dmg *= Mathf.Max(0f, iAmTankDamageMultiplier);
+        if (IsZenithCursed)
+            dmg *= 0.25f;
+        return dmg;
+    }
+
+    /// <summary>
+    /// Meteor general augment hook. Each weapon's Fire calls this after
+    /// spawning its projectile/swing — if the augment is active, the shot
+    /// was a crit, and the per-fire chance roll passes, a
+    /// <see cref="MeteorArmer"/> is attached to the projectile so it can
+    /// spawn a meteor on its first enemy hit.
+    ///
+    /// <paramref name="baseDamage"/> is the post-crit damage figure for this
+    /// attack — so the meteor's damage scales with the player's crit damage
+    /// stat and with that fire-event's actual hit damage. Pass the SAME
+    /// damage value the projectile is dealing.
+    ///
+    /// <paramref name="enemyLayers"/> is the layer mask the meteor's AOE
+    /// pass uses; pass the calling weapon's enemyLayers so the meteor only
+    /// hits the same population the weapon does.
+    /// </summary>
+    public void TryArmMeteorOnProjectile(GameObject projectile, float baseDamage, bool wasCrit, LayerMask enemyLayers)
+    {
+        if (!meteorEnabled || !wasCrit || projectile == null) return;
+        if (Random.value >= meteorChanceOnCrit) return;
+        var armer = projectile.GetComponent<MeteorArmer>();
+        if (armer == null) armer = projectile.AddComponent<MeteorArmer>();
+        armer.Arm(
+            damage:            baseDamage * Mathf.Max(0f, meteorDamageMultiplier),
+            fallDuration:      meteorFallDuration,
+            aoeRadius:         meteorAOERadius,
+            vfxPrefab:         meteorVfxPrefab,
+            vfxRotationOffset: meteorVfxRotationOffset,
+            hitLayers:         enemyLayers);
     }
 
     /// <summary>Backward-compatible no-arg overload: rolls a random stat (respecting maxedWeaponBoostMode).</summary>

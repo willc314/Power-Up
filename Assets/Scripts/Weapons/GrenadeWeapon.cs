@@ -55,9 +55,20 @@ public class GrenadeWeapon : Weapon
         // explosion's damage. Source is the weapon's own `damage` field,
         // which Awake() seeded from the explosion prefab and which weapon
         // upgrades (Range cap, Projectiles cap, Damage fallback) keep
-        // adding to via the base TryApplyBoost path.
-        g.damageOverride = owner.ComputeAttackDamage(damage);
+        // adding to via the base TryApplyBoost path. WithCrit overload
+        // feeds the Meteor general augment.
+        float dmg = owner.ComputeAttackDamageWithCrit(damage, out bool wasCrit);
+        g.damageOverride = dmg;
+        // Pre-crit friendly-fire damage so the player's crit roll doesn't
+        // amplify their own self-damage if they stand in the AOE. The
+        // multiplier-of-0.5x is preserved (matches the original Explosion
+        // behavior) but applied to the no-crit base instead.
+        g.friendlyFireDamage = owner.ComputeAttackDamageNoCrit(damage) * 0.5f;
         g.Launch(startPos, endPos, arcHeight, flightTime);
+        // Meteor arms the GRENADE itself — Grenade.Detonate() forwards the
+        // armer onto the spawned Explosion so the meteor fires when the
+        // explosion lands its first enemy hit.
+        owner.TryArmMeteorOnProjectile(g.gameObject, dmg, wasCrit, enemyLayers);
     }
 
     // ---- Boost overrides ----

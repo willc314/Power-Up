@@ -102,9 +102,8 @@ public class LevelUpgradeRegistry
     {
         Instance = new LevelUpgradeRegistry();
         Instance.GeneralUpgrades.Add(new IAmTankUpgrade());
+        Instance.GeneralUpgrades.Add(new MeteorUpgrade());
         Instance.WeaponUpgrades.Add(new SwordZenithUpgrade());
-        // Future phases:
-        // Instance.WeaponUpgrades.Add(new ShieldMeteorUpgrade());
         return Instance;
     }
 
@@ -273,5 +272,54 @@ public class SwordZenithUpgrade : LevelUpgrade
         if (hero.secondaryWeapon != sword)
             hero.ReplaceWeaponSlot(replacePrimary: false, newType: eWeaponType.sword);
         Debug.Log("[Level-Up] Zenith UNLOCKED. The trial begins. You Will Suffer.");
+    }
+}
+
+/// <summary>
+/// "Meteor" — slot-3 general buff. Once accepted, every CRIT attack from any
+/// weapon has a 50% chance to call down a meteor on the first enemy the
+/// fire-event hits. The meteor falls in place at the target and deals 4×
+/// that hit's damage as AOE on impact.
+///
+/// Hooks into the existing crit roll via Hero.ComputeAttackDamageWithCrit
+/// (no duplicate roll), so the augment respects the player's crit rate and
+/// crit damage stats — boosted crit chance ⇒ more meteors. Per-weapon
+/// arming + first-hit consumption is wired through the generic
+/// <see cref="MeteorArmer"/> component, so the augment scales to every
+/// projectile / swing / throw without weapon-specific glue.
+///
+/// Slot 3 is consumed once any general buff is taken, so picking Meteor
+/// also locks out future I-am-Tank offers (and vice-versa).
+/// </summary>
+public class MeteorUpgrade : LevelUpgrade
+{
+    public MeteorUpgrade()
+    {
+        DisplayName = "Meteor";
+        Description =
+            "Critical hits from ANY weapon have a 50% chance to call down a " +
+            "meteor on the first enemy struck by that attack. The meteor deals " +
+            "4× the attack's damage as AOE.";
+        UpgradeSlot = Slot.GeneralBuff;
+        TargetWeapon = eWeaponType.none;
+    }
+
+    public override bool IsAvailable(Hero hero)
+    {
+        if (hero == null) return false;
+        // One-shot — once active, never re-offered.
+        if (hero.meteorEnabled) return false;
+        // Also gated by the registry's per-run "general buff already chosen"
+        // flag (slot 3 is hidden once any general buff has been picked).
+        return true;
+    }
+
+    public override void Apply(Hero hero)
+    {
+        if (hero == null) return;
+        hero.meteorEnabled = true;
+        if (LevelUpgradeRegistry.Instance != null)
+            LevelUpgradeRegistry.Instance.NotifyGeneralBuffChosen();
+        Debug.Log("[Level-Up] Meteor general augment activated.");
     }
 }

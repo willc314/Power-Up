@@ -168,6 +168,22 @@ public class LevelUpChoiceUI : MonoBehaviour
             return;
         }
 
+        // Cancel any in-progress weapon state BEFORE the panel pauses time.
+        // Otherwise a held bow/crossbow visual stays in the world while the
+        // game is paused (the OnFireUp event won't fire under timeScale = 0,
+        // and even if the player releases during the pause, the visual is
+        // already orphaned). Mirrors the same call in Hero.ApplyPowerUp so
+        // both pickers — powerup and level-up — share interrupt semantics.
+        // BowWeapon.OnInterrupted also tears down an active death beam so
+        // it doesn't keep ticking through the paused screen.
+        Hero hero = Hero.Instance;
+        if (hero != null)
+        {
+            if (hero.primaryWeapon != null)   hero.primaryWeapon.OnInterrupted(hero);
+            if (hero.secondaryWeapon != null) hero.secondaryWeapon.OnInterrupted(hero);
+            hero.speedMultiplier = 1f;
+        }
+
         rootContainer.SetActive(true);
         shown = true;
         savedTimeScale = Time.timeScale;

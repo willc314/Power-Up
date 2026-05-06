@@ -691,6 +691,16 @@ public class SlimeGod : MonoBehaviour
         // built in GameHUD, so suppress it here (set BEFORE Enemy.Awake is too
         // late — the SlimeGod prefab should also have showHealthBar=false).
         if (enemy != null) enemy.showHealthBar = false;
+
+        // Suppress the slime pack's attack animation clip — the boss's
+        // attacks are entirely script-driven (telegraphed dashes, beams,
+        // arrow waves) and the canned Slime "Attack01" pose looks wrong
+        // when it triggers in the middle of a custom pattern. EnemyAnimator
+        // gracefully no-ops on PlayOneShot when the clip name is empty,
+        // so wiping it here is enough — idle / walk / hit / die clips
+        // still play normally.
+        var anim = GetComponent<EnemyAnimator>() ?? GetComponentInChildren<EnemyAnimator>();
+        if (anim != null) anim.attackClip = "";
     }
 
     private void OnEnable()

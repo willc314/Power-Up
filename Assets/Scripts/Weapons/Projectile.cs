@@ -62,6 +62,13 @@ public class Projectile : MonoBehaviour
     private readonly HashSet<Enemy> alreadyHit = new HashSet<Enemy>();
     private readonly Collider[] hitBuffer = new Collider[16];
 
+    // Cached reference to an optional MeteorArmer — added by the Hero's
+    // Meteor general augment when a crit shot rolls successfully. On the
+    // first valid enemy hit we call TryConsume(enemyPos) to spawn the
+    // meteor at that enemy's position. Cached lazily on Launch since the
+    // armer is added AFTER Launch by the firing weapon.
+    private MeteorArmer meteorArmer;
+
     public void Launch(Vector3 dir, float damage, LayerMask enemyLayers)
     {
         direction = dir.sqrMagnitude > 0.0001f ? dir.normalized : Vector3.forward;
@@ -125,6 +132,12 @@ public class Projectile : MonoBehaviour
                 // CURRENT scale is consumed by this hit, then we step it
                 // toward the floor for the next hit.
                 e.TakeDamage(damage * damageScale);
+                // Meteor general augment: if this projectile was armed at
+                // fire time, spawn the meteor on this first valid hit.
+                // TryConsume disarms internally so subsequent hits in a
+                // piercing chain don't double-fire.
+                if (meteorArmer == null) meteorArmer = GetComponent<MeteorArmer>();
+                if (meteorArmer != null) meteorArmer.TryConsume(e.transform.position);
                 if (damageFalloffPerHit < 1f - 0.0001f)
                 {
                     damageScale = Mathf.Max(damageFalloffFloor, damageScale * damageFalloffPerHit);

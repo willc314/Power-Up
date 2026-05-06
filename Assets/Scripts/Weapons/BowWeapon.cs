@@ -508,6 +508,15 @@ public class BowWeapon : Weapon
     public override void OnInterrupted(Hero owner)
     {
         if (charging) EndCharge(owner);
+        // Also kill any beam that's currently mid-fire — interrupts now
+        // come from the level-up UI as well as dashing / powerup pickup,
+        // and a beam ticking through a paused level-up screen looks like
+        // a stuck visual to the player.
+        if (activeBeam != null)
+        {
+            Destroy(activeBeam.gameObject);
+            activeBeam = null;
+        }
     }
 
     public override bool OnFireUp(Hero owner)
@@ -592,8 +601,9 @@ public class BowWeapon : Weapon
         float scale = Mathf.Lerp(arrowMinScale, arrowMaxScale, chargeT);
 
         // Apply hero damage multipliers + crit roll for this shot. One roll
-        // for the whole volley so all arrows in the fan share it.
-        dmg = owner.ComputeAttackDamage(dmg);
+        // for the whole volley so all arrows in the fan share it. WithCrit
+        // overload feeds the Meteor general augment.
+        dmg = owner.ComputeAttackDamageWithCrit(dmg, out bool wasCrit);
 
         // Fully-charged shots gain homing — they curve onto the nearest
         // enemy with near-perfect tracking, then chain to a new target if
@@ -627,6 +637,7 @@ public class BowWeapon : Weapon
             p.damageFalloffPerHit = falloffPerHit;
             p.damageFalloffFloor  = falloffFloor;
             p.Launch(owner.transform.forward, dmg, enemyLayers);
+            owner.TryArmMeteorOnProjectile(p.gameObject, dmg, wasCrit, enemyLayers);
             return;
         }
 
@@ -648,6 +659,9 @@ public class BowWeapon : Weapon
             p.damageFalloffPerHit = falloffPerHit;
             p.damageFalloffFloor  = falloffFloor;
             p.Launch(dir, dmg, enemyLayers);
+            // Meteor arms only the FIRST arrow in a fan — semantics are "one
+            // meteor per fire-event" so multi-shot doesn't multiply meteors.
+            if (i == 0) owner.TryArmMeteorOnProjectile(p.gameObject, dmg, wasCrit, enemyLayers);
         }
     }
 

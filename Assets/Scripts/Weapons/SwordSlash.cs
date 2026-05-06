@@ -112,6 +112,12 @@ public class SwordSlash : MonoBehaviour
     private readonly HashSet<Enemy> alreadyHit = new HashSet<Enemy>();
     private readonly Collider[] hitBuffer = new Collider[64];
 
+    // Cached lookup for the Meteor general augment (see MeteorArmer). If the
+    // swing was rolled at fire time, the first valid enemy hit consumes it
+    // and spawns a meteor at the enemy's position. Lazily fetched because
+    // the armer is attached AFTER Init runs by SwordWeapon.Fire.
+    private MeteorArmer meteorArmer;
+
     public void Init(Transform owner, float damage, LayerMask enemyLayers, bool rightToLeft)
     {
         this.owner = owner;
@@ -330,6 +336,8 @@ public class SwordSlash : MonoBehaviour
 
             alreadyHit.Add(enemy);
             enemy.TakeDamage(damage);
+            if (meteorArmer == null) meteorArmer = GetComponent<MeteorArmer>();
+            if (meteorArmer != null) meteorArmer.TryConsume(enemy.transform.position);
         }
 
         if (debugDrawHitbox)
@@ -354,7 +362,11 @@ public class SwordSlash : MonoBehaviour
             Enemy enemy = hitBuffer[i].GetComponentInParent<Enemy>();
 
             if (enemy != null && alreadyHit.Add(enemy))
+            {
                 enemy.TakeDamage(damage);
+                if (meteorArmer == null) meteorArmer = GetComponent<MeteorArmer>();
+                if (meteorArmer != null) meteorArmer.TryConsume(enemy.transform.position);
+            }
         }
 
         if (debugDrawHitbox)

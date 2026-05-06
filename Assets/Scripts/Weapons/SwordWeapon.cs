@@ -406,7 +406,11 @@ public class SwordWeapon : Weapon
         }
 
         // Apply hero damage multipliers + roll one crit for the whole swing.
-        slash.Init(owner.transform, owner.ComputeAttackDamage(damage), enemyLayers, nextSwingRightToLeft);
+        // WithCrit overload so the Meteor general augment can gate its
+        // chance roll on the crit outcome (no duplicate roll).
+        float dmg = owner.ComputeAttackDamageWithCrit(damage, out bool wasCrit);
+        slash.Init(owner.transform, dmg, enemyLayers, nextSwingRightToLeft);
+        owner.TryArmMeteorOnProjectile(slash.gameObject, dmg, wasCrit, enemyLayers);
         nextSwingRightToLeft = !nextSwingRightToLeft;
     }
 }
