@@ -2674,13 +2674,17 @@ MonoBehaviour:
   tankShieldPrefab: {fileID: 1289543790355709915, guid: b99922c2f59b1a542bdd06ae8bee47ae, type: 3}
   tankShieldVisualScale: 1.2
   tankShieldVisualYOffset: 0
+  tankShieldFreezeTime: 1.5
   meteorEnabled: 0
-  meteorChanceOnCrit: 0.25
+  meteorChanceOnCrit: 0.4
   meteorDamageMultiplier: 2
-  meteorVfxPrefab: {fileID: 100006, guid: 4b3e2799610ded5468bd161b5a26975b, type: 3}
+  meteorVfxPrefab: {fileID: 100008, guid: 90d6be0259fe4e24185ac6be60610b9c, type: 3}
   meteorVfxRotationOffset: {x: 90, y: 0, z: 0}
-  meteorFallDuration: 0.3
+  meteorVfxScale: 0.5
+  meteorFallDuration: 0.42
   meteorAOERadius: 3
+  meteorShakeAmplitude: 0.1
+  meteorShakeDuration: 0.15
   damageMultiplier: 1
   damageBoostAmount: 0.15
   maxDamageMultiplier: 100

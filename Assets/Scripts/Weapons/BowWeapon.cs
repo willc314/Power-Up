@@ -604,6 +604,12 @@ public class BowWeapon : Weapon
         // for the whole volley so all arrows in the fan share it. WithCrit
         // overload feeds the Meteor general augment.
         dmg = owner.ComputeAttackDamageWithCrit(dmg, out bool wasCrit);
+        // Single meteor roll shared across every arrow in the fan — the
+        // shared MeteorRoll's `consumed` flag guarantees only the first
+        // enemy hit across the whole volley fires the meteor, while every
+        // arrow remains a candidate (so one arrow missing doesn't waste
+        // the meteor opportunity).
+        MeteorRoll meteorRoll = owner.TryRollMeteor(dmg, wasCrit, enemyLayers);
 
         // Fully-charged shots gain homing — they curve onto the nearest
         // enemy with near-perfect tracking, then chain to a new target if
@@ -637,7 +643,7 @@ public class BowWeapon : Weapon
             p.damageFalloffPerHit = falloffPerHit;
             p.damageFalloffFloor  = falloffFloor;
             p.Launch(owner.transform.forward, dmg, enemyLayers);
-            owner.TryArmMeteorOnProjectile(p.gameObject, dmg, wasCrit, enemyLayers);
+            if (meteorRoll != null) owner.AttachMeteorRoll(p.gameObject, meteorRoll);
             return;
         }
 
@@ -659,9 +665,12 @@ public class BowWeapon : Weapon
             p.damageFalloffPerHit = falloffPerHit;
             p.damageFalloffFloor  = falloffFloor;
             p.Launch(dir, dmg, enemyLayers);
-            // Meteor arms only the FIRST arrow in a fan — semantics are "one
-            // meteor per fire-event" so multi-shot doesn't multiply meteors.
-            if (i == 0) owner.TryArmMeteorOnProjectile(p.gameObject, dmg, wasCrit, enemyLayers);
+            // Every arrow in the fan gets the SAME meteor roll — the
+            // shared `consumed` flag inside MeteorRoll ensures only the
+            // first hit across the whole volley fires the meteor while
+            // every arrow is still a candidate (so a missed leftmost
+            // arrow doesn't waste the opportunity).
+            if (meteorRoll != null) owner.AttachMeteorRoll(p.gameObject, meteorRoll);
         }
     }
 

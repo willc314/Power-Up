@@ -22,6 +22,8 @@ public class ShieldMeteor : MonoBehaviour
     private float fallDuration;
     private float damage;
     private float aoeRadius;
+    private float shakeAmplitude;
+    private float shakeDuration;
     private LayerMask hitLayers;
     private float vfxLingerAfterImpact = 1.5f;
 
@@ -49,6 +51,9 @@ public class ShieldMeteor : MonoBehaviour
         float aoeRadius,
         GameObject vfxPrefab,
         Vector3 vfxRotationOffset,
+        float vfxScale,
+        float shakeAmplitude,
+        float shakeDuration,
         LayerMask hitLayers)
     {
         var go = new GameObject("ShieldMeteor");
@@ -57,6 +62,8 @@ public class ShieldMeteor : MonoBehaviour
         m.damage = damage;
         m.aoeRadius = Mathf.Max(0f, aoeRadius);
         m.fallDuration = Mathf.Max(0.05f, fallDuration);
+        m.shakeAmplitude = Mathf.Max(0f, shakeAmplitude);
+        m.shakeDuration = Mathf.Max(0f, shakeDuration);
         m.hitLayers = hitLayers;
 
         // Place the host at the target. The VFX prefab plays its full
@@ -79,6 +86,18 @@ public class ShieldMeteor : MonoBehaviour
             var vfx = Instantiate(vfxPrefab, go.transform);
             vfx.transform.localPosition = Vector3.zero;
             vfx.transform.localRotation = Quaternion.Euler(vfxRotationOffset);
+            // Uniform scale from Hero.meteorVfxScale — most ray / lightning
+            // prefabs ship at a size sized for an event-VFX setpiece (huge
+            // and screen-filling); a multiplier <1 shrinks them to a
+            // weapon-augment-appropriate size. Force every ParticleSystem
+            // to Hierarchy scaling mode FIRST — many packs (ParticleProFX
+            // included) ship with scalingMode = Local or Shape, which
+            // ignores transform scale entirely and is why setting scale
+            // on the prefab directly does nothing visible. Hierarchy mode
+            // makes localScale actually shrink the particles.
+            VfxHelpers.ForceHierarchyScaling(vfx);
+            float s = Mathf.Max(0.0001f, vfxScale);
+            vfx.transform.localScale = vfx.transform.localScale * s;
             // Strip every physics-y component that could shove the boss /
             // mobs away as the meteor lands on top of them. Some packs
             // ship ParticleSystem.collision modules that apply forces to
@@ -118,12 +137,14 @@ public class ShieldMeteor : MonoBehaviour
                 e.TakeDamage(damage);
         }
 
-        // Camera shake for impact feel — borrows the shake pattern other
-        // weapons use. Cheap.
-        if (Camera.main != null)
+        // Camera shake for impact feel. Amplitude / duration come from
+        // Hero.meteorShakeAmplitude / meteorShakeDuration so the player
+        // can tune the punchiness without recompiling — pass 0 amplitude
+        // to disable shake entirely.
+        if (shakeAmplitude > 0f && shakeDuration > 0f && Camera.main != null)
         {
             var cam = Camera.main.GetComponent<CameraFollow>();
-            if (cam != null) cam.Shake(0.45f, 0.3f);
+            if (cam != null) cam.Shake(shakeAmplitude, shakeDuration);
         }
 
         // Linger so the prefab's particles finish their post-impact

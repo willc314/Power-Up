@@ -54,6 +54,27 @@ public static class VfxHelpers
     }
 
     /// <summary>
+    /// Force every ParticleSystem in the hierarchy to use
+    /// <see cref="ParticleSystemScalingMode.Hierarchy"/> so a uniform scale
+    /// applied to the root transform actually shrinks / grows the particles.
+    /// Many third-party packs ship with <c>scalingMode = Local</c> (only the
+    /// system's own transform scale matters, parent ignored) or
+    /// <c>scalingMode = Shape</c> (only the emission shape scales, particle
+    /// sizes don't), which makes setting <c>localScale</c> on a wrapping
+    /// host do nothing visible. Call this before adjusting localScale on
+    /// the wrapper.
+    /// </summary>
+    public static void ForceHierarchyScaling(GameObject root)
+    {
+        if (root == null) return;
+        foreach (var ps in root.GetComponentsInChildren<ParticleSystem>(true))
+        {
+            var main = ps.main;
+            main.scalingMode = ParticleSystemScalingMode.Hierarchy;
+        }
+    }
+
+    /// <summary>
     /// Force every ParticleSystem in the hierarchy to NOT loop, so a prefab
     /// that ships with main.loop = true still plays its emission burst and
     /// then ends. Used for one-shot VFX (meteor impact, grenade detonation)

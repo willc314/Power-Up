@@ -1,6 +1,33 @@
 using UnityEngine;
 
 /// <summary>
+/// Per-fire-event meteor data + a shared "consumed" flag. One instance is
+/// created per crit fire that passes the chance roll, then the SAME instance
+/// is referenced by every projectile in the volley (single-shot weapons,
+/// fanned crossbow / bow shots, AOE explosions, etc). Whichever projectile
+/// lands the first enemy hit consumes the roll for the entire fire-event,
+/// preventing duplicate meteors AND ensuring no meteor is "wasted" on a
+/// projectile that misses while its siblings hit.
+///
+/// Semantics are still "one meteor per fire-event"; the shared flag just
+/// makes that bookkeeping work across multiple projectiles instead of
+/// betting all the hit-coverage on one specific arrow.
+/// </summary>
+public class MeteorRoll
+{
+    public float damage;
+    public float fallDuration;
+    public float aoeRadius;
+    public GameObject vfxPrefab;
+    public Vector3 vfxRotationOffset;
+    public float vfxScale;
+    public float shakeAmplitude;
+    public float shakeDuration;
+    public LayerMask hitLayers;
+    public bool consumed;
+}
+
+/// <summary>
 /// Generic "this projectile/swing was rolled to spawn a meteor on its first
 /// enemy hit" marker. Attached to a projectile's GameObject by
 /// <see cref="Hero.TryArmMeteorOnProjectile"/> when the Meteor general augment
@@ -8,92 +35,79 @@ using UnityEngine;
 ///
 /// Each individual weapon hit-handler is responsible for calling
 /// <see cref="TryConsume"/> on its first enemy hit — semantics: one meteor
-/// per fire-event. Subsequent hits in the same fire (e.g. piercing arrows,
-/// AOE explosions, multi-tick shield throws) will see the armer disarmed and
-/// no-op cleanly.
+/// per fire-event. The armer holds a reference to a shared
+/// <see cref="MeteorRoll"/>, so multi-projectile weapons (crossbow fan,
+/// bow fan) can attach the SAME roll to every arrow and have any arrow's
+/// first hit fire the meteor — the shared `consumed` flag ensures it only
+/// fires once.
 ///
-/// This component is independent of the original (now removed) shield-only
-/// meteor wiring — see <see cref="ShieldMeteor.Spawn"/> for the actual VFX +
-/// AOE pass it kicks off.
+/// See <see cref="ShieldMeteor.Spawn"/> for the actual VFX + AOE pass it
+/// kicks off.
 /// </summary>
 public class MeteorArmer : MonoBehaviour
 {
-    private float damage;
-    private float fallDuration;
-    private float aoeRadius;
-    private GameObject vfxPrefab;
-    private Vector3 vfxRotationOffset;
-    private LayerMask hitLayers;
-    private bool armed;
+    private MeteorRoll roll;
 
     /// <summary>
-    /// Bake meteor parameters in and arm the projectile. Called once by the
-    /// Hero helper at fire time after the augment + crit + chance gates pass.
-    /// <paramref name="vfxRotationOffset"/> is applied to the spawned VFX's
-    /// local rotation so prefabs that point along an unusual local axis
-    /// (e.g. ppfxRay's +Z trail) can be re-aimed downward without a custom
-    /// wrapper prefab.
+    /// Bind this armer to a shared <see cref="MeteorRoll"/>. Multiple
+    /// armers (one per projectile in a fanned volley) typically share the
+    /// same roll so first-hit-wins works across every arrow.
     /// </summary>
-    public void Arm(float damage, float fallDuration, float aoeRadius,
-                    GameObject vfxPrefab, Vector3 vfxRotationOffset, LayerMask hitLayers)
+    public void Arm(MeteorRoll roll)
     {
-        this.damage = damage;
-        this.fallDuration = fallDuration;
-        this.aoeRadius = aoeRadius;
-        this.vfxPrefab = vfxPrefab;
-        this.vfxRotationOffset = vfxRotationOffset;
-        this.hitLayers = hitLayers;
-        armed = true;
+        this.roll = roll;
     }
 
     /// <summary>
-    /// True if the projectile/swing was rolled for a meteor and hasn't
-    /// consumed it yet. Call sites can fast-path skip cheap lookups using
-    /// this before formatting an enemy position.
+    /// True if this armer is bound to an unconsumed roll. Used by
+    /// <see cref="Grenade.Detonate"/> as a fast-path before forwarding the
+    /// roll to the spawned Explosion.
     /// </summary>
-    public bool IsArmed => armed;
+    public bool IsArmed => roll != null && !roll.consumed;
 
     /// <summary>
-    /// Move the armed state from <paramref name="source"/> to a new
-    /// MeteorArmer added to <paramref name="targetGo"/>, then disarm the
-    /// source so the original projectile won't fire it. Used by
-    /// <see cref="Grenade.Detonate"/> to forward the armer onto the
-    /// spawned Explosion (so the meteor is gated on an actual enemy hit
-    /// inside the AOE rather than firing at the blast center regardless).
-    /// No-op if source is null / unarmed.
+    /// Forward this armer's roll onto a fresh MeteorArmer added to
+    /// <paramref name="targetGo"/>. Used by <see cref="Grenade.Detonate"/>
+    /// to hand off the meteor opportunity from the in-flight grenade to the
+    /// spawned Explosion, so the meteor is gated on an actual enemy hit
+    /// inside the AOE rather than firing at the blast center regardless.
+    /// No-op if source is null / already consumed.
     /// </summary>
     public static void Transfer(MeteorArmer source, GameObject targetGo)
     {
-        if (source == null || !source.armed || targetGo == null) return;
+        if (source == null || source.roll == null || source.roll.consumed) return;
+        if (targetGo == null) return;
         var dest = targetGo.GetComponent<MeteorArmer>();
         if (dest == null) dest = targetGo.AddComponent<MeteorArmer>();
-        dest.Arm(
-            damage:            source.damage,
-            fallDuration:      source.fallDuration,
-            aoeRadius:         source.aoeRadius,
-            vfxPrefab:         source.vfxPrefab,
-            vfxRotationOffset: source.vfxRotationOffset,
-            hitLayers:         source.hitLayers);
-        source.armed = false;
+        dest.Arm(source.roll);
+        // Source's reference is intentionally KEPT — the shared `consumed`
+        // flag is what gates double-fire, not whether the source still
+        // holds a reference. Letting the source point at the same roll is
+        // harmless (it just sees consumed = true after dest fires).
     }
 
     /// <summary>
-    /// Spawn the meteor at <paramref name="targetPos"/> and disarm. No-op if
-    /// the armer was never armed or has already been consumed. Returns true
-    /// only when a meteor was actually spawned (useful for log + debug).
+    /// Spawn the meteor at <paramref name="targetPos"/> and mark the shared
+    /// roll consumed so sibling armers in the same fire-event don't
+    /// double-fire. No-op if there's no roll bound or if the roll has
+    /// already been consumed by a sibling. Returns true only when a meteor
+    /// was actually spawned.
     /// </summary>
     public bool TryConsume(Vector3 targetPos)
     {
-        if (!armed) return false;
-        armed = false;
+        if (roll == null || roll.consumed) return false;
+        roll.consumed = true;
         ShieldMeteor.Spawn(
             targetPos:         targetPos,
-            damage:            damage,
-            fallDuration:      fallDuration,
-            aoeRadius:         aoeRadius,
-            vfxPrefab:         vfxPrefab,
-            vfxRotationOffset: vfxRotationOffset,
-            hitLayers:         hitLayers);
+            damage:            roll.damage,
+            fallDuration:      roll.fallDuration,
+            aoeRadius:         roll.aoeRadius,
+            vfxPrefab:         roll.vfxPrefab,
+            vfxRotationOffset: roll.vfxRotationOffset,
+            vfxScale:          roll.vfxScale,
+            shakeAmplitude:    roll.shakeAmplitude,
+            shakeDuration:     roll.shakeDuration,
+            hitLayers:         roll.hitLayers);
         return true;
     }
 }

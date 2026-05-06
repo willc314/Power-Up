@@ -71,21 +71,28 @@ public class CrossbowWeapon : Weapon
         // Use the crit-aware overload so the Meteor general augment can gate
         // its per-fire chance roll on crit (no duplicate roll).
         float finalDamage = owner.ComputeAttackDamageWithCrit(damage, out bool wasCrit);
+        // Roll the meteor ONCE for the volley — every arrow in the fan
+        // shares the same MeteorRoll, so whichever one lands the first
+        // enemy hit fires the meteor (rather than gating it on one
+        // specific arrow that might miss while siblings hit).
+        MeteorRoll meteorRoll = owner.TryRollMeteor(finalDamage, wasCrit, enemyLayers);
 
         int n = Mathf.Max(1, projectileCount);
         if (n == 1)
         {
             Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
             p.Launch(owner.transform.forward, finalDamage, enemyLayers);
-            owner.TryArmMeteorOnProjectile(p.gameObject, finalDamage, wasCrit, enemyLayers);
+            if (meteorRoll != null) owner.AttachMeteorRoll(p.gameObject, meteorRoll);
             return;
         }
 
         // Fan the arrows evenly across [-spread/2, +spread/2] around forward.
         // For odd counts the middle arrow goes straight; for even counts the
-        // pair straddles the forward direction. Meteor arms the FIRST arrow
-        // in the fan only — semantics are "one meteor per fire-event" so
-        // multi-shot doesn't multiply meteors.
+        // pair straddles the forward direction. EVERY arrow gets the shared
+        // meteor roll attached — the roll's internal `consumed` flag
+        // guarantees only the first enemy hit across the whole fan fires
+        // the meteor, so we get one meteor per fire-event with maximum
+        // hit-coverage.
         float half = spreadAngle * 0.5f;
         for (int i = 0; i < n; i++)
         {
@@ -94,7 +101,7 @@ public class CrossbowWeapon : Weapon
             Vector3 dir = Quaternion.AngleAxis(angle, Vector3.up) * owner.transform.forward;
             Projectile p = Instantiate(arrowPrefab, spawn, Quaternion.identity);
             p.Launch(dir, finalDamage, enemyLayers);
-            if (i == 0) owner.TryArmMeteorOnProjectile(p.gameObject, finalDamage, wasCrit, enemyLayers);
+            if (meteorRoll != null) owner.AttachMeteorRoll(p.gameObject, meteorRoll);
         }
     }
 

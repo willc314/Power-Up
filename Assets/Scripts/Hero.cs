@@ -112,10 +112,16 @@ public class Hero : MonoBehaviour
     public GameObject meteorVfxPrefab;
     [Tooltip("Local Euler rotation applied to the spawned meteor VFX so its trail points in the right direction. Most ray/beam prefabs (e.g. ppfxRay) point along their local +Z; setting this to (90,0,0) re-aims that axis along world -Y, i.e. straight down. Drop-in self-contained meteor prefabs (vfx_MeteorRain_01) usually want (0,0,0). Tweak in 90° increments — (-90,0,0), (0,90,0), etc — until the trail visually falls from sky to ground.")]
     public Vector3 meteorVfxRotationOffset = new Vector3(90f, 0f, 0f);
+    [Tooltip("Uniform scale applied to the spawned meteor VFX. 1 = use the prefab's authored size; <1 shrinks (e.g. 0.5 for a smaller ppfxRayLightning); >1 enlarges. Purely visual — the AOE damage radius is controlled by meteorAOERadius below.")]
+    public float meteorVfxScale = 1f;
     [Tooltip("Delay (seconds) between the meteor spawn (which immediately starts the prefab's visual fall) and the AOE damage application. Tune this to match the prefab's natural impact moment so the damage lands when the visual lands.")]
     public float meteorFallDuration = 0.7f;
     [Tooltip("AOE damage radius around the meteor's impact point. Every enemy whose collider overlaps this sphere takes the full meteor damage once.")]
     public float meteorAOERadius = 3f;
+    [Tooltip("Camera shake amplitude on meteor impact. 0 = disabled. The previous baked-in value was 0.45 which read as too punchy when meteors landed in quick succession.")]
+    [Range(0f, 1f)] public float meteorShakeAmplitude = 0.18f;
+    [Tooltip("Camera shake duration (seconds) on meteor impact.")]
+    [Range(0f, 1f)] public float meteorShakeDuration = 0.18f;
 
     [Header("Damage Modifiers")]
     [Tooltip("Multiplier applied to ALL weapon damage at attack time. 1 = no change.")]
@@ -1459,17 +1465,56 @@ public class Hero : MonoBehaviour
     /// </summary>
     public void TryArmMeteorOnProjectile(GameObject projectile, float baseDamage, bool wasCrit, LayerMask enemyLayers)
     {
-        if (!meteorEnabled || !wasCrit || projectile == null) return;
-        if (Random.value >= meteorChanceOnCrit) return;
+        if (projectile == null) return;
+        var roll = TryRollMeteor(baseDamage, wasCrit, enemyLayers);
+        if (roll == null) return;
+        AttachMeteorRoll(projectile, roll);
+    }
+
+    /// <summary>
+    /// Roll the Meteor general augment for a single fire-event. Returns a
+    /// populated <see cref="MeteorRoll"/> if the augment is enabled, the
+    /// fire was a crit, AND the per-fire chance roll passed; otherwise
+    /// returns null. Use this when a single fire-event spawns multiple
+    /// projectiles (e.g. fanned crossbow / bow shots) and you want every
+    /// projectile to share the SAME roll — that way, whichever arrow lands
+    /// first on an enemy fires the meteor (rather than the meteor being
+    /// gated on one specific arrow that might miss).
+    ///
+    /// Single-shot callers can keep using <see cref="TryArmMeteorOnProjectile"/>
+    /// which wraps this + <see cref="AttachMeteorRoll"/>.
+    /// </summary>
+    public MeteorRoll TryRollMeteor(float baseDamage, bool wasCrit, LayerMask enemyLayers)
+    {
+        if (!meteorEnabled || !wasCrit) return null;
+        if (Random.value >= meteorChanceOnCrit) return null;
+        return new MeteorRoll
+        {
+            damage            = baseDamage * Mathf.Max(0f, meteorDamageMultiplier),
+            fallDuration      = meteorFallDuration,
+            aoeRadius         = meteorAOERadius,
+            vfxPrefab         = meteorVfxPrefab,
+            vfxRotationOffset = meteorVfxRotationOffset,
+            vfxScale          = meteorVfxScale,
+            shakeAmplitude    = meteorShakeAmplitude,
+            shakeDuration     = meteorShakeDuration,
+            hitLayers         = enemyLayers,
+        };
+    }
+
+    /// <summary>
+    /// Attach a <see cref="MeteorArmer"/> bound to the given
+    /// <see cref="MeteorRoll"/> onto the projectile's GameObject. If the
+    /// caller passes the SAME roll to multiple projectiles in one
+    /// fire-event, the roll's `consumed` flag ensures only the first
+    /// hit fires a meteor — the rest no-op cleanly.
+    /// </summary>
+    public void AttachMeteorRoll(GameObject projectile, MeteorRoll roll)
+    {
+        if (projectile == null || roll == null) return;
         var armer = projectile.GetComponent<MeteorArmer>();
         if (armer == null) armer = projectile.AddComponent<MeteorArmer>();
-        armer.Arm(
-            damage:            baseDamage * Mathf.Max(0f, meteorDamageMultiplier),
-            fallDuration:      meteorFallDuration,
-            aoeRadius:         meteorAOERadius,
-            vfxPrefab:         meteorVfxPrefab,
-            vfxRotationOffset: meteorVfxRotationOffset,
-            hitLayers:         enemyLayers);
+        armer.Arm(roll);
     }
 
     /// <summary>Backward-compatible no-arg overload: rolls a random stat (respecting maxedWeaponBoostMode).</summary>
