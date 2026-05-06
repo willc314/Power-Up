@@ -104,7 +104,7 @@ public class LevelUpgradeRegistry
         Instance.GeneralUpgrades.Add(new IAmTankUpgrade());
         Instance.WeaponUpgrades.Add(new SwordZenithUpgrade());
         // Future phases:
-        // Instance.WeaponUpgrades.Add(new GrenadeMeteorUpgrade());
+        // Instance.WeaponUpgrades.Add(new ShieldMeteorUpgrade());
         return Instance;
     }
 

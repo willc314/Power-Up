@@ -563,6 +563,7 @@ MonoBehaviour:
   bossBarBottomMargin: 28
   primaryButtonLabel: LMB
   secondaryButtonLabel: RMB
+  tankAbilityIcon: {fileID: 0}
 --- !u!4 &635634192
 Transform:
   m_ObjectHideFlags: 0
@@ -897,6 +898,8 @@ MonoBehaviour:
   vignetteColor: {r: 0.85, g: 0.07, b: 0.07, a: 1}
   maxAlpha: 0.65
   fadeSpeed: 3.5
+  hitFlashPeakAlpha: 0.3
+  hitFlashFadeTime: 0.35
   pulseSpeed: 1.6
   pulseAmount: 0.25
   textureSize: 256
@@ -1768,6 +1771,9 @@ MonoBehaviour:
   pointsPerBossKill: 50
   pointsPerSecond: 1
   pointsForFinalBossKill: 1000
+  xpPerKill: 1
+  xpPerBossKill: 50
+  levelThresholds: 050000008813000040420f00
   stopTimerOnDeath: 1
   elapsedTime: 0
   kills: 0

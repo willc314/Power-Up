@@ -29,8 +29,8 @@ public class GameManager : MonoBehaviour
     public int xpPerKill = 1;
     [Tooltip("XP granted per boss kill (SlimeKing & SlimeGod).")]
     public int xpPerBossKill = 50;
-    [Tooltip("Cumulative XP thresholds for each level above 1. Index 0 = XP needed to reach level 2, index 1 = level 3, index 2 = level 4 (max). Length defines max level.")]
-    public int[] levelThresholds = new int[] { 50, 5000, 1000000 };
+    [Tooltip("Cumulative XP thresholds for each level above 1. Length defines max level: a single threshold means max level is 2 (one level-up event), two thresholds means max level 3, etc. Currently: max level 3 — two level-up events (at 50 XP and 5000 XP), giving the player exactly two augment picks per run.")]
+    public int[] levelThresholds = new int[] { 50, 5000 };
 
     /// <summary>Cumulative XP earned this run.</summary>
     public int CurrentXP { get; private set; }

@@ -175,7 +175,10 @@ public class LevelUpChoiceUI : MonoBehaviour
 
         if (MusicManager.Instance != null) { MusicManager.Instance.BeginDuck(); duckActive = true; }
 
-        headerText.text = "LEVEL UP!  →  " + level;
+        // Player-facing language: "augment". Singular because each
+        // level-up offers one pick (the level cap is 2, so there's only
+        // ever one augment-choice event per run).
+        headerText.text = "Choose your Augment";
 
         // Wire each panel to its offered upgrade (or hide if none).
         for (int i = 0; i < panels.Length; i++)
@@ -245,9 +248,9 @@ public class LevelUpChoiceUI : MonoBehaviour
     {
         switch (slot)
         {
-            case LevelUpgrade.Slot.EquippedWeapon: return "EQUIPPED WEAPON";
-            case LevelUpgrade.Slot.OtherWeapon:    return "OTHER WEAPON";
-            case LevelUpgrade.Slot.GeneralBuff:    return "GENERAL BUFF";
+            case LevelUpgrade.Slot.EquippedWeapon: return "EQUIPPED WEAPON AUGMENT";
+            case LevelUpgrade.Slot.OtherWeapon:    return "OTHER WEAPON AUGMENT";
+            case LevelUpgrade.Slot.GeneralBuff:    return "GENERAL AUGMENT";
         }
         return "";
     }
@@ -297,7 +300,7 @@ public class LevelUpChoiceUI : MonoBehaviour
         headerText.color = levelTextColor;
         headerText.fontSize = 56;
         headerText.fontStyle = FontStyle.Bold;
-        headerText.text = "LEVEL UP!";
+        headerText.text = "Choose your Augment";
 
         // Panels — 3 columns centered.
         float totalWidth = panels.Length * panelSize.x + (panels.Length - 1) * panelSpacing;
