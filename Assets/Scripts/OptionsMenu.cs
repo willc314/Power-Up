@@ -61,6 +61,8 @@ public class OptionsMenu : MonoBehaviour
     private Dropdown resolutionDropdown;
     private Slider musicSlider;
     private Text   musicValueLabel;
+    private Slider sfxSlider;
+    private Text   sfxValueLabel;
 
     /// <summary>
     /// Auto-spawn fallback: if no OptionsMenu exists in the first scene's
@@ -215,6 +217,12 @@ public class OptionsMenu : MonoBehaviour
             if (musicValueLabel != null) musicValueLabel.text = Mathf.RoundToInt(s.MusicVolume * 100f) + "%";
         }
 
+        if (sfxSlider != null)
+        {
+            sfxSlider.SetValueWithoutNotify(s.SfxVolume);
+            if (sfxValueLabel != null) sfxValueLabel.text = Mathf.RoundToInt(s.SfxVolume * 100f) + "%";
+        }
+
         HighlightSelection(fullscreenButtons, s.Fullscreen ? 1 : 0);
         HighlightSelection(difficultyButtons, (int)s.CurrentDifficulty);
     }
@@ -270,7 +278,7 @@ public class OptionsMenu : MonoBehaviour
         panelRt.anchorMax = new Vector2(0.5f, 0.5f);
         panelRt.pivot = new Vector2(0.5f, 0.5f);
         panelRt.anchoredPosition = Vector2.zero;
-        panelRt.sizeDelta = new Vector2(960f, 820f); // taller — fits 5 option rows, the warning, and bottom buttons
+        panelRt.sizeDelta = new Vector2(960f, 900f); // taller — fits 5 option rows + SFX row, the warning, and bottom buttons
         var panelImg = panel.AddComponent<Image>();
         panelImg.color = panelColor;
         panelImg.raycastTarget = true;
@@ -310,17 +318,24 @@ public class OptionsMenu : MonoBehaviour
             anchorTop: true);
         BuildOptionRowMusicVolume(panel.transform, /*yFromTop*/ -480f);
 
-        // --- Row: Difficulty ---
-        BuildLabel(panel.transform, "Difficulty",
-            new Vector2(40f, -580f), new Vector2(280f, 40f),
+        // --- Row: SFX Volume ---
+        BuildLabel(panel.transform, "SFX Volume",
+            new Vector2(40f, -560f), new Vector2(280f, 40f),
             anchor: TextAnchor.MiddleLeft, fontSize: 26, color: subtleTextColor,
             anchorTop: true);
-        BuildOptionRowDifficulty(panel.transform, /*yFromTop*/ -580f);
+        BuildOptionRowSfxVolume(panel.transform, /*yFromTop*/ -560f);
+
+        // --- Row: Difficulty ---
+        BuildLabel(panel.transform, "Difficulty",
+            new Vector2(40f, -660f), new Vector2(280f, 40f),
+            anchor: TextAnchor.MiddleLeft, fontSize: 26, color: subtleTextColor,
+            anchorTop: true);
+        BuildOptionRowDifficulty(panel.transform, /*yFromTop*/ -660f);
 
         // Small warning text below the row — players need to know the
         // change won't kick in until they start a fresh run.
         BuildLabel(panel.transform, "Difficulty changes apply on the next new game.",
-            new Vector2(40f, -640f), new Vector2(880f, 26f),
+            new Vector2(40f, -720f), new Vector2(880f, 26f),
             anchor: TextAnchor.MiddleLeft, fontSize: 16, color: subtleTextColor,
             anchorTop: true);
 
@@ -428,6 +443,52 @@ public class OptionsMenu : MonoBehaviour
             float clamped = Mathf.Clamp01(v);
             GameSettings.Instance.SetMusicVolume(clamped);
             if (musicValueLabel != null) musicValueLabel.text = Mathf.RoundToInt(clamped * 100f) + "%";
+        });
+    }
+
+    private void BuildOptionRowSfxVolume(Transform parent, float yFromTop)
+    {
+        // SFX volume row: continuous slider 0..1 with a "100%" live label.
+        // Mirrors the music row exactly — sliding writes through to
+        // GameSettings.SetSfxVolume which persists the value AND pushes
+        // it onto SoundManager.volume so the change is audible immediately
+        // (e.g. play a sword swing right after sliding).
+        const float startX     = 320f;
+        const float sliderW    = 440f;
+        const float sliderH    = 30f;
+        const float labelW     = 160f;
+        const float labelGap   = 18f;
+
+        float currentVolume = GameSettings.Instance != null ? GameSettings.Instance.SfxVolume : 1f;
+
+        sfxSlider = BuildSlider(parent,
+            new Vector2(startX, yFromTop - 10f),
+            new Vector2(sliderW, sliderH),
+            min: 0f, max: 1f, wholeNumbers: false,
+            initialValue: currentVolume);
+
+        // Live percentage label
+        GameObject labelGo = MakeUI("Sfx_Value", parent);
+        var lblRt = (RectTransform)labelGo.transform;
+        lblRt.anchorMin = new Vector2(0f, 1f);
+        lblRt.anchorMax = new Vector2(0f, 1f);
+        lblRt.pivot = new Vector2(0f, 1f);
+        lblRt.anchoredPosition = new Vector2(startX + sliderW + labelGap, yFromTop);
+        lblRt.sizeDelta = new Vector2(labelW, 40f);
+        sfxValueLabel = labelGo.AddComponent<Text>();
+        sfxValueLabel.font = defaultFont;
+        sfxValueLabel.fontSize = 22;
+        sfxValueLabel.color = textColor;
+        sfxValueLabel.alignment = TextAnchor.MiddleLeft;
+        sfxValueLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+        sfxValueLabel.text = Mathf.RoundToInt(currentVolume * 100f) + "%";
+        sfxValueLabel.raycastTarget = false;
+
+        sfxSlider.onValueChanged.AddListener(v =>
+        {
+            float clamped = Mathf.Clamp01(v);
+            GameSettings.Instance.SetSfxVolume(clamped);
+            if (sfxValueLabel != null) sfxValueLabel.text = Mathf.RoundToInt(clamped * 100f) + "%";
         });
     }
 

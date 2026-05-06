@@ -79,6 +79,12 @@ public class MusicManager : MonoBehaviour
         Instance = this;
         if (persistAcrossScenes) DontDestroyOnLoad(gameObject);
 
+        // Pull persisted music volume from GameSettings so the player's
+        // saved slider value takes effect even though GameSettings.Apply()
+        // runs before any per-scene MusicManager exists.
+        if (GameSettings.Instance != null)
+            volume = Mathf.Clamp01(GameSettings.Instance.MusicVolume);
+
         sourceA = gameObject.AddComponent<AudioSource>();
         sourceB = gameObject.AddComponent<AudioSource>();
         ConfigureSource(sourceA);

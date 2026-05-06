@@ -167,8 +167,47 @@ public class SwordWeapon : Weapon
         sb.Append($"Slash Arc:  {arc:0}°");
         if (bladeSizeMultiplier > 1.0001f)   sb.Append($"\nBlade Size: {bladeSizeMultiplier:0.##}×");
         if (extraAttackCount > 0)            sb.Append($"\nExtra Slashes: {extraAttackCount}");
+
+        // Zenith requirements section — only shown while the player is
+        // CURSED (Zenith unlocked but not yet applied). Mirrors the gates
+        // in MeetsZenithRequirements so the player can see exactly what
+        // they're missing instead of having to guess what triggers Zenith.
+        // Each line shows: leading ✓ if the gate is satisfied, • otherwise,
+        // followed by the requirement label and current / target values
+        // where applicable.
+        if (zenithUnlocked && !zenithApplied)
+        {
+            Hero hero = Hero.Instance;
+            bool bothSlots = hero != null && hero.primaryWeapon == this && hero.secondaryWeapon == this;
+            bool arcMax    = IsSlashArcAtMax;
+            // extras gate is STRICT >, so the lowest passing count is required+1.
+            int extrasTarget = zenithExtraAttacksRequired + 1;
+            bool extrasOk    = extraAttackCount >= extrasTarget;
+            float speedReduction = OriginalCooldown > 0.0001f
+                ? Mathf.Clamp01(1f - cooldown / OriginalCooldown)
+                : 0f;
+            // speed gate is STRICT >, mirror the +1% buffer in the display.
+            float speedTargetPct = (zenithAttackSpeedReductionRequired * 100f) + 1f;
+            bool speedOk = speedReduction * 100f >= speedTargetPct;
+            bool bossOk  = zenithBossDefeatedSinceCurse;
+
+            sb.Append("\n\n— Zenith Requirements —");
+            sb.Append($"\n{Tick(bothSlots)} Dual-wield Sword");
+            sb.Append($"\n{Tick(arcMax)} Slash Arc: {arc:0}° / 360°");
+            sb.Append($"\n{Tick(extrasOk)} Extra Slashes: {extraAttackCount} / {extrasTarget}");
+            sb.Append($"\n{Tick(speedOk)} Attack Speed: {speedReduction * 100f:0}% / {speedTargetPct:0}%");
+            sb.Append($"\n{Tick(bossOk)} Defeat a boss");
+        }
+
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Glyph prefix for each Zenith-requirement line. ✓ if the gate is
+    /// satisfied, • (unmet bullet) otherwise. Both characters render in
+    /// Unity's LegacyRuntime.ttf which is what the stats panel uses.
+    /// </summary>
+    private static string Tick(bool met) => met ? "✓" : "•";
 
     public override bool TryApplyBoost(BoostKind kind)
     {

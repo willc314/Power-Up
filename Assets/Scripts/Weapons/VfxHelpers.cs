@@ -75,6 +75,48 @@ public static class VfxHelpers
     }
 
     /// <summary>
+    /// Uniformly scale every NON-particle renderer's transform by
+    /// <paramref name="scale"/>, while forcing every ParticleSystem to
+    /// <see cref="ParticleSystemScalingMode.Local"/> so it stays at its
+    /// authored size regardless of any parent-transform scale changes.
+    ///
+    /// Use this when you want the "static" parts of a VFX (ground crack
+    /// decals, mesh-based shockwaves, sprite quads) to grow with an effect
+    /// radius, but the particles (sparks, smoke, fire) to keep their
+    /// original visual size — a 2× boosted grenade should leave a 2× big
+    /// ground crack but the spark particles shouldn't suddenly look
+    /// chunky.
+    /// </summary>
+    public static void ScaleStaticRenderersOnly(GameObject root, float scale)
+    {
+        if (root == null || scale <= 0.0001f) return;
+
+        // First, lock every ParticleSystem into Local scaling. With Local
+        // scaling, particles use ONLY their own transform's scale and
+        // ignore parent transforms — so any local-scale we apply to a
+        // mesh renderer's transform on the way down won't accidentally
+        // resize particles parented underneath it.
+        foreach (var ps in root.GetComponentsInChildren<ParticleSystem>(true))
+        {
+            var main = ps.main;
+            main.scalingMode = ParticleSystemScalingMode.Local;
+        }
+
+        // Then scale every NON-particle renderer's transform. We collect
+        // the unique parent transforms first so a single GameObject hosting
+        // multiple non-particle renderers (rare but possible) only gets
+        // scaled once.
+        var seen = new System.Collections.Generic.HashSet<Transform>();
+        foreach (var rend in root.GetComponentsInChildren<Renderer>(true))
+        {
+            if (rend is ParticleSystemRenderer) continue;
+            if (rend.transform == null) continue;
+            if (!seen.Add(rend.transform)) continue;
+            rend.transform.localScale = rend.transform.localScale * scale;
+        }
+    }
+
+    /// <summary>
     /// Force every ParticleSystem in the hierarchy to NOT loop, so a prefab
     /// that ships with main.loop = true still plays its emission burst and
     /// then ends. Used for one-shot VFX (meteor impact, grenade detonation)

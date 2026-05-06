@@ -349,11 +349,12 @@ MonoBehaviour:
   cubeRenderer: {fileID: 7533446484085117571}
   tmpLetterText: {fileID: 0}
   letterText: {fileID: 0}
-  visualLocalY: 0
   lifeTime: 10
   rotateSpeed: {x: 0, y: 120, z: 0}
   bobHeight: 0.25
   bobSpeed: 3
+  dropSound: {fileID: 8300000, guid: ffb159a21c8a04135a5616979c828fab, type: 3}
+  dropSoundVolume: 1
   swordColor: {r: 0.79622644, g: 0, b: 0.15279415, a: 0.39215687}
   shieldColor: {r: 0.25, g: 0.65, b: 1, a: 0.39215687}
   bowColor: {r: 0.84202915, g: 0.89433956, b: 0.84202915, a: 0.39215687}

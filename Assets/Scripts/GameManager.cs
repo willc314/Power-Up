@@ -166,6 +166,15 @@ public class GameManager : MonoBehaviour
 
         HighScore = PlayerPrefs.GetInt(PrefsHighScore, 0);
         startOfRunHighScore = HighScore;
+        // Refresh the level-up registry for THIS run. The registry's
+        // GeneralBuffChosen flag (and any other per-run state baked into
+        // upgrade subclasses) lives on a static singleton that survives
+        // scene loads now that LevelUpChoiceUI is DontDestroyOnLoad — so
+        // without this re-init the second run would see general augments
+        // permanently hidden because run #1 chose one. GameManager.Awake
+        // runs on every gameplay scene load, so this is the natural
+        // per-run reset point.
+        LevelUpgradeRegistry.Initialize();
         // Diagnostic: confirm the inspector-bound XP / level-threshold values
         // actually made it into the build. If you change xpPerKill or the
         // levelThresholds array in the inspector but forget to save the
@@ -347,6 +356,16 @@ public class GameManager : MonoBehaviour
         savedScores = false;
         HighScore = PlayerPrefs.GetInt(PrefsHighScore, 0);
         startOfRunHighScore = HighScore;
+        // Reset XP / level so the second run starts fresh — these are
+        // run-scoped stats that don't auto-reset because GameManager
+        // properties default-initialize only when the C# instance is
+        // first allocated.
+        CurrentXP = 0;
+        CurrentLevel = 1;
+        // Refresh the level-up registry too, for in-place restarts that
+        // don't go through a scene reload (the GameManager.Awake init
+        // covers the scene-reload path).
+        LevelUpgradeRegistry.Initialize();
     }
 
     /// <summary>

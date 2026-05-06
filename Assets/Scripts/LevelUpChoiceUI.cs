@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 /// <summary>
@@ -118,8 +119,35 @@ public class LevelUpChoiceUI : MonoBehaviour
         Hide();
     }
 
-    private void OnEnable()  { GameManager.OnLeveledUp += OnLeveledUp; }
-    private void OnDisable() { GameManager.OnLeveledUp -= OnLeveledUp; }
+    private void OnEnable()
+    {
+        GameManager.OnLeveledUp += OnLeveledUp;
+        // The picker singleton is DontDestroyOnLoad so it follows the
+        // player from gameplay into the title scene if they hit
+        // "Quit to Main Menu" mid-pick. Subscribing to sceneLoaded lets
+        // us force-close on any scene transition so the augment overlay
+        // doesn't linger over the wrong scene.
+        SceneManager.sceneLoaded += OnSceneLoaded;
+    }
+    private void OnDisable()
+    {
+        GameManager.OnLeveledUp -= OnLeveledUp;
+        SceneManager.sceneLoaded -= OnSceneLoaded;
+    }
+
+    private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
+    {
+        // Hard reset whenever the active scene changes — drain any queued
+        // levels (they were earned in the previous run and shouldn't carry
+        // over) and force-close the picker. Close() handles the visual
+        // hide, timeScale restore, and music un-duck even if the picker
+        // wasn't currently shown.
+        pendingLevels.Clear();
+        if (shown) Close();
+        // Defensive: if we were waiting on the powerup UI to close, drop
+        // that subscription too so nothing fires after a scene transition.
+        PowerUpChoiceUI.OnClosed -= OnExternalUIClosed;
+    }
 
     /// <summary>
     /// Triggered by GameManager when CurrentLevel advances. If the picker is

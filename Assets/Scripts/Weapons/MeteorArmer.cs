@@ -23,6 +23,8 @@ public class MeteorRoll
     public float vfxScale;
     public float shakeAmplitude;
     public float shakeDuration;
+    public AudioClip impactSound;
+    public float impactSoundVolume;
     public LayerMask hitLayers;
     public bool consumed;
 }
@@ -107,6 +109,8 @@ public class MeteorArmer : MonoBehaviour
             vfxScale:          roll.vfxScale,
             shakeAmplitude:    roll.shakeAmplitude,
             shakeDuration:     roll.shakeDuration,
+            impactSound:       roll.impactSound,
+            impactSoundVolume: roll.impactSoundVolume,
             hitLayers:         roll.hitLayers);
         return true;
     }

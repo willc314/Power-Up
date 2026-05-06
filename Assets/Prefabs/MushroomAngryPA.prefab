@@ -345,9 +345,6 @@ MonoBehaviour:
   dropAllWeaponPowerUps: 1
   possiblePowerUpTypes: 010000000200000003000000040000000400000004000000
   powerUpDropHeight: 0
-  powerUpDropGroundMask:
-    serializedVersion: 2
-    m_Bits: 4294967295
   useObstacleAvoidance: 1
   obstacleMask:
     serializedVersion: 2
@@ -363,8 +360,9 @@ MonoBehaviour:
   hitParticleLifetime: 0.5
   hitParticleSpread: 35
   hitParticleHeight: 1
-  dashSpeedMultiplier: 7
+  dashSpeedMultiplier: 6
   dashTelegraphTime: 0.8
+  dashLockOnDelay: 0.1
   dashDuration: 0.5
   dashRecovery: 1.2
   crossbowProjectile: {fileID: 0}

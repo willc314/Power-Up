@@ -122,6 +122,10 @@ public class Hero : MonoBehaviour
     [Range(0f, 1f)] public float meteorShakeAmplitude = 0.18f;
     [Tooltip("Camera shake duration (seconds) on meteor impact.")]
     [Range(0f, 1f)] public float meteorShakeDuration = 0.18f;
+    [Tooltip("One-shot SFX played at the impact point when the meteor lands. Routed through SoundManager so it picks up the global SFX volume + 3D rolloff. Leave null for silent meteors.")]
+    public AudioClip meteorImpactSound;
+    [Tooltip("Per-clip volume multiplier for the meteor impact SFX. Stacks on top of SoundManager.volume. Useful if the chosen clip is louder/quieter than the rest of your SFX.")]
+    [Range(0f, 1f)] public float meteorImpactSoundVolume = 1f;
 
     [Header("Damage Modifiers")]
     [Tooltip("Multiplier applied to ALL weapon damage at attack time. 1 = no change.")]
@@ -176,6 +180,12 @@ public class Hero : MonoBehaviour
     public string enemyLayerName = "Enemy";
     [Tooltip("Distance to keep from the arena edge during movement. Prevents tunneling through the boundary wall when the dash or move speed would otherwise carry the hero past it in one physics tick.")]
     public float dashArenaEdgeMargin = 0.5f;
+
+    [Header("Dash SFX")]
+    [Tooltip("One-shot sound played at the hero's position when a dash starts. Routed through SoundManager so it picks up the SFX volume slider + 3D rolloff. Leave null for silent dashes.")]
+    public AudioClip dashSound;
+    [Tooltip("Per-clip volume multiplier for the dash SFX. Stacks on SoundManager.volume.")]
+    [Range(0f, 1f)] public float dashSoundVolume = 1f;
 
     [Header("Dash Particles")]
     [Tooltip("Spawn dust particles flying behind the hero during the dash.")]
@@ -611,6 +621,11 @@ public class Hero : MonoBehaviour
         dashTimer = dashDuration;
         dashCooldownTimer = dashCooldown;
         dashParticleAccumulator = 0f;
+
+        // Dash SFX — fires at the start of the dash so the audio aligns
+        // with the visual particles and the i-frame window.
+        if (dashSound != null && SoundManager.Instance != null)
+            SoundManager.Instance.PlaySfxAt(dashSound, transform.position, dashSoundVolume);
         // Cover the whole dash plus the small grace period afterward, then
         // scale by the cumulative MoveSpeed-boost shrinkage so faster dashing
         // = shorter invulnerability per dash.
@@ -1498,6 +1513,8 @@ public class Hero : MonoBehaviour
             vfxScale          = meteorVfxScale,
             shakeAmplitude    = meteorShakeAmplitude,
             shakeDuration     = meteorShakeDuration,
+            impactSound       = meteorImpactSound,
+            impactSoundVolume = meteorImpactSoundVolume,
             hitLayers         = enemyLayers,
         };
     }

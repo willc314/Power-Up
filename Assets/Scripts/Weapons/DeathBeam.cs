@@ -41,6 +41,12 @@ public class DeathBeam : MonoBehaviour
     [Tooltip("Vertical offset above the hero pivot the beam fires from.")]
     public float spawnHeight = 1.0f;
 
+    [Header("SFX")]
+    [Tooltip("One-shot sound played at the beam's origin when the beam first fires. Routed through SoundManager so it picks up the global SFX volume + 3D rolloff. Leave null for silent beams.")]
+    public AudioClip fireSound;
+    [Tooltip("Per-clip volume multiplier for the fire SFX. Stacks on top of SoundManager.volume.")]
+    [Range(0f, 1f)] public float fireSoundVolume = 1f;
+
     [Header("Trail Particles")]
     [Tooltip("How many particles per second flow backward from the beam toward the player. 0 = none.")]
     public float beamParticlesPerSecond = 80f;
@@ -79,6 +85,17 @@ public class DeathBeam : MonoBehaviour
         if (vfxPrefab != null)
         {
             vfxInstance = Instantiate(vfxPrefab, owner.transform.position + Vector3.up * spawnHeight, owner.transform.rotation, owner.transform);
+        }
+
+        // One-shot fire SFX at the beam's origin — same SoundManager pipeline
+        // the meteor uses, so it inherits the global SFX volume slider and
+        // 3D rolloff. Plays once at Init, not looped, so a long beam plays
+        // its "firing" sound at the start and the rest is just visuals +
+        // damage ticks.
+        if (fireSound != null && SoundManager.Instance != null)
+        {
+            Vector3 sfxPos = owner.transform.position + Vector3.up * spawnHeight;
+            SoundManager.Instance.PlaySfxAt(fireSound, sfxPos, fireSoundVolume);
         }
 
         // Visual scale: stretch X/Z to thickness, Y to a thin slab, length on Z.

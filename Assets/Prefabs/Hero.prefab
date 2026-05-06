@@ -2666,11 +2666,11 @@ MonoBehaviour:
   maxHealthRegenPerSecond: 100
   iAmTankActive: 0
   iAmTankHpExponentialPerBoost: 0.05
-  iAmTankRegenMultiplier: 2
+  iAmTankRegenMultiplier: 1.5
   iAmTankDamageMultiplier: 1.3
   iAmTankAbilityCooldown: 30
   iAmTankShieldDuration: 35
-  iAmTankHealFraction: 0.2
+  iAmTankHealFraction: 0.15
   tankShieldPrefab: {fileID: 1289543790355709915, guid: b99922c2f59b1a542bdd06ae8bee47ae, type: 3}
   tankShieldVisualScale: 1.2
   tankShieldVisualYOffset: 0
@@ -2685,6 +2685,8 @@ MonoBehaviour:
   meteorAOERadius: 3
   meteorShakeAmplitude: 0.1
   meteorShakeDuration: 0.15
+  meteorImpactSound: {fileID: 0}
+  meteorImpactSoundVolume: 1
   damageMultiplier: 1
   damageBoostAmount: 0.15
   maxDamageMultiplier: 100
@@ -2708,6 +2710,8 @@ MonoBehaviour:
   dashPhasesThroughEnemies: 1
   enemyLayerName: Enemy
   dashArenaEdgeMargin: 0.5
+  dashSound: {fileID: 8300000, guid: d46323e22e74e46baa241cbf48c85671, type: 3}
+  dashSoundVolume: 0.5
   dashParticles: 1
   dashParticlesPerSecond: 80
   dashParticleColor: {r: 0.65, g: 0.55, b: 0.42, a: 1}
@@ -3016,6 +3020,8 @@ MonoBehaviour:
   arcHeight: 3
   flightTime: 0.8
   spawnHeight: 1
+  throwSound: {fileID: 0}
+  throwSoundVolume: 0.5
   explosionRadiusBonus: 0
   radiusIncreasePerLevel: 1
   maxExplosionRadiusBonus: 5

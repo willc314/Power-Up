@@ -32,6 +32,8 @@ public class Explosion : MonoBehaviour
     public GameObject vfxPrefab;
     [Tooltip("Seconds to wait before destroying this object (leave time for the VFX to play).")]
     public float vfxLifetime = 2f;
+    [Tooltip("Reference radius the vfxPrefab was authored at. The spawned VFX is uniformly scaled by (current radius / this value), so a grenade Range upgrade that doubles the AOE radius also doubles the visual size. Default 6 matches the Explosion's default radius — set this to whatever radius your VFX prefab visually 'fills' at and the scaling will line up. Set to 0 to disable size scaling.")]
+    public float vfxRefRadius = 6f;
 
     [Header("Built-in Debris Burst")]
     [Tooltip("If true, spawns a quick burst of cube/sphere debris flying upward and outward — looks like an explosion without needing a particle prefab.")]
@@ -114,6 +116,19 @@ public class Explosion : MonoBehaviour
             // schedule below handles cleanup once the burst finishes.
             VfxHelpers.DisablePhysicsInterference(vfx);
             VfxHelpers.ConfigureAsOneShotVfx(vfx);
+            // Scale the GROUND-CRACK / mesh parts of the VFX to match the
+            // AOE radius, but keep particles (sparks, smoke, fire) at
+            // their authored size. A 2× radius boost grows the ground
+            // crack to 2× but the sparks shouldn't read as chunky-twice-
+            // as-big. ScaleStaticRenderersOnly walks non-particle
+            // renderers and scales their transforms while pinning every
+            // ParticleSystem to Local scaling so it ignores any parent
+            // transform changes.
+            if (vfxRefRadius > 0.0001f)
+            {
+                float scale = Mathf.Max(0.0001f, radius / vfxRefRadius);
+                VfxHelpers.ScaleStaticRenderersOnly(vfx, scale);
+            }
             Destroy(vfx, vfxLifetime);
         }
 

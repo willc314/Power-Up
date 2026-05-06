@@ -24,6 +24,8 @@ public class ShieldMeteor : MonoBehaviour
     private float aoeRadius;
     private float shakeAmplitude;
     private float shakeDuration;
+    private AudioClip impactSound;
+    private float impactSoundVolume;
     private LayerMask hitLayers;
     private float vfxLingerAfterImpact = 1.5f;
 
@@ -54,6 +56,8 @@ public class ShieldMeteor : MonoBehaviour
         float vfxScale,
         float shakeAmplitude,
         float shakeDuration,
+        AudioClip impactSound,
+        float impactSoundVolume,
         LayerMask hitLayers)
     {
         var go = new GameObject("ShieldMeteor");
@@ -64,6 +68,8 @@ public class ShieldMeteor : MonoBehaviour
         m.fallDuration = Mathf.Max(0.05f, fallDuration);
         m.shakeAmplitude = Mathf.Max(0f, shakeAmplitude);
         m.shakeDuration = Mathf.Max(0f, shakeDuration);
+        m.impactSound = impactSound;
+        m.impactSoundVolume = Mathf.Clamp01(impactSoundVolume);
         m.hitLayers = hitLayers;
 
         // Place the host at the target. The VFX prefab plays its full
@@ -79,6 +85,32 @@ public class ShieldMeteor : MonoBehaviour
         // then orbits around the world-vertical fall axis, preserving
         // the downward direction while still varying approach angle.
         go.transform.rotation = Quaternion.Euler(0f, Random.Range(0f, 360f), 0f);
+
+        // One-shot spawn SFX at the impact point — plays at the moment the
+        // visual starts falling so the audio arrives BEFORE the impact
+        // (matching the falling-meteor "incoming!" cue most packs author
+        // their sound around). Routed through SoundManager so it picks up
+        // the global SFX volume + 3D rolloff.
+        //
+        // Pitch-scaled so the clip's full length matches the meteor's
+        // fallDuration: the sound starts at spawn AND ends right at the
+        // impact moment, regardless of whether the clip is shorter or
+        // longer than the fall. Unity's pitch knob time-stretches without
+        // cropping (pitch>1 = faster+higher, pitch<1 = slower+lower) and
+        // the trade-off is a tonal shift, which the user accepted as the
+        // alternative to cutting the clip short.
+        if (impactSound != null && SoundManager.Instance != null)
+        {
+            float pitch = 1f;
+            if (impactSound.length > 0.0001f && m.fallDuration > 0.0001f)
+            {
+                // Clamp to Unity's documented AudioSource.pitch range
+                // [-3, 3]. Floor at a small positive to avoid divide-by-
+                // zero / negative-pitch (reverse playback) edge cases.
+                pitch = Mathf.Clamp(impactSound.length / m.fallDuration, 0.05f, 3f);
+            }
+            SoundManager.Instance.PlaySfxAt(impactSound, targetPos, m.impactSoundVolume, pitch);
+        }
 
         // Spawn the visual as a child so its lifetime is bound to the host.
         if (vfxPrefab != null)
@@ -146,6 +178,9 @@ public class ShieldMeteor : MonoBehaviour
             var cam = Camera.main.GetComponent<CameraFollow>();
             if (cam != null) cam.Shake(shakeAmplitude, shakeDuration);
         }
+
+        // (Spawn SFX is fired at Spawn() time now, not Impact — the audio
+        // arrives at the start of the fall instead of after damage lands.)
 
         // Linger so the prefab's particles finish their post-impact
         // dissipation (smoke, shockwave, etc) before the host vanishes.

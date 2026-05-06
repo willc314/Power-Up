@@ -100,6 +100,7 @@ public class GameSettings : MonoBehaviour
     private const string PrefsResHeight   = "Settings.ResolutionHeight";
     private const string PrefsFullscreen  = "Settings.Fullscreen";
     private const string PrefsMusicVol    = "Settings.MusicVolume";
+    private const string PrefsSfxVol      = "Settings.SfxVolume";
     private const string PrefsDifficulty  = "Settings.Difficulty";
 
     /// <summary>Target framerate. 0 = uncapped.</summary>
@@ -109,8 +110,10 @@ public class GameSettings : MonoBehaviour
     /// <summary>True for fullscreen, false for windowed.</summary>
     public bool Fullscreen { get; private set; } = true;
 
-    /// <summary>Music volume from 0 (mute) to 1 (full). Applied via AudioListener.volume.</summary>
+    /// <summary>Music volume from 0 (mute) to 1 (full). Applied to MusicManager.volume; also drives AudioListener.volume as a fallback when MusicManager isn't loaded.</summary>
     public float MusicVolume { get; private set; } = 0.7f;
+    /// <summary>SFX volume from 0 (mute) to 1 (full). Applied to SoundManager.volume.</summary>
+    public float SfxVolume { get; private set; } = 1.0f;
 
     /// <summary>Active difficulty. Changes only take effect on the next new game.</summary>
     public Difficulty CurrentDifficulty { get; private set; } = Difficulty.Normal;
@@ -141,6 +144,7 @@ public class GameSettings : MonoBehaviour
         Resolution = new Vector2Int(Mathf.Max(640, w), Mathf.Max(360, h));
         Fullscreen = PlayerPrefs.GetInt(PrefsFullscreen, Screen.fullScreen ? 1 : 0) != 0;
         MusicVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(PrefsMusicVol, 0.7f));
+        SfxVolume   = Mathf.Clamp01(PlayerPrefs.GetFloat(PrefsSfxVol,   1.0f));
         int diff = PlayerPrefs.GetInt(PrefsDifficulty, (int)Difficulty.Normal);
         CurrentDifficulty = (Difficulty)Mathf.Clamp(diff, (int)Difficulty.Easy, (int)Difficulty.Hard);
     }
@@ -152,6 +156,7 @@ public class GameSettings : MonoBehaviour
         PlayerPrefs.SetInt(PrefsResHeight,  Resolution.y);
         PlayerPrefs.SetInt(PrefsFullscreen, Fullscreen ? 1 : 0);
         PlayerPrefs.SetFloat(PrefsMusicVol, MusicVolume);
+        PlayerPrefs.SetFloat(PrefsSfxVol,   SfxVolume);
         PlayerPrefs.SetInt(PrefsDifficulty, (int)CurrentDifficulty);
         PlayerPrefs.Save();
     }
@@ -164,13 +169,20 @@ public class GameSettings : MonoBehaviour
     }
 
     /// <summary>
-    /// Apply music volume — drives AudioListener.volume. If you later split
-    /// audio into music/SFX channels via an AudioMixer, route the music
-    /// channel's exposed parameter from here instead.
+    /// Push music + SFX volumes onto their respective managers. Each
+    /// manager owns its own AudioSource(s) and reads its `volume` field
+    /// when scheduling audio, so setting these values takes effect on
+    /// the next play (and crossfades for music). AudioListener.volume
+    /// stays at 1.0 — we DON'T globally scale it, otherwise the SFX
+    /// slider would also affect music and vice versa.
     /// </summary>
     public void ApplyAudio()
     {
-        AudioListener.volume = Mathf.Clamp01(MusicVolume);
+        AudioListener.volume = 1f;
+        if (MusicManager.Instance != null)
+            MusicManager.Instance.volume = Mathf.Clamp01(MusicVolume);
+        if (SoundManager.Instance != null)
+            SoundManager.Instance.volume = Mathf.Clamp01(SfxVolume);
     }
 
     /// <summary>Apply the FPS cap only — cheap, safe to call every frame.</summary>
@@ -194,6 +206,7 @@ public class GameSettings : MonoBehaviour
     public void SetResolution(Vector2Int r)  { Resolution = r;                ApplyDisplay(); Save(); }
     public void SetFullscreen(bool fs)       { Fullscreen = fs;               ApplyDisplay(); Save(); }
     public void SetMusicVolume(float v)      { MusicVolume = Mathf.Clamp01(v); ApplyAudio();  Save(); }
+    public void SetSfxVolume(float v)        { SfxVolume   = Mathf.Clamp01(v); ApplyAudio();  Save(); }
     /// <summary>Pick a difficulty preset. Doesn't apply to gameplay until the player starts a new run.</summary>
     public void SetDifficulty(Difficulty d)  { CurrentDifficulty = d; Save(); }
 

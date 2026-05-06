@@ -18,6 +18,12 @@ public class GrenadeWeapon : Weapon
     [Tooltip("Vertical offset for the throw release point.")]
     public float spawnHeight = 1.0f;
 
+    [Header("Throw SFX")]
+    [Tooltip("One-shot sound played at the hero's position when the grenade leaves the hand. Routed through SoundManager.")]
+    public AudioClip throwSound;
+    [Tooltip("Per-clip volume multiplier for the throw SFX. Stacks on SoundManager.volume.")]
+    [Range(0f, 1f)] public float throwSoundVolume = 1f;
+
     [Header("Power Boost (Range)")]
     [Tooltip("Total bonus added to the explosion radius from Range boosts. Set by TryApplyBoost(Range).")]
     public float explosionRadiusBonus = 0f;
@@ -51,6 +57,11 @@ public class GrenadeWeapon : Weapon
 
         Grenade g = Instantiate(grenadePrefab, startPos, Quaternion.identity);
         g.radiusBonus = explosionRadiusBonus;
+        // Throw SFX at the hero's release point (slightly forward + up,
+        // matches the visual spawn position so the audio's spatialization
+        // tracks the throw rather than the hero's pivot).
+        if (throwSound != null && SoundManager.Instance != null)
+            SoundManager.Instance.PlaySfxAt(throwSound, startPos, throwSoundVolume);
         // Bake hero damage modifiers (general damage + crit) into the
         // explosion's damage. Source is the weapon's own `damage` field,
         // which Awake() seeded from the explosion prefab and which weapon
