@@ -545,7 +545,7 @@ MonoBehaviour:
   dashTelegraphTime: 0.8
   dashDuration: 0.3
   dashRecovery: 1.2
-  crossbowProjectile: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
+  crossbowProjectile: {fileID: 5082396591220985723, guid: 2127089df43e8d54faa8d7bb483224dd, type: 3}
   crossbowDamage: 40
   crossbowProjectileSpeed: 100
   crossbowSpawnHeight: 1.5

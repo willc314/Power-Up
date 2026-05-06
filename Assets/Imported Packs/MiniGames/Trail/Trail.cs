@@ -47,6 +47,21 @@ namespace Tiny
 		[SerializeField, Tooltip("The array of Vector3 points to connect.")]
 		private Vector3[] points = new Vector3[] { new Vector3(0f, 0f, -1f), new Vector3(0f, 0f, 1f) };
 
+		// --- Power-Up project customization: smooth head-to-tail fade ---
+		// The original Tiny.Trail relied entirely on the bound texture for any
+		// alpha falloff. Some textures (including the demo WeaponTrail.png)
+		// don't have a smooth gradient at the tail, so trails using them show
+		// a harsh edge where the oldest segments cut off. We solve that by
+		// writing a vertex-color alpha gradient onto the mesh — the
+		// Particles/Standard Unlit shader multiplies vertex color through, so
+		// this produces a guaranteed smooth fade regardless of texture
+		// content while still letting the texture/tint colour the trail.
+		[SerializeField, Tooltip("If true, write per-vertex alpha along the trail so the tail end fades out smoothly. Requires a shader that respects vertex colors (Particles/Standard Unlit / Sprites-Default / most particle shaders do).")]
+		private bool fadeTail = true;
+
+		[SerializeField, Range(0.1f, 5f), Tooltip("Power curve for the head-to-tail alpha fade. 1 = linear; >1 keeps the head opaque longer and fades hard at the tail; <1 starts fading immediately. 2 is a good default.")]
+		private float tailFadePower = 2f;
+
 		[NonSerialized] GameObject trailGo = null;
 		[NonSerialized] Mesh mesh = null;
 
@@ -300,6 +315,30 @@ namespace Tiny
 			mesh.vertices = vertices;
 			mesh.uv = uvs;
 			mesh.SetIndices(indexs, MeshTopology.Triangles, 0);
+
+			// Power-Up project customization: bake a head-to-tail alpha fade
+			// into the mesh's vertex colors. uv.y is 0 at the head (current
+			// frame's transform) and 1 at the tail (oldest frame still in the
+			// trail buffer). Squaring (or higher-power) the (1-v) value gives
+			// the trail a longer opaque head plateau before easing into the
+			// fade — visually softer than a linear ramp.
+			if (fadeTail)
+			{
+				Color[] colors = new Color[uvs.Length];
+				for (int i = 0; i < uvs.Length; i++)
+				{
+					float v = uvs[i].y;
+					float alpha = Mathf.Pow(Mathf.Clamp01(1f - v), Mathf.Max(0.1f, tailFadePower));
+					colors[i] = new Color(1f, 1f, 1f, alpha);
+				}
+				mesh.colors = colors;
+			}
+			else
+			{
+				// Clear any previously-baked colors when fade is turned off so
+				// the mesh reverts to plain texture × tint behavior.
+				mesh.colors = null;
+			}
 
 			update = StartCoroutine(PhysicsUpdate());
 		}

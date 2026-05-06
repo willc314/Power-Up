@@ -259,7 +259,7 @@ public class SlimeGod : MonoBehaviour
     [Tooltip("How far past the arrow's target point the telegraph line is drawn. Without this the line ends at the target (mid-arena), which reads visually as 'this is where the arrow stops'. Extending it sells the actual flight path through the target and out the other side.")]
     public float aerialTelegraphExtensionDistance = 40f;
     [Tooltip("Width of the aerial-volley telegraph lines specifically. Lower than the shared telegraphLineWidth so the dense fan of arrow lines doesn't visually overwhelm the screen.")]
-    public float aerialTelegraphLineWidth = 0.10f;
+    public float aerialTelegraphLineWidth = 0.07f;
     [Tooltip("Vertical offset added to the aerial-arrow telegraph lines (visual only — arrow spawn / flight y is unchanged). Negative drops the lines closer to the ground so they read as floor markings instead of mid-air streaks.")]
     public float aerialTelegraphYOffset = -0.3f;
     [Tooltip("If true, each aerial wave checks how far the player has run from the attack center; if they've fled past aerialEscapeRadius, an EXTRA tracking volley fires that predicts at multiple lead scales so the player can't outrun the whole pattern.")]
@@ -352,6 +352,16 @@ public class SlimeGod : MonoBehaviour
     public GameObject deathBeamVisualPrefab;
     [Tooltip("Visual radius of the firing beam (used when Death Beam Visual Prefab is assigned). Half the box's X/Y scale.")]
     public float beamFireVisualRadius = 0.55f;
+    [Tooltip("OPTIONAL material that replaces the spawned beam visual's material at runtime. The bow's death beam SHARES the same prefab, so editing the prefab's material would change the bow too — instead, assign a separate material here (e.g. Assets/Materials/DeathBeamGlowBoss.mat) and the boss-spawned visuals will swap to it on Instantiate while the bow stays on the original. Leave null to use whatever material the prefab ships with.")]
+    public Material bossDeathBeamMaterial;
+
+    [Header("Beam Lightning Aura (optional)")]
+    [Tooltip("OPTIONAL aura prefab spawned in a chain along the firing beam's length so the beam reads as electric. Designed for Hovl Studio's 'Lightning aura' or any character-aura-style prefab. Spawns multiple copies — see Beam Aura Count. Applied to ALL three boss beam types (constant DeathBeam, SweepingBeam, dash-end beam).")]
+    public GameObject beamLightningAuraPrefab;
+    [Tooltip("Number of aura copies spawned along the beam's length. Includes both endpoints, so 2 = origin + endpoint, 5 = origin + 3 evenly-spaced midpoints + endpoint. Higher = more visual density but more particles to simulate.")]
+    public int beamLightningAuraCount = 5;
+    [Tooltip("Uniform scale applied to spawned aura prefabs. Most character-aura prefabs were authored at scale 1 for a player-sized character; tune this to match the beam's visual width / desired punch.")]
+    public float beamLightningAuraScale = 0.7f;
 
     // ---- Ranged sub-pattern: Sweeping Death Beam ----
 
@@ -454,6 +464,15 @@ public class SlimeGod : MonoBehaviour
     [System.NonSerialized] public float projectileCountMultiplier = 1f;
     [System.NonSerialized] public float attackSpeedMultiplier    = 1f;
 
+    /// <summary>
+    /// Skip the EnemyProjectile.visualPrefab override on every projectile this
+    /// boss instance spawns. Set by EnemySpawner on respawns so the heavy VFX
+    /// trails (FireIce / Gabriel Aguiar) only render on the first summon —
+    /// projectile counts scale up with each respawn, so trails are the first
+    /// thing to drop a frame budget at high counts.
+    /// </summary>
+    [System.NonSerialized] public bool suppressProjectileVisuals = false;
+
     // Rage-phase runtime state. incomingDamageMultiplier doubles each trigger
     // and is consumed by ModifyIncomingDamage. extraProjectileCount is added
     // by ScaledCount on top of the per-spawn projectile scaling.
@@ -480,6 +499,117 @@ public class SlimeGod : MonoBehaviour
     /// </summary>
     private float ScaledInterval(float baseInterval)
         => baseInterval / Mathf.Max(0.01f, attackSpeedMultiplier);
+
+    /// <summary>
+    /// Spawn an EnemyProjectile, honoring suppressProjectileVisuals. All boss
+    /// projectile instantiates go through here so visual-trail overrides can be
+    /// gated centrally — flip the bool on this instance and every fresh
+    /// projectile skips its visualPrefab setup.
+    /// </summary>
+    private EnemyProjectile SpawnProjectile(EnemyProjectile prefab, Vector3 position, Quaternion rotation)
+    {
+        if (suppressProjectileVisuals)
+            return EnemyProjectile.InstantiateNoVisual(prefab, position, rotation);
+        return Instantiate(prefab, position, rotation);
+    }
+
+    /// <summary>
+    /// Disable colliders on a freshly-spawned beam visual and apply the
+    /// "stretched cube/sphere along Z" scale convention used by
+    /// DeathBeamVisual.prefab.
+    ///
+    /// Also applies the bossDeathBeamMaterial override if assigned — the bow
+    /// shares this prefab, so we swap materials per-instance at spawn rather
+    /// than mutating the shared prefab.
+    /// </summary>
+    private void SetupBeamVisualScale(GameObject beamVisual, float radius, float range)
+    {
+        if (beamVisual == null) return;
+        // Always disable colliders — beam visuals are cosmetic.
+        foreach (var col in beamVisual.GetComponentsInChildren<Collider>()) col.enabled = false;
+        beamVisual.transform.localScale = new Vector3(radius, radius, range);
+        // Material override — boss spawns swap to its own material so the bow's
+        // copies of this prefab (which keep using the prefab default) stay
+        // visually distinct.
+        if (bossDeathBeamMaterial != null)
+        {
+            foreach (var r in beamVisual.GetComponentsInChildren<Renderer>(true))
+            {
+                // sharedMaterials avoids the per-instance material allocation
+                // that .materials = ... triggers; we replace ALL slots with
+                // the override so multi-material renderers tint uniformly.
+                Material[] sm = r.sharedMaterials;
+                for (int i = 0; i < sm.Length; i++) sm[i] = bossDeathBeamMaterial;
+                r.sharedMaterials = sm;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Position + orient a beam visual along <paramref name="dir"/>.
+    /// Centered halfway down the range with local +Z = dir, matching
+    /// DeathBeamVisual.prefab's stretched-along-Z mesh convention.
+    /// </summary>
+    private static void OrientBeamVisual(GameObject beamVisual, Vector3 origin, Vector3 dir, float range)
+    {
+        if (beamVisual == null) return;
+        beamVisual.transform.position = origin + dir * (range * 0.5f);
+        beamVisual.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+    }
+
+    /// <summary>
+    /// Spawn <see cref="beamLightningAuraCount"/> Lightning aura instances
+    /// evenly along the beam from origin to (origin + dir * range), so the
+    /// beam reads as electric. Each instance is registered into
+    /// <see cref="activeBeamAuras"/> for per-frame placement and end-of-fire
+    /// (or rage) cleanup. No-op if no prefab is assigned or count &lt; 1.
+    /// </summary>
+    private void SpawnBeamAuras(Vector3 origin, Vector3 dir, float range)
+    {
+        if (beamLightningAuraPrefab == null || beamLightningAuraCount < 1) return;
+        for (int i = 0; i < beamLightningAuraCount; i++)
+        {
+            GameObject aura = Instantiate(beamLightningAuraPrefab);
+            aura.transform.localScale = Vector3.one * Mathf.Max(0.0001f, beamLightningAuraScale);
+            // Disable any colliders so the aura is purely cosmetic.
+            foreach (var c in aura.GetComponentsInChildren<Collider>()) c.enabled = false;
+            activeBeamAuras.Add(aura);
+        }
+        UpdateBeamAuras(origin, dir, range);
+    }
+
+    /// <summary>
+    /// Per-frame: re-position every aura along the beam from origin to the
+    /// far endpoint. Auras are spaced uniformly (t=0 → origin, t=1 → endpoint),
+    /// so a count of 5 puts auras at 0%, 25%, 50%, 75%, 100% of the beam length.
+    /// </summary>
+    private void UpdateBeamAuras(Vector3 origin, Vector3 dir, float range)
+    {
+        int n = activeBeamAuras.Count;
+        if (n == 0) return;
+        for (int i = 0; i < n; i++)
+        {
+            var aura = activeBeamAuras[i];
+            if (aura == null) continue;
+            float t = (n == 1) ? 0.5f : (float)i / (n - 1);
+            aura.transform.position = origin + dir * (range * t);
+        }
+    }
+
+    /// <summary>
+    /// Destroy every active beam-aura instance and clear the tracker list.
+    /// Called from the normal end-of-fire path and from TriggerRagePhase /
+    /// OnBossKilled so an interrupted beam doesn't leave auras floating.
+    /// </summary>
+    private void ClearBeamAuras()
+    {
+        for (int i = activeBeamAuras.Count - 1; i >= 0; i--)
+        {
+            var v = activeBeamAuras[i];
+            if (v != null) Destroy(v);
+        }
+        activeBeamAuras.Clear();
+    }
 
     /// <summary>True from the moment <see cref="Begin"/> runs until the boss dies or the scene unloads.</summary>
     public bool IsActive { get; private set; }
@@ -518,6 +648,20 @@ public class SlimeGod : MonoBehaviour
     // exists so an interrupted pattern (e.g. cancelled by a rage phase) can
     // ClearAllTelegraphs() and not leak floating world-space lines.
     private readonly List<LineRenderer> transientTelegraphPool = new List<LineRenderer>();
+
+    // Catch-all list for every dynamically-instantiated beam-visual GameObject
+    // (deathBeamVisualPrefab clones used by DeathBeamRoutine, SweepingBeamPattern,
+    // and DashEndBeam — plus the LineRenderer GameObjects those beams fall back
+    // to). Each spawn site registers itself here and removes itself on its own
+    // normal-path destroy, but if rage phase StopCoroutine's mid-fire the
+    // local references are lost — without this pool the visuals would stay
+    // floating in the scene for the rest of the fight.
+    private readonly List<GameObject> activeBeamVisuals = new List<GameObject>();
+
+    // Lightning auras chained along whichever beam is currently firing.
+    // Lifecycle is the same as activeBeamVisuals — spawned at fire start,
+    // updated per-frame to track the beam, destroyed at fire end / rage cancel.
+    private readonly List<GameObject> activeBeamAuras = new List<GameObject>();
 
     private Coroutine masterRoutine;
     private Coroutine beamRoutine;
@@ -698,6 +842,15 @@ public class SlimeGod : MonoBehaviour
         if (rageWatcherRoutine != null) StopCoroutine(rageWatcherRoutine);
         if (bonusVolleyRoutine != null) { StopCoroutine(bonusVolleyRoutine); bonusVolleyRoutine = null; }
         if (beamLine != null) { Destroy(beamLine.gameObject); beamLine = null; }
+        // Same risk on death as on rage — local beam-visual refs vanish when
+        // coroutines stop, so destroy any tracked visuals before they orphan.
+        for (int i = activeBeamVisuals.Count - 1; i >= 0; i--)
+        {
+            var v = activeBeamVisuals[i];
+            if (v != null) Destroy(v);
+        }
+        activeBeamVisuals.Clear();
+        ClearBeamAuras();
         ClearAllTelegraphs();
         DestroyShieldVisual();
 
@@ -819,6 +972,20 @@ public class SlimeGod : MonoBehaviour
             string n = child.name;
             if (n == "SweepingBeam" || n == "BossTelegraph") Destroy(child.gameObject);
         }
+        // Destroy any beam visuals spawned by DeathBeamRoutine, SweepingBeamPattern,
+        // or DashEndBeam. These are NOT parented to the boss (Instantiate(prefab)
+        // with no parent), so the child-loop above doesn't catch them. Each spawn
+        // site registers into activeBeamVisuals; the rage StopCoroutine drops the
+        // local references so without this they'd just hang forever in the scene.
+        for (int i = activeBeamVisuals.Count - 1; i >= 0; i--)
+        {
+            var v = activeBeamVisuals[i];
+            if (v != null) Destroy(v);
+        }
+        activeBeamVisuals.Clear();
+        // Same risk for the lightning auras chained along whichever beam was
+        // mid-fire — they're top-level GameObjects too.
+        ClearBeamAuras();
 
         // Freeze in place. Velocity is zeroed every frame in the channel
         // loop too, in case the rigidbody gets nudged by colliders.
@@ -1148,7 +1315,7 @@ public class SlimeGod : MonoBehaviour
             Vector3 dir = (targets[i] - spawnPoints[i]);
             if (dir.sqrMagnitude < 0.0001f) continue;
             dir.Normalize();
-            EnemyProjectile p = Instantiate(aerialArrowPrefab, spawnPoints[i], Quaternion.LookRotation(dir, Vector3.up));
+            EnemyProjectile p = SpawnProjectile(aerialArrowPrefab, spawnPoints[i], Quaternion.LookRotation(dir, Vector3.up));
             if (spawnGridArrowSpeed > 0f) p.speed = spawnGridArrowSpeed;
             ApplyArrowScale(p, spawnGridArrowScale);
             p.Launch(dir, ScaledDamage(spawnGridArrowDamage));
@@ -1244,7 +1411,7 @@ public class SlimeGod : MonoBehaviour
             float angle = (360f / count) * i + offsetDeg + Random.Range(-meleeHomingAngleJitter, meleeHomingAngleJitter);
             float rad = angle * Mathf.Deg2Rad;
             Vector3 dir = new Vector3(Mathf.Cos(rad), 0f, Mathf.Sin(rad));
-            EnemyProjectile p = Instantiate(meleeHomingProjectilePrefab, origin, Quaternion.LookRotation(dir, Vector3.up));
+            EnemyProjectile p = SpawnProjectile(meleeHomingProjectilePrefab, origin, Quaternion.LookRotation(dir, Vector3.up));
             // Force homing on regardless of what the prefab was authored with.
             p.homing = true;
             if (meleeHomingArrowSpeed > 0f) p.speed = meleeHomingArrowSpeed;
@@ -1405,7 +1572,7 @@ public class SlimeGod : MonoBehaviour
         Vector3 spawn = bossPos;
         spawn.y = groundY + aerialArrowSpawnHeight;
 
-        EnemyProjectile p = Instantiate(aerialArrowPrefab, spawn, Quaternion.LookRotation(dir, Vector3.up));
+        EnemyProjectile p = SpawnProjectile(aerialArrowPrefab, spawn, Quaternion.LookRotation(dir, Vector3.up));
         if (aerialArrowSpeed > 0f) p.speed = aerialArrowSpeed;
         ApplyArrowScale(p, aerialArrowScale);
         p.Launch(dir, ScaledDamage(aerialArrowDamage));
@@ -1448,17 +1615,20 @@ public class SlimeGod : MonoBehaviour
         if (deathBeamVisualPrefab != null)
         {
             beamVisual = Instantiate(deathBeamVisualPrefab);
+            // Register so rage phase can destroy this visual if it interrupts
+            // the dash mid-flight.
+            activeBeamVisuals.Add(beamVisual);
             // Bow's DeathBeam script self-destructs without an owner; strip it.
             foreach (var db in beamVisual.GetComponentsInChildren<DeathBeam>()) Destroy(db);
-            beamVisual.transform.localScale = new Vector3(
-                beamFireVisualRadius * 2f,
-                beamFireVisualRadius * 2f,
-                beamRange);
-            foreach (var col in beamVisual.GetComponentsInChildren<Collider>()) col.enabled = false;
+            // Helper picks the right scaling convention (cube-along-Z vs FF self-scale).
+            SetupBeamVisualScale(beamVisual, beamFireVisualRadius * 2f, beamRange);
         }
         else
         {
             GameObject go = new GameObject("DashEndBeam", typeof(LineRenderer));
+            // Track the LineRenderer GameObject too — same leak risk if rage
+            // cancels DashPattern mid-coroutine.
+            activeBeamVisuals.Add(go);
             beamLR = go.GetComponent<LineRenderer>();
             beamLR.useWorldSpace = true;
             beamLR.positionCount = 2;
@@ -1485,8 +1655,7 @@ public class SlimeGod : MonoBehaviour
 
             if (beamVisual != null)
             {
-                beamVisual.transform.position = origin + dir * (beamRange * 0.5f);
-                beamVisual.transform.rotation = Quaternion.LookRotation(dir, Vector3.up);
+                OrientBeamVisual(beamVisual, origin, dir, beamRange);
             }
             else if (beamLR != null)
             {
@@ -1512,8 +1681,8 @@ public class SlimeGod : MonoBehaviour
             yield return null;
         }
 
-        if (beamVisual != null) Destroy(beamVisual);
-        if (beamLR != null)     Destroy(beamLR.gameObject);
+        if (beamVisual != null) { activeBeamVisuals.Remove(beamVisual); Destroy(beamVisual); }
+        if (beamLR != null)     { activeBeamVisuals.Remove(beamLR.gameObject); Destroy(beamLR.gameObject); }
     }
 
     private IEnumerator BouncePattern()
@@ -1675,7 +1844,7 @@ public class SlimeGod : MonoBehaviour
             float a = (360f / count) * i + angleDeg;
             float rad = a * Mathf.Deg2Rad;
             Vector3 dir = new Vector3(Mathf.Cos(rad), 0f, Mathf.Sin(rad));
-            EnemyProjectile p = Instantiate(spamArrowPrefab, origin, Quaternion.LookRotation(dir, Vector3.up));
+            EnemyProjectile p = SpawnProjectile(spamArrowPrefab, origin, Quaternion.LookRotation(dir, Vector3.up));
             if (spamArrowSpeed > 0f) p.speed = spamArrowSpeed;
             ApplyArrowScale(p, spamArrowScale);
             p.Launch(dir, ScaledDamage(spamArrowDamage));
@@ -1823,7 +1992,7 @@ public class SlimeGod : MonoBehaviour
                 dir.Normalize();
                 if (aerialArrowPrefab != null)
                 {
-                    EnemyProjectile p = Instantiate(aerialArrowPrefab, from, Quaternion.LookRotation(dir, Vector3.up));
+                    EnemyProjectile p = SpawnProjectile(aerialArrowPrefab, from, Quaternion.LookRotation(dir, Vector3.up));
                     if (aerialArrowSpeed > 0f) p.speed = aerialArrowSpeed;
                     ApplyArrowScale(p, aerialArrowScale);
                     p.Launch(dir, ScaledDamage(aerialArrowDamage));
@@ -2006,7 +2175,7 @@ public class SlimeGod : MonoBehaviour
             Vector3 dir = (to - from);
             if (dir.sqrMagnitude < 0.0001f) continue;
             dir.Normalize();
-            EnemyProjectile p = Instantiate(aerialArrowPrefab, from, Quaternion.LookRotation(dir, Vector3.up));
+            EnemyProjectile p = SpawnProjectile(aerialArrowPrefab, from, Quaternion.LookRotation(dir, Vector3.up));
             if (aerialPunishArrowSpeed > 0f) p.speed = aerialPunishArrowSpeed;
             ApplyArrowScale(p, aerialPunishArrowScale);
             p.Launch(dir, ScaledDamage(aerialPunishArrowDamage));
@@ -2124,19 +2293,17 @@ public class SlimeGod : MonoBehaviour
             // Hide the telegraph LineRenderer; the bow visual takes over.
             lr.enabled = false;
             sweepVisual = Instantiate(deathBeamVisualPrefab);
+            // Register so rage phase can destroy this visual if it interrupts
+            // the fire phase mid-coroutine.
+            activeBeamVisuals.Add(sweepVisual);
             // Strip the bow's DeathBeam script so the instance doesn't
             // self-destruct on the first frame (it requires an owner Hero).
             foreach (var db in sweepVisual.GetComponentsInChildren<DeathBeam>())
                 Destroy(db);
-            // sweepingBeamFireWidth is the LineRenderer thickness; the bow
-            // visual scales (X,Y) by (radius*2). Treat fireWidth as the full
-            // diameter so the bloom matches the wide-line look.
-            sweepVisual.transform.localScale = new Vector3(
-                sweepingBeamFireWidth,
-                sweepingBeamFireWidth,
-                sweepingBeamRange);
-            // Disable colliders so the visual cube doesn't shove anything.
-            foreach (var col in sweepVisual.GetComponentsInChildren<Collider>()) col.enabled = false;
+            // sweepingBeamFireWidth is the LineRenderer thickness used as the
+            // diameter for the default cube visual. Helper picks the right
+            // scaling convention (FF lasers self-scale via length_multiplier).
+            SetupBeamVisualScale(sweepVisual, sweepingBeamFireWidth, sweepingBeamRange);
         }
         else
         {
@@ -2146,6 +2313,12 @@ public class SlimeGod : MonoBehaviour
             Color fireCol = sweepingBeamFireColor; fireCol.a = 1f;
             lr.startColor = fireCol;
             lr.endColor   = fireCol;
+        }
+
+        // Spawn the lightning aura chain along the sweeping beam.
+        {
+            Vector3 spawnOrigin = transform.position + Vector3.up * beamOriginHeight;
+            SpawnBeamAuras(spawnOrigin, currentDir, sweepingBeamRange);
         }
 
         float damageTimer = 0f;
@@ -2191,14 +2364,16 @@ public class SlimeGod : MonoBehaviour
             // Update visual.
             if (sweepVisual != null)
             {
-                sweepVisual.transform.position = origin + currentDir * (sweepingBeamRange * 0.5f);
-                sweepVisual.transform.rotation = Quaternion.LookRotation(currentDir, Vector3.up);
+                OrientBeamVisual(sweepVisual, origin, currentDir, sweepingBeamRange);
             }
             else
             {
                 lr.SetPosition(0, origin);
                 lr.SetPosition(1, endpoint);
             }
+
+            // Re-place the aura chain to track the beam's current direction.
+            UpdateBeamAuras(origin, currentDir, sweepingBeamRange);
 
             // Apply damage in fixed ticks so DPS stays consistent.
             if (damageTimer >= sweepingBeamDamageTickInterval && player != null && !player.IsDead)
@@ -2221,14 +2396,16 @@ public class SlimeGod : MonoBehaviour
             yield return null;
             if (!IsActive)
             {
-                if (sweepVisual != null) Destroy(sweepVisual);
+                if (sweepVisual != null) { activeBeamVisuals.Remove(sweepVisual); Destroy(sweepVisual); }
+                ClearBeamAuras();
                 Destroy(go);
                 isAerialOrSweepingActive = false;
                 yield break;
             }
         }
 
-        if (sweepVisual != null) Destroy(sweepVisual);
+        if (sweepVisual != null) { activeBeamVisuals.Remove(sweepVisual); Destroy(sweepVisual); }
+        ClearBeamAuras();
         Destroy(go);
         isAerialOrSweepingActive = false;
     }
@@ -2350,17 +2527,17 @@ public class SlimeGod : MonoBehaviour
             {
                 beamLine.enabled = false;
                 beamVisual = Instantiate(deathBeamVisualPrefab);
+                // Register so rage phase can destroy this visual if it
+                // interrupts the fire phase mid-coroutine.
+                activeBeamVisuals.Add(beamVisual);
                 // The bow's DeathBeam script self-destructs when its owner is
                 // null, so strip it from the instance — we drive position /
                 // rotation / damage from the SlimeGod coroutine instead.
                 foreach (var db in beamVisual.GetComponentsInChildren<DeathBeam>())
                     Destroy(db);
-                beamVisual.transform.localScale = new Vector3(
-                    beamFireVisualRadius * 2f,
-                    beamFireVisualRadius * 2f,
-                    beamRange);
-                // Disable any colliders on the visual so it doesn't shove the boss/player.
-                foreach (var col in beamVisual.GetComponentsInChildren<Collider>()) col.enabled = false;
+                // Scale convention is prefab-dependent; helper handles both
+                // the default cube-along-Z and the Flashy Feather +X convention.
+                SetupBeamVisualScale(beamVisual, beamFireVisualRadius * 2f, beamRange);
             }
             else
             {
@@ -2369,6 +2546,14 @@ public class SlimeGod : MonoBehaviour
                 Color fc = beamFireColor; fc.a = 1f;
                 beamLine.startColor = fc;
                 beamLine.endColor   = fc;
+            }
+
+            // Spawn the lightning aura chain along the beam. Initial placement
+            // uses the locked-fire direction; per-frame UpdateBeamAuras keeps
+            // them tracking as the beam rotates toward the player.
+            {
+                Vector3 spawnOrigin = transform.position + Vector3.up * beamOriginHeight;
+                SpawnBeamAuras(spawnOrigin, fireDir, beamRange);
             }
 
             float fireT = 0f;
@@ -2400,15 +2585,17 @@ public class SlimeGod : MonoBehaviour
                 // Update visual.
                 if (beamVisual != null)
                 {
-                    // Center the box halfway down its length, oriented along fireDir.
-                    beamVisual.transform.position = origin + fireDir * (beamRange * 0.5f);
-                    beamVisual.transform.rotation = Quaternion.LookRotation(fireDir, Vector3.up);
+                    // Helper picks the right convention (centered cube vs FF +X anchored at origin).
+                    OrientBeamVisual(beamVisual, origin, fireDir, beamRange);
                 }
                 else
                 {
                     beamLine.SetPosition(0, origin);
                     beamLine.SetPosition(1, endpoint);
                 }
+
+                // Re-place the aura chain to track the beam's current direction.
+                UpdateBeamAuras(origin, fireDir, beamRange);
 
                 // Damage tick — point-line distance to the current beam.
                 if (damageTickT >= beamDamageTickInterval && player != null && !player.IsDead)
@@ -2425,12 +2612,14 @@ public class SlimeGod : MonoBehaviour
                 yield return null;
                 if (!IsActive)
                 {
-                    if (beamVisual != null) Destroy(beamVisual);
+                    if (beamVisual != null) { activeBeamVisuals.Remove(beamVisual); Destroy(beamVisual); }
+                    ClearBeamAuras();
                     yield break;
                 }
             }
 
-            if (beamVisual != null) Destroy(beamVisual);
+            if (beamVisual != null) { activeBeamVisuals.Remove(beamVisual); Destroy(beamVisual); }
+            ClearBeamAuras();
             beamLine.enabled = false;
         }
     }

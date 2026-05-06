@@ -22,16 +22,13 @@ public class BowWeapon : Weapon
     public float bowSpawnHeight = 1.0f;
     [Tooltip("Extra Euler rotation applied to the bow visual so the arrow points along the hero's forward. Try (0,-90,0), (0,90,0), or (0,180,0) until it points the right way.")]
     public Vector3 bowVisualRotationOffset = new Vector3(0f, -90f, 0f);
-    [Tooltip("Color the bow blends toward at full charge.")]
-    public Color glowColor = Color.white;
-    [Tooltip("How brightly the bow emits light at full charge. 0 = no emission, 1-3 reads as a clear glow. With Bloom post-processing enabled, higher values look more 'glowing'.")]
-    public float emissionIntensity = 2.5f;
-    [Tooltip("If true, also adds a Point Light to the bow that brightens with charge. Use this when the bow's material doesn't support emission (e.g. Mobile/Diffuse shader).")]
-    public bool useGlowLight = true;
-    [Tooltip("Maximum Light intensity at full charge.")]
-    public float maxLightIntensity = 6f;
-    [Tooltip("Maximum Light range at full charge.")]
-    public float maxLightRange = 5f;
+    // The bow used to drive a per-charge material tint (glowColor /
+    // emissionIntensity) and an attached point light (useGlowLight /
+    // maxLightIntensity / maxLightRange) to telegraph the charge state. Those
+    // fields and the accompanying TintBow / CacheBowMaterials machinery were
+    // removed when the hero-aura system took over the feedback role — the
+    // Lightning aura at full charge and the Plexus aura at overcharge are
+    // visually clearer and don't depend on bow shader/material support.
 
     [Header("Charge")]
     [Tooltip("Seconds to reach full normal-shot charge. After this, damage and arrow size are at max.")]
@@ -72,20 +69,33 @@ public class BowWeapon : Weapon
     public float overchargeTime = 5f;
     [Tooltip("Prefab spawned on overcharged release. Should have a DeathBeam component on a stretched cube/cylinder.")]
     public DeathBeam deathBeamPrefab;
-    [Tooltip("Color the bow blends toward when in overcharge mode (visual cue that the next release is the beam).")]
-    public Color overchargeColor = new Color(1f, 0.95f, 0.7f);
 
     [Header("Audio / VFX (optional)")]
     [Tooltip("Optional particle prefab spawned on the bow when entering overcharge.")]
     public GameObject overchargeVfxPrefab;
+
+    [Header("Hero Aura VFX (optional)")]
+    [Tooltip("Spawned on the HERO (not the bow) the moment the bow reaches full charge. Stays on for the rest of the charge until release/interrupt. Designed for Hovl Studio's 'Lightning aura' or any character-aura-style prefab.")]
+    public GameObject fullyChargedHeroAuraPrefab;
+
+    [Tooltip("Spawned on the HERO (not the bow) the moment the bow enters overcharge. Stacks ON TOP of the Lightning aura — the fully-charged aura stays alive too. Designed for Hovl Studio's 'Plexus' prefab or any heavier aura you want layered on top.")]
+    public GameObject overchargedHeroAuraPrefab;
+
+    [Tooltip("Vertical offset above the hero's pivot where the aura prefabs spawn. Most character-aura prefabs are authored centered on the body, so 0–1 reads well. Tweak if the aura sits at the feet or above the head.")]
+    public float heroAuraYOffset = 0f;
+
+    [Tooltip("Uniform scale applied to spawned hero aura prefabs. Useful when the source pack was authored at a different character size than the hero.")]
+    public float heroAuraScale = 1f;
 
     // ---- Runtime state ----
     private bool charging;
     private float chargeTime;
     private GameObject bowVisualInstance;
     private GameObject overchargeVfxInstance;
-    private Light glowLight;
+    private GameObject fullyChargedHeroAuraInstance;
+    private GameObject overchargedHeroAuraInstance;
     private bool overchargeReached;
+    private bool fullyChargedAuraReached;
     /// <summary>Damage multiplier accumulated while holding past overchargeTime. Applied to beam damage at fire and reset on EndCharge.</summary>
     private float postOverchargeAccumulated;
     /// <summary>Reference to the most recently fired death beam. While non-null (the GameObject is still alive), OnFireDown refuses to start a new charge — the player must wait for the beam to finish.</summary>
@@ -95,13 +105,6 @@ public class BowWeapon : Weapon
     public bool IsCharging => charging;
     /// <summary>True while a previously-fired death beam is still alive in the world. Read by OnFireDown to lock out new charges.</summary>
     public bool IsBeamActive => activeBeam != null;
-
-    // Cached material info for tinting the bow visual.
-    private struct MatRef { public Material mat; public int prop; public Color original; }
-    private readonly List<MatRef> bowMats = new List<MatRef>();
-    private static readonly int kBaseColor = Shader.PropertyToID("_BaseColor");
-    private static readonly int kColor     = Shader.PropertyToID("_Color");
-    private static readonly int kEmission  = Shader.PropertyToID("_EmissionColor");
 
     public override bool CanFire => true; // charging weapon — always allowed to start
 
@@ -465,31 +468,16 @@ public class BowWeapon : Weapon
             bowVisualInstance.transform.rotation = owner.transform.rotation * Quaternion.Euler(bowVisualRotationOffset);
         }
 
-        // Tint the bow toward glowColor, and crank the emission so the glow is visible.
-        // Past overchargeTime, switch tint and boost emission further.
         float chargeT = Mathf.Clamp01(chargeTime / fullChargeTime);
-        Color target;
-        float intensity;
-        float lightT;
-        if (chargeTime >= overchargeTime)
-        {
-            target = overchargeColor;
-            intensity = emissionIntensity * 1.6f;
-            lightT = 1.5f;
-        }
-        else
-        {
-            target = Color.Lerp(Color.white, glowColor, chargeT);
-            intensity = emissionIntensity * chargeT;
-            lightT = chargeT;
-        }
-        TintBow(target, intensity);
 
-        if (glowLight != null)
+        // Hero aura: Lightning when fully charged. Spawn ONCE at the
+        // chargeT=1 transition; reset flag is in EndCharge so each charge
+        // cycle gets a fresh trigger.
+        if (chargeT >= 1f && !fullyChargedAuraReached)
         {
-            glowLight.color = target;
-            glowLight.intensity = maxLightIntensity * lightT;
-            glowLight.range = Mathf.Max(0.5f, maxLightRange * lightT);
+            fullyChargedAuraReached = true;
+            if (fullyChargedHeroAuraPrefab != null)
+                fullyChargedHeroAuraInstance = SpawnHeroAura(owner, fullyChargedHeroAuraPrefab);
         }
 
         if (chargeTime >= overchargeTime && !overchargeReached)
@@ -497,6 +485,11 @@ public class BowWeapon : Weapon
             overchargeReached = true;
             if (overchargeVfxPrefab != null && bowVisualInstance != null)
                 overchargeVfxInstance = Instantiate(overchargeVfxPrefab, bowVisualInstance.transform.position, bowVisualInstance.transform.rotation, bowVisualInstance.transform);
+
+            // Hero aura: Plexus stacked ON TOP of the still-active Lightning
+            // aura. Two distinct instances; both get torn down in EndCharge.
+            if (overchargedHeroAuraPrefab != null)
+                overchargedHeroAuraInstance = SpawnHeroAura(owner, overchargedHeroAuraPrefab);
         }
 
         // Past overcharge → accumulate beam damage multiplier indefinitely.
@@ -541,11 +534,29 @@ public class BowWeapon : Weapon
 
     // ---- Helpers ----
 
+    /// <summary>
+    /// Instantiate a hero-aura prefab centered on the hero with the configured
+    /// y-offset and uniform scale. Parented to the hero so it follows movement
+    /// for the rest of the charge window. Colliders on the prefab are disabled
+    /// so the aura can't shove the hero or get caught by the dash phase-through.
+    /// </summary>
+    private GameObject SpawnHeroAura(Hero owner, GameObject prefab)
+    {
+        if (prefab == null || owner == null) return null;
+        Vector3 pos = owner.transform.position + Vector3.up * heroAuraYOffset;
+        GameObject go = Instantiate(prefab, pos, owner.transform.rotation, owner.transform);
+        go.transform.localScale = Vector3.one * Mathf.Max(0.0001f, heroAuraScale);
+        // Disable any colliders so the aura is purely cosmetic.
+        foreach (var c in go.GetComponentsInChildren<Collider>()) c.enabled = false;
+        return go;
+    }
+
     private void StartCharge(Hero owner)
     {
         charging = true;
         chargeTime = 0f;
         overchargeReached = false;
+        fullyChargedAuraReached = false;
         postOverchargeAccumulated = 0f; // fresh charge → no banked extra-damage
         owner.speedMultiplier = slowdownWhileCharging;
 
@@ -555,22 +566,6 @@ public class BowWeapon : Weapon
             bowVisualInstance = Instantiate(bowVisualPrefab, pos, owner.transform.rotation * Quaternion.Euler(bowVisualRotationOffset));
             // Disable any colliders on the bow visual so it can't shove the hero.
             foreach (var c in bowVisualInstance.GetComponentsInChildren<Collider>()) c.enabled = false;
-            CacheBowMaterials();
-            TintBow(Color.white, 0f);
-
-            // Optional Point Light (works regardless of bow shader).
-            if (useGlowLight)
-            {
-                GameObject lightGO = new GameObject("BowGlowLight");
-                lightGO.transform.SetParent(bowVisualInstance.transform, false);
-                lightGO.transform.localPosition = Vector3.zero;
-                glowLight = lightGO.AddComponent<Light>();
-                glowLight.type = LightType.Point;
-                glowLight.color = glowColor;
-                glowLight.intensity = 0f;
-                glowLight.range = 0.5f;
-                glowLight.shadows = LightShadows.None;
-            }
         }
     }
 
@@ -579,12 +574,15 @@ public class BowWeapon : Weapon
         charging = false;
         chargeTime = 0f;
         overchargeReached = false;
+        fullyChargedAuraReached = false;
         postOverchargeAccumulated = 0f; // banked damage is consumed/discarded by FireDeathBeam or the interrupt
         owner.speedMultiplier = 1f;
-        bowMats.Clear();
-        glowLight = null; // destroyed with the bow visual since it's a child
         if (bowVisualInstance != null) Destroy(bowVisualInstance);
         if (overchargeVfxInstance != null) Destroy(overchargeVfxInstance);
+        if (fullyChargedHeroAuraInstance != null) Destroy(fullyChargedHeroAuraInstance);
+        if (overchargedHeroAuraInstance != null) Destroy(overchargedHeroAuraInstance);
+        fullyChargedHeroAuraInstance = null;
+        overchargedHeroAuraInstance = null;
     }
 
     private void FireArrow(Hero owner)
@@ -708,47 +706,5 @@ public class BowWeapon : Weapon
         // handles the auto-clear; the beam destroys itself when its duration
         // elapses (DeathBeam.Update -> Destroy(gameObject)).
         activeBeam = beam;
-    }
-
-    // ---- Bow tinting (similar to DamageFlash) ----
-
-    private void CacheBowMaterials()
-    {
-        bowMats.Clear();
-        if (bowVisualInstance == null) return;
-        foreach (Renderer r in bowVisualInstance.GetComponentsInChildren<Renderer>())
-        {
-            Material[] mats = r.materials;
-            for (int i = 0; i < mats.Length; i++)
-            {
-                Material m = mats[i];
-                if (m == null) continue;
-                int prop = m.HasProperty(kBaseColor) ? kBaseColor : m.HasProperty(kColor) ? kColor : 0;
-                if (prop == 0) continue;
-                bowMats.Add(new MatRef { mat = m, prop = prop, original = m.GetColor(prop) });
-            }
-        }
-    }
-
-    private void TintBow(Color color, float emissionStrength)
-    {
-        for (int i = 0; i < bowMats.Count; i++)
-        {
-            // Tint the base color so it shifts toward the glow color.
-            Color blended = Color.Lerp(bowMats[i].original, color, 0.85f);
-            bowMats[i].mat.SetColor(bowMats[i].prop, blended);
-
-            // Drive emission so the glow is visible regardless of base color.
-            // Standard shader needs the _EMISSION keyword enabled AND the GI flag cleared
-            // of EmissiveIsBlack (otherwise it short-circuits emission at render time
-            // even when the keyword is on).
-            if (bowMats[i].mat.HasProperty(kEmission))
-            {
-                if (emissionStrength > 0.001f) bowMats[i].mat.EnableKeyword("_EMISSION");
-                else                           bowMats[i].mat.DisableKeyword("_EMISSION");
-                bowMats[i].mat.SetColor(kEmission, color * emissionStrength);
-                bowMats[i].mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
-            }
-        }
     }
 }

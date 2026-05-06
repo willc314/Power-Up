@@ -96,6 +96,15 @@ public class SwordSlash : MonoBehaviour
 
         timer = 0f;
 
+        // Snap the visual to the arc-start pose BEFORE the first render.
+        // SwordWeapon.Fire() instantiates the prefab at the hero's spawn
+        // position with the hero's rotation — without this the sword would
+        // render for one frame at "in front of hero, hero-facing-direction"
+        // (no modelPitch/modelYaw applied) before Update()'s first call to
+        // UpdateVisual() snaps it onto the arc the following frame. That
+        // produced a visible 1-frame pop at the start of every swing.
+        UpdateVisual(0f);
+
         // First hit check on the click frame so the sword feels snappy.
         // Without this there's a ~1-frame gap before the first damage tick runs in Update().
         if (useLegacyBladeCapsule)

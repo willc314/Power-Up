@@ -403,6 +403,12 @@ public class EnemySpawner : MonoBehaviour
                 sg.attackDamageMultiplier    = dmgMul;
                 sg.projectileCountMultiplier = projMul;
                 sg.attackSpeedMultiplier     = speedMul;
+                // After the first summon, projectile counts scale up via
+                // projMul + extraProjectileCount and the per-projectile VFX
+                // overrides (FireIce trails / Gabriel Aguiar trails) become
+                // a frame-rate problem. Suppress the visualPrefab on every
+                // projectile this respawn fires; gameplay is unaffected.
+                sg.suppressProjectileVisuals = priorKills > 0;
             }
 
             aliveEnemies.Add(bossEnemy);
