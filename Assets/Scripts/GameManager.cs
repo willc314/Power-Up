@@ -276,6 +276,16 @@ public class GameManager : MonoBehaviour
         finalBossKilled = true;
         bonusPoints += pointsForFinalBossKill;
         activeFinalBoss = null;
+        // Rewind elapsedTime back to where it was when the boss spawned, so
+        // the post-kill timer resumes from the frozen value instead of
+        // jumping forward by the entire boss-fight duration. The score
+        // contract ("survival points stop accumulating while the boss is
+        // alive") is satisfied either way, but the HUD reads EffectiveSurvivalTime
+        // which == elapsedTime once IsFinalBossAlive flips false — without
+        // this rewind the player would see e.g. 5:00 → 15:00 the moment
+        // they kill the boss, instead of 5:00 continuing to climb naturally.
+        if (survivalTimeFrozenSet)
+            elapsedTime = survivalTimeFrozen;
         // Final-boss kill counts toward XP just like a SlimeKing — it's not
         // routed through OnEnemyKilled (intentionally, so the regular kill
         // counter stays untouched), so grant XP explicitly here.

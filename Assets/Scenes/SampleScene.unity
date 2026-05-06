@@ -1773,7 +1773,7 @@ MonoBehaviour:
   pointsForFinalBossKill: 1000
   xpPerKill: 1
   xpPerBossKill: 50
-  levelThresholds: 050000008813000040420f00
+  levelThresholds: 640000008813000040420f00
   stopTimerOnDeath: 1
   elapsedTime: 0
   kills: 0
