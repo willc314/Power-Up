@@ -260,9 +260,15 @@ public class SwordWeapon : Weapon
     {
         base.Update();
         // Tick the dual-wield secondary cooldown alongside the base class's
-        // primary one. Cheap to tick unconditionally; only consumed when
-        // Zenith dual-wield is active.
-        if (secondaryCooldownTimer > 0f) secondaryCooldownTimer -= Time.deltaTime;
+        // primary one. Scaled by Hero.attackSpeedMultiplier so global
+        // attack-speed buffs (Blood Sense MMB) accelerate Zenith's off-hand
+        // swing too — without this scale, only the primary sword would
+        // benefit from the buff.
+        if (secondaryCooldownTimer > 0f)
+        {
+            float scale = Hero.Instance != null ? Hero.Instance.attackSpeedMultiplier : 1f;
+            secondaryCooldownTimer -= Time.deltaTime * Mathf.Max(0.01f, scale);
+        }
 
         // Stat-gated Zenith auto-activation. Once the player meets ALL four
         // requirements simultaneously, Zenith fires and stays applied for

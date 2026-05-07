@@ -117,6 +117,7 @@ public class LevelUpgradeRegistry
         Instance = new LevelUpgradeRegistry();
         Instance.GeneralUpgrades.Add(new IAmTankUpgrade());
         Instance.GeneralUpgrades.Add(new MeteorUpgrade());
+        Instance.GeneralUpgrades.Add(new BloodSenseUpgrade());
         Instance.WeaponUpgrades.Add(new SwordZenithUpgrade());
         Instance.WeaponUpgrades.Add(new DaggerElementalShivUpgrade());
         Instance.WeaponUpgrades.Add(new BowHeavenlyGaleUpgrade());
@@ -351,6 +352,48 @@ public class MeteorUpgrade : LevelUpgrade
         if (LevelUpgradeRegistry.Instance != null)
             LevelUpgradeRegistry.Instance.NotifyGeneralBuffChosen();
         Debug.Log("[Level-Up] Meteor general augment activated.");
+    }
+}
+
+/// <summary>
+/// "Blood Sense" — slot-3 general buff. Passive: damage scales with missing
+/// HP (1% missing = +1% damage by default), and the player gains 1 shield
+/// layer per 30% MaxHP missing (recomputed live so layers appear / fade
+/// with HP automatically). Active (MMB): sacrifices a chunk of MaxHP
+/// (cannot kill — floors at 1 HP), grants 2 extra shield layers on top of
+/// the passive, and doubles attack speed for 8 seconds.
+/// </summary>
+[Preserve]
+public class BloodSenseUpgrade : LevelUpgrade
+{
+    [Preserve]
+    public BloodSenseUpgrade()
+    {
+        DisplayName = "Blood Sense";
+        Description =
+            "Deal +1% damage for every 1% of MaxHP missing.\n" +
+            "Gain a shield layer for every 30% MaxHP lost (auto-recomputed from current HP).\n\n" +
+            "MIDDLE MOUSE BUTTON: sacrifice 60% of MaxHP (cannot kill), gain 2 extra shield layers, " +
+            "and double attack speed for 8s. Cooldown 30s.";
+        UpgradeSlot = Slot.GeneralBuff;
+        TargetWeapon = eWeaponType.none;
+        Icon = LoadIcon("BloodSense");
+    }
+
+    public override bool IsAvailable(Hero hero)
+    {
+        if (hero == null) return false;
+        if (hero.bloodSenseActive) return false;
+        return true;
+    }
+
+    public override void Apply(Hero hero)
+    {
+        if (hero == null) return;
+        hero.bloodSenseActive = true;
+        if (LevelUpgradeRegistry.Instance != null)
+            LevelUpgradeRegistry.Instance.NotifyGeneralBuffChosen();
+        Debug.Log("[Level-Up] Blood Sense general augment activated.");
     }
 }
 

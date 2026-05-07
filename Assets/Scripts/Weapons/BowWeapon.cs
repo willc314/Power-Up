@@ -812,7 +812,11 @@ public class BowWeapon : Weapon
     public override bool OnFireHeld(Hero owner)
     {
         if (!charging) return false;
-        chargeTime += Time.deltaTime;
+        // Scale charge progression by Hero.attackSpeedMultiplier so the
+        // Blood Sense attack-speed buff accelerates the bow's charge
+        // (and the Heavenly Gale 3s charge) too. 1.0 outside of any buff.
+        float chargeScale = owner != null ? owner.attackSpeedMultiplier : 1f;
+        chargeTime += Time.deltaTime * Mathf.Max(0.01f, chargeScale);
         owner.speedMultiplier = slowdownWhileCharging;
 
         // Update bow visual position (follow the hero).

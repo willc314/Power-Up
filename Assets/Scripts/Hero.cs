@@ -167,6 +167,53 @@ public class Hero : MonoBehaviour
     [Tooltip("Per-clip volume multiplier for meteorRainSound. Stacks on SoundManager.volume.")]
     [Range(0f, 1f)] public float meteorRainSoundVolume = 1f;
 
+    [Header("Blood Sense General Buff (level-up unlock)")]
+    [Tooltip("Set to true by BloodSenseUpgrade.Apply when the player picks the buff. Unlocks the MMB ability and the passive HP→damage conversion + auto-shield-layer system.")]
+    public bool bloodSenseActive = false;
+    [Tooltip("Damage multiplier added per missing-HP fraction. 1 = the player gains +1% damage for every 1% of MaxHP they're missing (so at 1 HP / 100 MaxHP they deal +99% damage). Stacks multiplicatively with damageMultiplier and crit.")]
+    public float bloodSenseMissingHpDamageRatio = 1f;
+    [Tooltip("Fraction of MaxHP the player must lose to gain ONE passive shield layer. 0.30 = +1 layer at 30% missing, +2 at 60% missing, +3 at 90% missing. Layers are recomputed live from current HP — they appear automatically as HP drops and disappear as HP heals.")]
+    [Range(0.05f, 1f)] public float bloodSenseHpPerShieldLayer = 0.3f;
+
+    [Header("Blood Sense Active Ability (MMB)")]
+    [Tooltip("Cooldown (seconds) between Blood Sense ability casts.")]
+    public float bloodSenseAbilityCooldown = 30f;
+    [Tooltip("Fraction of MaxHP the player sacrifices on cast. 0.6 = lose 60% of MaxHP from current HP. Sacrifice CANNOT kill — current HP floors at 1 even if the loss would otherwise reduce it below zero.")]
+    [Range(0f, 1f)] public float bloodSenseSacrificeFraction = 0.6f;
+    [Tooltip("Extra shield layers added on TOP of the passive HP-derived layers when the ability fires. These layers are consumed on hit (don't auto-regenerate from HP like the passive layers do).")]
+    public int bloodSenseActiveExtraLayers = 2;
+    [Tooltip("Duration (seconds) of the post-cast attack-speed buff.")]
+    public float bloodSenseAttackSpeedDuration = 8f;
+    [Tooltip("Attack-speed multiplier applied while the buff is active. 2 = double attack speed; can push past normal weapon cooldown floors since this multiplier scales how fast the cooldown timer drains.")]
+    public float bloodSenseAttackSpeedMultiplier = 2f;
+    [Tooltip("Optional shield visual prefab spawned as a child of the hero whenever any blood-sense shield layer is active. Treated like the I-am-Tank shield prefab — VfxHelpers freezes it mid-pose so the visual stays static while the layers are up.")]
+    public GameObject bloodSenseShieldPrefab;
+    [Tooltip("Uniform scale applied to the spawned shield visual.")]
+    public float bloodSenseShieldVisualScale = 1.2f;
+    [Tooltip("Vertical offset for the shield visual relative to hero pivot.")]
+    public float bloodSenseShieldVisualYOffset = 0.9f;
+    [Tooltip("Seconds to simulate the shield prefab forward into its lifecycle before freezing it (matches the I-am-Tank shield freeze pattern).")]
+    public float bloodSenseShieldFreezeTime = 1.5f;
+    [Tooltip("Alpha override applied to every renderer in the spawned shield visual. 0.4 ≈ 100/255 — keeps the shield silhouette readable without obscuring the player. Set to 1 to disable the override entirely.")]
+    [Range(0f, 1f)] public float bloodSenseShieldAlpha = 0.4f;
+    [Tooltip("Optional aura visual spawned for the duration of the Blood Sense attack-speed buff (8s by default). Tracks the hero's position each frame but its rotation is LOCKED to whatever the prefab was authored at — it doesn't rotate with the player. Despawned when the buff window ends.")]
+    public GameObject bloodSenseAuraPrefab;
+    [Tooltip("Uniform scale applied to the spawned aura visual.")]
+    public float bloodSenseAuraVisualScale = 1.2f;
+    [Tooltip("Vertical offset for the aura visual relative to hero pivot.")]
+    public float bloodSenseAuraVisualYOffset = 0f;
+    [Tooltip("Alpha override applied to every renderer in the spawned aura visual. Same translucency treatment the shield gets so the player can see through the aura. Set to 1 to disable.")]
+    [Range(0f, 1f)] public float bloodSenseAuraAlpha = 0.4f;
+
+    /// <summary>
+    /// Multiplier on the rate at which weapon cooldown timers drain (and
+    /// the bow's chargeTime advances). Driven by the Blood Sense MMB
+    /// attack-speed buff — set to 2 for 8s on cast to double weapon
+    /// attack speed; stays at 1 the rest of the time. Read by
+    /// Weapon.Update and BowWeapon.OnFireHeld.
+    /// </summary>
+    [System.NonSerialized] public float attackSpeedMultiplier = 1f;
+
     [Header("Damage Modifiers")]
     [Tooltip("Multiplier applied to ALL weapon damage at attack time. 1 = no change.")]
     public float damageMultiplier = 1f;
@@ -394,6 +441,13 @@ public class Hero : MonoBehaviour
     private float meteorRainCooldownTimer;    // seconds remaining before MMB can re-cast (0 = ready)
     private bool  meteorRainActive;           // true while a rain coroutine is mid-spawn
 
+    // ---- Blood Sense runtime state ----
+    private float bloodSenseCooldownTimer;    // seconds remaining before MMB can re-cast (0 = ready)
+    private float bloodSenseAttackSpeedTimer; // seconds remaining on the active attack-speed buff
+    private int   bloodSenseActiveLayers;     // shield layers from the active cast (consumed on hit)
+    private GameObject bloodSenseShieldInstance; // spawned shield visual (parented to hero)
+    private GameObject bloodSenseAuraInstance;   // spawned attack-speed aura (parented to hero)
+
     // ---- Zenith curse retroactive refunds ----
     // While the Zenith curse is active, hero stat boosts apply at half
     // efficiency and the missing half is banked here per-stat. When
@@ -433,6 +487,30 @@ public class Hero : MonoBehaviour
     public bool IsMeteorRainAvailable => meteorEnabled && !iAmTankActive;
     /// <summary>0..1 progress for HUD ring; 1 = ready.</summary>
     public float MeteorRainCooldownProgress => meteorRainCooldown <= 0f ? 1f : Mathf.Clamp01(1f - meteorRainCooldownTimer / meteorRainCooldown);
+    /// <summary>True while Blood Sense owns MMB (and Tank/Meteor don't). Mirrors the slot-3 mutex.</summary>
+    public bool IsBloodSenseAvailable => bloodSenseActive && !iAmTankActive && !meteorEnabled;
+    /// <summary>0..1 progress for HUD ring; 1 = ready.</summary>
+    public float BloodSenseAbilityCooldownProgress => bloodSenseAbilityCooldown <= 0f ? 1f : Mathf.Clamp01(1f - bloodSenseCooldownTimer / bloodSenseAbilityCooldown);
+    public float BloodSenseCooldownRemaining => Mathf.Max(0f, bloodSenseCooldownTimer);
+    /// <summary>Seconds remaining on the post-cast attack-speed buff, 0 if none.</summary>
+    public float BloodSenseAttackSpeedRemaining => Mathf.Max(0f, bloodSenseAttackSpeedTimer);
+    /// <summary>Passive shield layers derived live from current HP. 30% missing = 1, 60% missing = 2, ...</summary>
+    public int BloodSensePassiveLayers
+    {
+        get
+        {
+            if (!bloodSenseActive || maxHP <= 0f) return 0;
+            float missingFraction = Mathf.Clamp01(1f - currentHP / maxHP);
+            float per = Mathf.Max(0.05f, bloodSenseHpPerShieldLayer);
+            return Mathf.FloorToInt(missingFraction / per);
+        }
+    }
+    /// <summary>Active layers from the MMB cast (consumed on hit).</summary>
+    public int BloodSenseActiveLayers => bloodSenseActiveLayers;
+    /// <summary>Combined layer count — total absorbs available.</summary>
+    public int BloodSenseTotalLayers => bloodSenseActive ? (BloodSensePassiveLayers + bloodSenseActiveLayers) : 0;
+    /// <summary>True while any blood-sense shield layer is up; HUD / VFX consult this.</summary>
+    public bool HasBloodSenseShield => bloodSenseActive && BloodSenseTotalLayers > 0;
     /// <summary>Seconds remaining on the meteor rain cooldown, 0 if ready.</summary>
     public float MeteorRainCooldownRemaining => Mathf.Max(0f, meteorRainCooldownTimer);
     /// <summary>True while a meteor rain is mid-spawn (between MMB cast and the last meteor falling).</summary>
@@ -587,6 +665,63 @@ public class Hero : MonoBehaviour
             if (meteorRainCooldownTimer > 0f) meteorRainCooldownTimer -= Time.deltaTime;
             if (Input.GetMouseButtonDown(2) && meteorRainCooldownTimer <= 0f && !IsDead && !meteorRainActive)
                 CastMeteorRain();
+        }
+
+        // ---- Blood Sense ability tick ----
+        if (IsBloodSenseAvailable)
+        {
+            // Aura is unparented so its rotation stays locked — track the
+            // hero's position manually each frame. Set BEFORE the buff
+            // timer tick so the visual position is fresh whether or not
+            // we're about to despawn this frame.
+            if (bloodSenseAuraInstance != null)
+            {
+                bloodSenseAuraInstance.transform.position = transform.position + Vector3.up * bloodSenseAuraVisualYOffset;
+            }
+            if (bloodSenseCooldownTimer > 0f) bloodSenseCooldownTimer -= Time.deltaTime;
+            // Attack-speed buff window: while bloodSenseAttackSpeedTimer > 0,
+            // weapons drain cooldown / charge faster (driven by attackSpeedMultiplier).
+            if (bloodSenseAttackSpeedTimer > 0f)
+            {
+                bloodSenseAttackSpeedTimer -= Time.deltaTime;
+                if (bloodSenseAttackSpeedTimer <= 0f)
+                {
+                    bloodSenseAttackSpeedTimer = 0f;
+                    attackSpeedMultiplier = 1f;
+                    // Buff window closed — tear down the aura visual.
+                    if (bloodSenseAuraInstance != null)
+                    {
+                        Destroy(bloodSenseAuraInstance);
+                        bloodSenseAuraInstance = null;
+                    }
+                }
+            }
+            // Shield visual: spawn whenever ANY layer is up (passive or active);
+            // despawn when total drops to 0. Recomputed each tick so it
+            // appears automatically as HP drops below 70% / 40% / 10% thresholds.
+            bool shouldShowShield = HasBloodSenseShield;
+            if (shouldShowShield && bloodSenseShieldInstance == null && bloodSenseShieldPrefab != null)
+            {
+                Vector3 pos = transform.position + Vector3.up * bloodSenseShieldVisualYOffset;
+                bloodSenseShieldInstance = Instantiate(bloodSenseShieldPrefab, pos, transform.rotation, transform);
+                bloodSenseShieldInstance.transform.localPosition = Vector3.up * bloodSenseShieldVisualYOffset;
+                bloodSenseShieldInstance.transform.localRotation = Quaternion.identity;
+                bloodSenseShieldInstance.transform.localScale = Vector3.one * Mathf.Max(0.0001f, bloodSenseShieldVisualScale);
+                VfxHelpers.DisablePhysicsInterference(bloodSenseShieldInstance);
+                VfxHelpers.FreezeVfxAtTime(bloodSenseShieldInstance, bloodSenseShieldFreezeTime);
+                // Translucency override — keeps the shield silhouette
+                // readable without obscuring the player. Walks the spawned
+                // renderers and rewrites each material's RGBA so the alpha
+                // matches the configured value while the hue is preserved.
+                ApplyAlphaToRenderers(bloodSenseShieldInstance, bloodSenseShieldAlpha);
+            }
+            else if (!shouldShowShield && bloodSenseShieldInstance != null)
+            {
+                Destroy(bloodSenseShieldInstance);
+                bloodSenseShieldInstance = null;
+            }
+            if (Input.GetMouseButtonDown(2) && bloodSenseCooldownTimer <= 0f && !IsDead)
+                CastBloodSenseAbility();
         }
 
         if (animator != null)
@@ -898,6 +1033,20 @@ public class Hero : MonoBehaviour
             return;
         }
 
+        // Blood Sense shield: each layer absorbs ONE incoming hit. Active
+        // layers (gained from MMB cast) are consumed first; passive layers
+        // (HP-derived) absorb infinitely while HP is in their bracket
+        // (no decrement on absorb — they regenerate from current HP each
+        // frame). Damage flash + vignette still fire so the player gets
+        // visual confirmation the shield blocked.
+        if (bloodSenseActive && BloodSenseTotalLayers > 0)
+        {
+            if (bloodSenseActiveLayers > 0) bloodSenseActiveLayers--;
+            if (damageFlash != null) damageFlash.Flash();
+            if (HealthVignette.Instance != null) HealthVignette.Instance.Flash();
+            return;
+        }
+
         // Charging-bow damage reduction. Both slots are checked because the
         // player can hold the bow on either LMB or RMB; whichever bow is
         // currently charging wins (the higher reduction if both somehow are).
@@ -1035,6 +1184,99 @@ public class Hero : MonoBehaviour
     /// resets immediately on cast (not on rain end), so the 30s timer
     /// includes the rain's spawn duration in its window.
     /// </summary>
+    /// <summary>
+    /// Blood Sense MMB ability. Sacrifices a chunk of MaxHP (cannot kill —
+    /// floors at 1), grants extra shield layers on top of the passive
+    /// HP-derived layers, and starts an attack-speed buff window.
+    /// </summary>
+    /// <summary>
+    /// Walk every Renderer in <paramref name="root"/> and rewrite its
+    /// material's color alpha to <paramref name="alpha"/>, preserving
+    /// each material's authored RGB. Uses rend.material (instance copy)
+    /// so the change is local to this spawned instance — the source
+    /// prefab's shared materials stay untouched. Material instances are
+    /// destroyed automatically when the host GameObject is destroyed.
+    /// </summary>
+    private static void ApplyAlphaToRenderers(GameObject root, float alpha)
+    {
+        if (root == null) return;
+        float a = Mathf.Clamp01(alpha);
+        foreach (var rend in root.GetComponentsInChildren<Renderer>(true))
+        {
+            // .materials returns instance copies — modifying these doesn't
+            // affect the asset. Loop catches multi-material renderers too.
+            var mats = rend.materials;
+            for (int i = 0; i < mats.Length; i++)
+            {
+                var m = mats[i];
+                if (m == null) continue;
+                if (m.HasProperty("_Color"))
+                {
+                    var c = m.GetColor("_Color");
+                    c.a = a;
+                    m.SetColor("_Color", c);
+                }
+                if (m.HasProperty("_BaseColor"))
+                {
+                    var c = m.GetColor("_BaseColor");
+                    c.a = a;
+                    m.SetColor("_BaseColor", c);
+                }
+                if (m.HasProperty("_TintColor"))
+                {
+                    var c = m.GetColor("_TintColor");
+                    c.a = a;
+                    m.SetColor("_TintColor", c);
+                }
+            }
+        }
+    }
+
+    private void CastBloodSenseAbility()
+    {
+        if (!IsBloodSenseAvailable || IsDead) return;
+        // Health sacrifice — subtract a fraction of MaxHP from current HP,
+        // floored at 1 so the ability can never kill the player. Uses
+        // SetCurrentHP which already enforces "only lower, never raise".
+        float lossAmount = maxHP * Mathf.Clamp01(bloodSenseSacrificeFraction);
+        float targetHP = Mathf.Max(1f, currentHP - lossAmount);
+        if (targetHP < currentHP) SetCurrentHP(targetHP);
+
+        // Active shield layers — added on top of whatever the passive
+        // layers compute to. Consumed on hit (no auto-regen).
+        bloodSenseActiveLayers += Mathf.Max(0, bloodSenseActiveExtraLayers);
+
+        // Attack-speed buff: scale the global attackSpeedMultiplier for
+        // a fixed window. Weapons read this each Update tick to drain
+        // their cooldown timers faster; the bow reads it in OnFireHeld
+        // to advance chargeTime faster too. SwordWeapon's secondary
+        // (Zenith dual-wield) cooldown also reads this, so the buff
+        // covers all weapons uniformly.
+        bloodSenseAttackSpeedTimer = Mathf.Max(0.05f, bloodSenseAttackSpeedDuration);
+        attackSpeedMultiplier = Mathf.Max(1f, bloodSenseAttackSpeedMultiplier);
+
+        // Spawn the aura visual for the buff window. NOT parented to the
+        // hero — that way the aura's world rotation stays locked to the
+        // prefab's authored value instead of spinning every time the
+        // player turns. Position is tracked manually in Update. Despawned
+        // when the buff timer drains to 0.
+        if (bloodSenseAuraPrefab != null && bloodSenseAuraInstance == null)
+        {
+            Vector3 pos = transform.position + Vector3.up * bloodSenseAuraVisualYOffset;
+            // Use the prefab's authored rotation so its baked orientation
+            // (e.g. a swirl pattern designed to face up) is preserved.
+            bloodSenseAuraInstance = Instantiate(bloodSenseAuraPrefab, pos, bloodSenseAuraPrefab.transform.rotation);
+            bloodSenseAuraInstance.transform.localScale = bloodSenseAuraInstance.transform.localScale * Mathf.Max(0.0001f, bloodSenseAuraVisualScale);
+            VfxHelpers.DisablePhysicsInterference(bloodSenseAuraInstance);
+            ApplyAlphaToRenderers(bloodSenseAuraInstance, bloodSenseAuraAlpha);
+        }
+
+        // Start cooldown.
+        bloodSenseCooldownTimer = Mathf.Max(0f, bloodSenseAbilityCooldown);
+
+        Debug.Log($"[Blood Sense] Cast — sacrificed {lossAmount:0} HP (now {currentHP:0}/{maxHP:0}), +{bloodSenseActiveExtraLayers} active layers (total {BloodSenseTotalLayers}), {bloodSenseAttackSpeedDuration}s ×{bloodSenseAttackSpeedMultiplier} attack speed.");
+    }
+
     private void CastMeteorRain()
     {
         if (!IsMeteorRainAvailable || IsDead || meteorRainActive) return;
@@ -1704,6 +1946,14 @@ public class Hero : MonoBehaviour
         // "+damage" buff anymore, only "remove the debuff."
         if (iAmTankActive && !(IsTankShieldActive && iAmTankShieldRestoresDamage))
             dmg *= Mathf.Clamp01(iAmTankPermanentDamagePenalty);
+        // Blood Sense: +1% damage per 1% HP missing (default ratio = 1).
+        // Computed live so a fresh hit triggering the bonus uses the
+        // post-hit HP — keeps the "berserker" feel honest.
+        if (bloodSenseActive && maxHP > 0f)
+        {
+            float missing = Mathf.Clamp01(1f - currentHP / maxHP);
+            dmg *= 1f + missing * Mathf.Max(0f, bloodSenseMissingHpDamageRatio);
+        }
         if (IsZenithCursed)
             dmg *= 0.25f;
         return dmg;
@@ -1723,6 +1973,11 @@ public class Hero : MonoBehaviour
         float dmg = baseDamage * Mathf.Max(0f, damageMultiplier);
         if (iAmTankActive && !(IsTankShieldActive && iAmTankShieldRestoresDamage))
             dmg *= Mathf.Clamp01(iAmTankPermanentDamagePenalty);
+        if (bloodSenseActive && maxHP > 0f)
+        {
+            float missing = Mathf.Clamp01(1f - currentHP / maxHP);
+            dmg *= 1f + missing * Mathf.Max(0f, bloodSenseMissingHpDamageRatio);
+        }
         if (IsZenithCursed)
             dmg *= 0.25f;
         return dmg;
@@ -1915,6 +2170,17 @@ public class Hero : MonoBehaviour
         // Clean up the tank shield visual on death so it doesn't sit there
         // glowing on the corpse.
         if (tankShieldInstance != null) BreakTankShield();
+        // Same for the Blood Sense shield + aura instances.
+        if (bloodSenseShieldInstance != null)
+        {
+            Destroy(bloodSenseShieldInstance);
+            bloodSenseShieldInstance = null;
+        }
+        if (bloodSenseAuraInstance != null)
+        {
+            Destroy(bloodSenseAuraInstance);
+            bloodSenseAuraInstance = null;
+        }
 
         if (rb != null)
             rb.velocity = Vector3.zero;

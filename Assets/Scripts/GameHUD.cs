@@ -110,6 +110,12 @@ public class GameHUD : MonoBehaviour
     [Tooltip("Optional icon for the Meteor Rain ability HUD slot. Square sprite (e.g. comet icon). Leave null for text-only.")]
     public Sprite meteorAbilityIcon;
 
+    // Blood Sense ability slot (same screen position as the others —
+    // mutex via slot-3, only one is visible at a time).
+    private TankWidgets bloodSenseSlot;
+    [Tooltip("Optional icon for the Blood Sense ability HUD slot. Square sprite (e.g. blood / fang icon). Leave null for text-only.")]
+    public Sprite bloodSenseAbilityIcon;
+
     // Boss HP bar (bottom-center; only shown while a SlimeGod is alive).
     private GameObject bossBarRoot;
     private RectTransform bossBarFillRect;
@@ -148,6 +154,7 @@ public class GameHUD : MonoBehaviour
         UpdateDashSlot();
         UpdateTankSlot();
         UpdateMeteorSlot();
+        UpdateBloodSenseSlot();
         UpdateBossBar();
         UpdateXPBar();
     }
@@ -724,6 +731,10 @@ public class GameHUD : MonoBehaviour
         // weapon-slots container without changing its layout. Aligned in X
         // with the dash slot and offset upward by one slot height + gap.
         tankSlot = BuildTankSlot(parent, totalWidth, totalHeight);
+        // Inspector-assigned sprite wins; otherwise fall back to the
+        // same Resources/UpgradeIcons asset the level-up picker uses for
+        // this augment so dropping the file once wires up both UIs.
+        ApplySlotIcon(ref tankSlot, tankAbilityIcon, "IAmTank", new Color(0.4f, 0.7f, 1f, 0.18f));
         tankSlot.root.SetActive(false); // hidden until iAmTankActive
 
         // Meteor Rain slot — same screen position as the Tank slot (they're
@@ -731,9 +742,31 @@ public class GameHUD : MonoBehaviour
         // visible because the player picks one general augment per run.
         meteorSlot = BuildTankSlot(parent, totalWidth, totalHeight);
         meteorSlot.root.name = "MeteorRainAbilitySlot";
-        if (meteorAbilityIcon != null) meteorSlot.iconImage.sprite = meteorAbilityIcon;
-        else                            meteorSlot.iconImage.color = new Color(1f, 0.55f, 0.2f, 0.22f); // faint orange placeholder
+        ApplySlotIcon(ref meteorSlot, meteorAbilityIcon, "Meteor", new Color(1f, 0.55f, 0.2f, 0.22f));
         meteorSlot.root.SetActive(false); // hidden until meteorEnabled
+
+        // Blood Sense slot — same screen position as the others. Slot-3
+        // mutex guarantees only one of {tank, meteor, blood sense} is up
+        // at any moment.
+        bloodSenseSlot = BuildTankSlot(parent, totalWidth, totalHeight);
+        bloodSenseSlot.root.name = "BloodSenseAbilitySlot";
+        ApplySlotIcon(ref bloodSenseSlot, bloodSenseAbilityIcon, "BloodSense", new Color(0.85f, 0.2f, 0.2f, 0.22f));
+        bloodSenseSlot.root.SetActive(false); // hidden until bloodSenseActive
+    }
+
+    /// <summary>
+    /// Apply an icon to a TankWidgets slot. Inspector-assigned sprite wins;
+    /// otherwise loads <c>Resources/UpgradeIcons/&lt;resourceName&gt;</c>
+    /// (same convention LevelUpgrade uses), and falls back to a faint
+    /// placeholder color if neither source has an asset.
+    /// </summary>
+    private static void ApplySlotIcon(ref TankWidgets ts, Sprite inspectorSprite, string resourceName, Color placeholder)
+    {
+        Sprite chosen = inspectorSprite;
+        if (chosen == null && !string.IsNullOrEmpty(resourceName))
+            chosen = Resources.Load<Sprite>("UpgradeIcons/" + resourceName);
+        if (chosen != null) ts.iconImage.sprite = chosen;
+        else                ts.iconImage.color = placeholder;
     }
 
     private TankWidgets BuildTankSlot(Transform parent, int weaponContainerWidth, int weaponContainerHeight)
@@ -909,6 +942,48 @@ public class GameHUD : MonoBehaviour
             meteorSlot.labelText.text = "RAIN";
             meteorSlot.labelText.color = textColor;
             if (meteorSlot.cooldownOverlay != null) meteorSlot.cooldownOverlay.fillAmount = 0f;
+        }
+    }
+
+    private void UpdateBloodSenseSlot()
+    {
+        if (bloodSenseSlot.root == null || hero == null) return;
+
+        // Show only when Blood Sense owns MMB (mutex with Tank/Meteor via
+        // slot-3, but the IsBloodSenseAvailable accessor wraps that check).
+        bool active = hero.IsBloodSenseAvailable;
+        if (bloodSenseSlot.root.activeSelf != active) bloodSenseSlot.root.SetActive(active);
+        if (!active) return;
+
+        float total = Mathf.Max(0.001f, hero.bloodSenseAbilityCooldown);
+        float remaining = hero.BloodSenseCooldownRemaining;
+        float buffLeft = hero.BloodSenseAttackSpeedRemaining;
+
+        if (buffLeft > 0.05f)
+        {
+            // Buff window — show buff time remaining in red so the player
+            // can read it as "berserker mode active".
+            bloodSenseSlot.labelText.text = buffLeft >= 1f ? buffLeft.ToString("0") : buffLeft.ToString("0.0");
+            bloodSenseSlot.labelText.color = new Color(1f, 0.45f, 0.45f, 1f);
+            // Cooldown overlay still drains during the buff so the player
+            // can also see when the next cast will be available.
+            if (bloodSenseSlot.cooldownOverlay != null)
+                bloodSenseSlot.cooldownOverlay.fillAmount = Mathf.Clamp01(remaining / total);
+        }
+        else if (remaining > 0.05f)
+        {
+            // On cooldown.
+            bloodSenseSlot.labelText.text = remaining >= 1f ? remaining.ToString("0") : remaining.ToString("0.0");
+            bloodSenseSlot.labelText.color = textColor;
+            if (bloodSenseSlot.cooldownOverlay != null)
+                bloodSenseSlot.cooldownOverlay.fillAmount = Mathf.Clamp01(remaining / total);
+        }
+        else
+        {
+            // Ready.
+            bloodSenseSlot.labelText.text = "BLOOD";
+            bloodSenseSlot.labelText.color = textColor;
+            if (bloodSenseSlot.cooldownOverlay != null) bloodSenseSlot.cooldownOverlay.fillAmount = 0f;
         }
     }
 

@@ -2706,6 +2706,23 @@ MonoBehaviour:
     m_Bits: 4294967295
   meteorRainSound: {fileID: 0}
   meteorRainSoundVolume: 1
+  bloodSenseActive: 0
+  bloodSenseMissingHpDamageRatio: 1
+  bloodSenseHpPerShieldLayer: 0.3
+  bloodSenseAbilityCooldown: 40
+  bloodSenseSacrificeFraction: 0.6
+  bloodSenseActiveExtraLayers: 1
+  bloodSenseAttackSpeedDuration: 8
+  bloodSenseAttackSpeedMultiplier: 2
+  bloodSenseShieldPrefab: {fileID: 6287953604210959080, guid: 5156d6689efbccb4991059f3a5755566, type: 3}
+  bloodSenseShieldVisualScale: 0.9
+  bloodSenseShieldVisualYOffset: 0
+  bloodSenseShieldFreezeTime: 1.5
+  bloodSenseShieldAlpha: 0.1
+  bloodSenseAuraPrefab: {fileID: 3377181292992421420, guid: 48c5715f9603c3842a353516a8baefbb, type: 3}
+  bloodSenseAuraVisualScale: 1.2
+  bloodSenseAuraVisualYOffset: 0
+  bloodSenseAuraAlpha: 0.1
   damageMultiplier: 1
   damageBoostAmount: 0.15
   maxDamageMultiplier: 100
@@ -2950,6 +2967,7 @@ MonoBehaviour:
   galeDeathBeamShakeAmplitude: 0.05
   galeDeathBeamTargetSearchRadius: 25
   galeBowPickupPierceBonus: 1
+  galeBarrageMaxPierce: 3
   galeBowPickupDamageScale: 0.5
   galeShieldPickupLifetimeBonus: 0.5
   galeShieldPickupDamageScale: 1

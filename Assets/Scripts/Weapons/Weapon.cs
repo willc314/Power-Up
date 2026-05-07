@@ -277,7 +277,15 @@ public abstract class Weapon : MonoBehaviour
     protected virtual void Update()
     {
         if (cooldownTimer > 0f)
-            cooldownTimer -= Time.deltaTime;
+        {
+            // Scale by Hero.attackSpeedMultiplier so global attack-speed
+            // buffs (Blood Sense MMB) accelerate every weapon's cooldown
+            // tick uniformly. Default 1.0 — no effect outside of an
+            // active buff. Defensive null-check in case the singleton
+            // hasn't initialized yet during scene load.
+            float scale = Hero.Instance != null ? Hero.Instance.attackSpeedMultiplier : 1f;
+            cooldownTimer -= Time.deltaTime * Mathf.Max(0.01f, scale);
+        }
     }
 
     /// <summary>
