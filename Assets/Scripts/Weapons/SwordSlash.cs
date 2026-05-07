@@ -89,6 +89,41 @@ public class SwordSlash : MonoBehaviour
     [System.NonSerialized] public float zenithMajorRadius = 0f;
     [System.NonSerialized] public Color trailTint = Color.white;
 
+    [Header("Zenith Trail Tuning")]
+    [Tooltip("Multiplier applied to TrailRenderer.startWidth / endWidth in Zenith mode. 2 = trail is 2× the prefab-authored width while Zenith is active. Non-Zenith swings keep using the Tiny.Trail prefab visuals untouched.")]
+    public float zenithTrailWidthMultiplier = 2.0f;
+    [Tooltip("Alpha along the LENGTH at the trail HEAD (newest position, near the blade tip).")]
+    [Range(0f, 1f)] public float zenithTrailHeadAlpha = 1.0f;
+    [Tooltip("Alpha along the LENGTH at the trail TAIL (oldest position, fading into the air behind the blade).")]
+    [Range(0f, 1f)] public float zenithTrailTailAlpha = 0.0f;
+    [Tooltip("Alpha along the WIDTH on the side facing the BLADE TIP. Combines multiplicatively with the head/tail length fade by sampling a runtime-baked vertical gradient on the trail material's main texture.")]
+    [Range(0f, 1f)] public float zenithTrailTipSideAlpha = 1.0f;
+    [Tooltip("Alpha along the WIDTH on the side facing the SWORD BASE. Lower values fade the trail's bottom edge so the trail visually anchors to the blade tip.")]
+    [Range(0f, 1f)] public float zenithTrailBaseSideAlpha = 0.0f;
+    [Tooltip("Shader property name on the trail material used for the runtime width-fade gradient. '_MainTex' works with the standard Sprites/Particles unlit shaders. If your trail uses a custom shader sampling a different 2D texture for vertex color modulation, override here.")]
+    public string zenithTrailWidthTextureProperty = "_MainTex";
+    [Tooltip("If the visible width fade is reversed (tip-side ends up the transparent edge), flip this. Just inverts the bake direction without you having to swap the alpha values.")]
+    public bool zenithTrailFlipWidthGradient = false;
+
+    // Cached gradient textures and property block, shared across all swings.
+    // We pre-bake TWO textures — one canonical (V=0 base, V=1 tip) for
+    // left-to-right swings and one V-reversed for right-to-left swings —
+    // and swap which one the property block points at based on swing
+    // direction. We do NOT rely on _MainTex_ST to flip V via the property
+    // block: many trail / particle / unlit shaders sample _MainTex
+    // directly without applying TRANSFORM_TEX, so an _ST override silently
+    // no-ops and the gradient stays mirrored on alternating swings. Two
+    // pre-baked textures bypass that entirely. Memory cost is ~512 bytes
+    // for both (1×64 RGBA32 each). Rebuilt only when the tip/base alpha
+    // inspector values change.
+    private static Texture2D zenithWidthGradientCanonical_;
+    private static Texture2D zenithWidthGradientFlipped_;
+    private static float cachedTipSideAlpha_  = float.NaN;
+    private static float cachedBaseSideAlpha_ = float.NaN;
+    private static MaterialPropertyBlock zenithMpb_;
+    private static int   zenithWidthTexId_    = -1;
+    private static string zenithWidthTexProp_ = null;
+
     private Transform owner;
     private float damage;
     /// <summary>
@@ -134,15 +169,92 @@ public class SwordSlash : MonoBehaviour
 
         timer = 0f;
 
-        // Zenith trail tint: SwordWeapon picks a random rainbow color per
-        // swing and stuffs it in trailTint before Init runs. Apply it to any
-        // Tiny.Trail children — they spawn their own trailGo/MeshRenderer in
-        // their Start(), so we use the queue-tint API which the Trail picks
-        // up if it's not started yet.
+        // Trail mode dispatch:
+        //
+        // Non-Zenith swings keep the original Tiny.Trail (mesh-baked) look —
+        // it's authored on the prefab and feels right for the regular sword.
+        // We force-disable any Unity TrailRenderer children so the augment
+        // trail doesn't bleed into the base swings.
+        //
+        // Zenith swings use the Unity TrailRenderer instead: it's cheap,
+        // tolerates fast arcs, and supports a clean head→tail alpha fade
+        // (head near the blade tip stays opaque, tail dissolves away).
+        // Tiny.Trail children are turned off for Zenith so the two trail
+        // systems don't double up. Width is multiplied by
+        // zenithTrailWidthMultiplier so the prefab-authored proportions
+        // stay intact while the augment reads as visibly bigger.
         if (zenithMode)
         {
+            Color head = trailTint; head.a = Mathf.Clamp01(zenithTrailHeadAlpha);
+            Color tail = trailTint; tail.a = Mathf.Clamp01(zenithTrailTailAlpha);
+
+            // Bake / fetch the width-axis alpha gradient textures and prepare
+            // the MaterialPropertyBlock once per swing. We don't mutate
+            // tr.material (which would instance and leak materials per
+            // swing) — instead we override _MainTex via a property block,
+            // which composes multiplicatively with the trail's vertex color
+            // (head/tail length fade) inside any standard texture-sampling
+            // shader. If the trail material doesn't sample _MainTex, set
+            // zenithTrailWidthTextureProperty to whatever sampler does.
+            //
+            // We bake TWO textures (canonical + V-reversed) and swap based
+            // on swing direction: when the sword model is yaw-flipped on
+            // rightToLeft swings the trail's V axis flips with it, so the
+            // gradient would visibly reverse on alternating swings without
+            // a per-swing correction. Pre-baked textures (instead of an
+            // _ST UV-flip) guarantee the correction takes effect regardless
+            // of how the trail's shader handles UV transforms — many
+            // particle/unlit shaders ignore _MainTex_ST overrides from a
+            // property block, which is why the previous _ST-based flip
+            // didn't visibly do anything on this material.
+            EnsureZenithWidthGradients(
+                Mathf.Clamp01(zenithTrailTipSideAlpha),
+                Mathf.Clamp01(zenithTrailBaseSideAlpha));
+            int widthTexId = GetZenithWidthTexId(zenithTrailWidthTextureProperty);
+            if (zenithMpb_ == null) zenithMpb_ = new MaterialPropertyBlock();
+
+            // Compose the V-axis flip:
+            //   - rightToLeft: yaw-mirrored swing flips the visible V edge.
+            //   - inspector toggle: lets the user correct an inverted setup
+            //     without having to swap the alpha values.
+            // XOR so two flips cancel, matching natural inversion semantics.
+            bool useFlipped = rightToLeft ^ zenithTrailFlipWidthGradient;
+            Texture2D widthTex = useFlipped ? zenithWidthGradientFlipped_ : zenithWidthGradientCanonical_;
+
+            foreach (var tr in GetComponentsInChildren<TrailRenderer>(true))
+            {
+                tr.enabled    = true;
+                tr.startColor = head;
+                tr.endColor   = tail;
+                // Read whatever the prefab authored as the "1× width" baseline
+                // and scale it. We touch widthMultiplier (rather than
+                // startWidth/endWidth) so designers who set a non-trivial
+                // widthCurve keep their authored profile and just get it
+                // scaled by the multiplier.
+                float mul = Mathf.Max(0.01f, zenithTrailWidthMultiplier);
+                tr.widthMultiplier = mul;
+
+                // Apply the width-axis gradient via property block. Read
+                // existing block first so we don't clobber other property
+                // overrides on the renderer.
+                tr.GetPropertyBlock(zenithMpb_);
+                zenithMpb_.SetTexture(widthTexId, widthTex);
+                tr.SetPropertyBlock(zenithMpb_);
+            }
             foreach (var t in GetComponentsInChildren<Tiny.Trail>(true))
+            {
                 t.RuntimeTintColor = trailTint;
+                t.enabled = false;
+            }
+        }
+        else
+        {
+            // Suppress any TrailRenderer left on the prefab so the regular
+            // sword swing keeps using the mini Tiny.Trail look.
+            foreach (var tr in GetComponentsInChildren<TrailRenderer>(true))
+                tr.enabled = false;
+            foreach (var t in GetComponentsInChildren<Tiny.Trail>(true))
+                t.enabled = true;
         }
 
         // Snap the visual to the arc-start pose BEFORE the first render.
@@ -463,5 +575,82 @@ public class SwordSlash : MonoBehaviour
 
         Gizmos.color = new Color(1f, 1f, 0.2f, 0.5f);
         Gizmos.DrawWireSphere(owner.position + Vector3.up * hitHeight, hitInnerRadius);
+    }
+
+    /// <summary>
+    /// Build (or refresh from cache) two 1×N alpha gradient textures used to
+    /// fade the Zenith trail across its WIDTH axis. Both have white RGB; the
+    /// alpha channel ramps either canonically (V=0 base → V=1 tip) or
+    /// V-reversed (V=0 tip → V=1 base). The reversed bake is what
+    /// right-to-left swings sample so the fade lands on the same blade
+    /// edge regardless of swing direction.
+    ///
+    /// Sampled multiplicatively against the trail's vertex color (which
+    /// already carries the head/tail length fade) so the two fades compose
+    /// on screen. Cached statically — only rebuilt when the inspector
+    /// alphas change. Textures are HideFlags.HideAndDontSave so they
+    /// survive scene loads.
+    /// </summary>
+    private static void EnsureZenithWidthGradients(float tipSideAlpha, float baseSideAlpha)
+    {
+        if (zenithWidthGradientCanonical_ != null
+            && zenithWidthGradientFlipped_   != null
+            && Mathf.Approximately(cachedTipSideAlpha_,  tipSideAlpha)
+            && Mathf.Approximately(cachedBaseSideAlpha_, baseSideAlpha))
+        {
+            return;
+        }
+
+        // Discard any prior bakes if the alphas changed so we don't leak.
+        if (zenithWidthGradientCanonical_ != null) DestroyImmediate(zenithWidthGradientCanonical_);
+        if (zenithWidthGradientFlipped_   != null) DestroyImmediate(zenithWidthGradientFlipped_);
+
+        zenithWidthGradientCanonical_ = BakeAlphaGradient(baseSideAlpha, tipSideAlpha);  // V=0 base, V=1 tip
+        zenithWidthGradientFlipped_   = BakeAlphaGradient(tipSideAlpha,  baseSideAlpha); // V=0 tip,  V=1 base
+        cachedTipSideAlpha_  = tipSideAlpha;
+        cachedBaseSideAlpha_ = baseSideAlpha;
+    }
+
+    /// <summary>
+    /// Bake a 1×N RGBA32 texture with white RGB and an alpha gradient from
+    /// <paramref name="alphaAtV0"/> at V=0 to <paramref name="alphaAtV1"/>
+    /// at V=1. Used by the Zenith trail to apply a width-axis fade on top
+    /// of the trail's existing length-axis vertex-color fade.
+    /// </summary>
+    private static Texture2D BakeAlphaGradient(float alphaAtV0, float alphaAtV1)
+    {
+        const int H = 64;
+        var tex = new Texture2D(1, H, TextureFormat.RGBA32, false, true);
+        tex.wrapMode   = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        tex.hideFlags  = HideFlags.HideAndDontSave;
+
+        var pixels = new Color[H];
+        for (int i = 0; i < H; i++)
+        {
+            float v = (H == 1) ? 1f : i / (float)(H - 1);
+            float a = Mathf.Lerp(alphaAtV0, alphaAtV1, v);
+            pixels[i] = new Color(1f, 1f, 1f, a);
+        }
+        tex.SetPixels(pixels);
+        tex.Apply(false, false);
+        return tex;
+    }
+
+    /// <summary>
+    /// Resolve and cache the shader property ID for the trail's width-fade
+    /// texture sampler. Most shaders use "_MainTex"; the inspector field
+    /// lets prefabs that use a different sampler retarget without a code
+    /// change.
+    /// </summary>
+    private static int GetZenithWidthTexId(string propName)
+    {
+        if (string.IsNullOrEmpty(propName)) propName = "_MainTex";
+        if (zenithWidthTexProp_ != propName)
+        {
+            zenithWidthTexId_   = Shader.PropertyToID(propName);
+            zenithWidthTexProp_ = propName;
+        }
+        return zenithWidthTexId_;
     }
 }

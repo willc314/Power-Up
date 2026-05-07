@@ -17,19 +17,25 @@ public class SkyBeamArmer : MonoBehaviour
     [System.NonSerialized] public BowWeapon source;
     [System.NonSerialized] public Hero owner;
     [System.NonSerialized] public float chancePerHit;
+    private bool consumed;
 
     /// <summary>
     /// Called by Projectile / DaggerStab / etc. on each enemy hit. Rolls
     /// chancePerHit; on success, asks the source bow to spawn a sky beam
-    /// on this specific enemy. Safe to call repeatedly across a piercing
-    /// chain — each call is independent.
+    /// on this specific enemy AND disarms so the same arrow can't spawn
+    /// multiple beams across a piercing chain. With pierce locked at 0
+    /// for HG arrows this is a contract guarantee rather than an
+    /// observable behavior change, but it keeps the per-arrow cap in
+    /// place if future tuning re-introduces pierce.
     /// </summary>
     public void OnEnemyHit(Enemy enemy)
     {
+        if (consumed) return;
         if (enemy == null || enemy.IsDead) return;
         if (source == null || owner == null) return;
         if (chancePerHit <= 0f) return;
         if (Random.value >= chancePerHit) return;
+        consumed = true;
         source.SpawnHeavenlyGaleSkyBeamOn(owner, enemy);
     }
 }

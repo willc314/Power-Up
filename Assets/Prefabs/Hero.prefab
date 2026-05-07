@@ -2846,7 +2846,7 @@ MonoBehaviour:
   zenithSemiMinorJitter: 0.5
   zenithSemiMinorWidenStrength: 0
   zenithBladeMidOffset: 2.1
-  zenithTrailAlpha: 0.098039
+  zenithTrailAlpha: 0.4
   zenithTrailDuration: 0.1
   zenithTrailCorner: 16
 --- !u!114 &8888070785139311172
@@ -2957,17 +2957,17 @@ MonoBehaviour:
   galeOscillationDegreesPerSide: 50
   galeOscillationStepDegrees: 10
   galeDeathBeamChancePerArrow: 0.05
-  galeDeathBeamDuration: 2.5
+  galeDeathBeamDuration: 1
   galeDeathBeamRadiusMultiplier: 0.35
   galeDeathBeamSkyHeight: 30
   galeDeathBeamMinTiltDegrees: 12
   galeDeathBeamMaxTiltDegrees: 32
   galeDeathBeamGroundExtension: 4
-  galeDeathBeamBloomIntensity: 4
+  galeDeathBeamBloomIntensity: 3
+  galeDeathBeamDamageMultiplier: 0.5
   galeDeathBeamShakeAmplitude: 0.05
   galeDeathBeamTargetSearchRadius: 25
-  galeBowPickupPierceBonus: 1
-  galeBarrageMaxPierce: 3
+  galeBarrageMaxPierce: 0
   galeBowPickupDamageScale: 0.5
   galeShieldPickupLifetimeBonus: 0.5
   galeShieldPickupDamageScale: 1

@@ -117,8 +117,8 @@ public class BowWeapon : Weapon
     public float galeOscillationStepDegrees = 10f;
     [Tooltip("Probability per FIRED ARROW (not per shot) to also call down a sky death beam on a random alive enemy in the area. 0.05 = 5% chance per arrow. Independent per arrow.")]
     [Range(0f, 1f)] public float galeDeathBeamChancePerArrow = 0.05f;
-    [Tooltip("Duration (seconds) of each Heavenly Gale sky death beam. Per spec — 2.5s.")]
-    public float galeDeathBeamDuration = 2.5f;
+    [Tooltip("Duration (seconds) of each Heavenly Gale sky death beam. Default 1s — short enough that beams don't visually overlap into screen-fill territory.")]
+    public float galeDeathBeamDuration = 1f;
     [Tooltip("Visual radius multiplier for the Heavenly Gale sky beam — the prefab's radius times this. <1 = thin beam (per spec — relatively thin).")]
     [Range(0.05f, 1f)] public float galeDeathBeamRadiusMultiplier = 0.35f;
     [Tooltip("Beam length (also the distance from the target to the beam's top end). The beam's bottom end sits at the target enemy and the beam extends this many units along the sky direction.")]
@@ -131,15 +131,15 @@ public class BowWeapon : Weapon
     public float galeDeathBeamGroundExtension = 4f;
     [Tooltip("Multiplier on the sky beam's emission color for bloom intensity. Values > 1 push the emission into HDR territory so the post-process bloom kicks in. Tint color (hue) is unchanged — only the emission gets boosted.")]
     public float galeDeathBeamBloomIntensity = 4f;
+    [Tooltip("Damage multiplier on the sky beam's per-second damage. 0.5 = half — a balance lever to keep the beam impactful without dominating the augment's DPS budget given how often it triggers.")]
+    [Range(0f, 2f)] public float galeDeathBeamDamageMultiplier = 0.5f;
     [Tooltip("Camera shake amplitude per Heavenly Gale sky beam. Overrides the prefab's much-stronger default — sky beams fire frequently during a barrage and the prefab's full shake stacks into screen-shaking-violently territory. Keep low (0.05-0.10) so the audio + visuals carry the impact instead of the camera.")]
     [Range(0f, 1f)] public float galeDeathBeamShakeAmplitude = 0.05f;
     [Tooltip("Search radius around the hero when picking a target enemy for a sky beam. If no enemy is in range, the beam is suppressed (no fallback random spot).")]
     public float galeDeathBeamTargetSearchRadius = 25f;
 
-    [Tooltip("Pierce added per BOW pickup while Heavenly Gale is active. Bow / Sword / Shield pickups all map to BoostKind.Damage, so this exists to give the bow pickup specifically a distinct effect — pierce stacks on every barrage arrow via the existing arrowPierceBonus path.")]
-    public int galeBowPickupPierceBonus = 1;
-    [Tooltip("Maximum total pierce on a Heavenly Gale barrage arrow. Clamps the sum of fullyChargedPierceCount + arrowPierceBonus AFTER all bonuses have been applied. Keeps a single arrow from chaining through every enemy on the screen even if the player has stacked many bow pickups. Set to a large value to effectively disable the cap.")]
-    public int galeBarrageMaxPierce = 3;
+    [Tooltip("Hard cap on pierce for Heavenly Gale barrage arrows. Default 0 — barrage arrows hit ONE enemy each then despawn, regardless of any pierce bonuses bow pickups would otherwise add. Keeps the augment's damage budget bounded.")]
+    public int galeBarrageMaxPierce = 0;
     [Tooltip("Multiplier on the standard Damage boost when a BOW pickup is applied under Heavenly Gale. 0.5 = the bow pickup gives HALF a regular damage boost on top of its pierce gain. Keeps the bow pickup a meaningful bump without overshadowing sword / shield damage pickups.")]
     [Range(0f, 2f)] public float galeBowPickupDamageScale = 0.5f;
     [Tooltip("Arrow lifetime bonus added per SHIELD pickup while Heavenly Gale is active. Stacks on arrowLifetimeBonus, which FireGaleBarrageShot reads at spawn time so each barrage arrow flies longer.")]
@@ -158,9 +158,9 @@ public class BowWeapon : Weapon
     [System.NonSerialized] public eWeaponType pickupSourceTypeHint = eWeaponType.none;
 
     [Header("Heavenly Gale — Barrage Arrow Visual")]
-    [Tooltip("Custom Projectile prefab spawned per arrow during the Heavenly Gale barrage (separate from the regular arrowPrefab). Should have a Tiny.Trail child for the rainbow trail. Falls back to arrowPrefab when null.")]
+    [Tooltip("Custom Projectile prefab spawned per arrow during the Heavenly Gale barrage (separate from the regular arrowPrefab). Use a Unity TrailRenderer child for the rainbow trail — it batches on the GPU and avoids the frame-rate-coupled raggedness Tiny.Trail can show under load. Tiny.Trail is still tinted as a fallback if your prefab still has one. Falls back to arrowPrefab entirely when null.")]
     public Projectile galeBarrageArrowPrefab;
-    [Tooltip("Alpha channel applied to the random rainbow tint on the barrage arrow's trail. Low values (~0.2 = 50/255) keep the trail translucent so multiple overlapping trails read as a single ghostly streak instead of a solid blob.")]
+    [Tooltip("Alpha channel applied to the random rainbow tint on the barrage arrow's TrailRenderer (and Tiny.Trail fallback). Low values (~0.2 = 50/255) keep the trail translucent so multiple overlapping trails read as a single ghostly streak instead of a solid blob.")]
     [Range(0f, 1f)] public float galeArrowTrailAlpha = 0.196f;
 
     // ---- Heavenly Gale runtime state ----
@@ -355,19 +355,6 @@ public class BowWeapon : Weapon
         // Heavenly Gale labels — the boost effects are remapped, so the
         // standard descriptions ("+1 Arrow", "Charge maxed") would mislead.
         if (heavenlyGaleEnabled && kind == BoostKind.Damage
-            && pickupSourceTypeHint == eWeaponType.bow)
-        {
-            // Bow pickup specifically — pierce + minor damage. Show both
-            // pieces unless pierce is at cap, in which case fall back to
-            // the regular damage label so the player still sees what
-            // they're getting.
-            bool pierceFull = arrowPierceBonus >= maxArrowPierceBonus;
-            float dmgPart = maxDamageIncreasePerLevel * Mathf.Max(0f, galeBowPickupDamageScale);
-            if (pierceFull)
-                return $"+{dmgPart:0.#} Max Damage";
-            return $"+{galeBowPickupPierceBonus} Pierce  •  +{dmgPart:0.#} Max Damage";
-        }
-        if (heavenlyGaleEnabled && kind == BoostKind.Damage
             && pickupSourceTypeHint == eWeaponType.shield)
         {
             // Shield pickup specifically — arrow lifetime + damage. Show
@@ -386,8 +373,17 @@ public class BowWeapon : Weapon
                     if (galeBarrageInterval <= galeBarrageMinInterval + 0.0001f)
                         return $"+{damageIncreasePerLevel * postMaxBoostScale:0.#} Damage";
                     {
-                        float next = Mathf.Max(galeBarrageMinInterval,
-                            galeBarrageInterval * Mathf.Clamp(galeBarrageIntervalPerBoost, 0.5f, 1f));
+                        // Mirror the diminishing-returns curve that
+                        // TryApplyHeavenlyGaleBoost actually applies so the
+                        // displayed % matches what the player gets, not the
+                        // un-scaled per-boost constant.
+                        float diminishHG  = AttackSpeedDiminisher;
+                        float baseRedHG   = 1f - Mathf.Clamp(galeBarrageIntervalPerBoost, 0.5f, 1f);
+                        float effFactorHG = 1f - baseRedHG * diminishHG;
+                        float next        = Mathf.Max(galeBarrageMinInterval,
+                                                      galeBarrageInterval * effFactorHG);
+                        if (next >= galeBarrageInterval - 0.0001f)
+                            return "Barrage Rate Maxed";
                         float pct = (galeBarrageInterval / next - 1f) * 100f;
                         return $"+{pct:0}% Barrage Fire Rate";
                     }
@@ -478,6 +474,32 @@ public class BowWeapon : Weapon
 
     public override string GetExtraStatsBlock()
     {
+        // Heavenly Gale takes over the bow's whole identity: charge into a
+        // homing-arrow barrage with chance-to-trigger sky beams. Showing the
+        // standard charge/overcharge stats while HG is active would mislead
+        // (those fields are no longer the gate to firing). Render an
+        // HG-specific block that mirrors the augment's tunables instead.
+        if (heavenlyGaleEnabled)
+        {
+            var hg = new System.Text.StringBuilder();
+            hg.Append("— Heavenly Gale —");
+            hg.Append($"\nArrow Dmg: {arrowMinDamage:0.#}–{arrowMaxDamage:0.#}");
+            hg.Append($"\nArrows / Shot: {galeBarrageProjectilesPerShot} / {galeBarrageMaxProjectilesPerShot}");
+            hg.Append($"\nBarrage Duration: {galeBarrageDuration:0.##}s / {galeBarrageMaxDuration:0.##}s");
+            // Fire rate as shots/sec (what the player feels) plus the raw
+            // interval below for advanced tuning visibility.
+            float shotsPerSec = galeBarrageInterval > 0.0001f ? 1f / galeBarrageInterval : 0f;
+            hg.Append($"\nBarrage Rate: {shotsPerSec:0.#}/s  ({galeBarrageInterval:0.###}s interval)");
+            hg.Append($"\nArrow Pierce: {Mathf.Max(0, galeBarrageMaxPierce)}");
+            hg.Append($"\nArrow Lifetime: {arrowBaseLifetime + arrowLifetimeBonus:0.##}s");
+            hg.Append($"\nSky Beam Chance: {galeDeathBeamChancePerArrow * 100f:0.#}% / arrow hit");
+            hg.Append($"\nSky Beam Duration: {galeDeathBeamDuration:0.##}s");
+            hg.Append($"\nSky Beam Damage: {galeDeathBeamDamageMultiplier * 100f:0}% of beam DPS");
+            if (deathBeamDpsBonus > 0f)
+                hg.Append($"\nBeam DPS Bonus: +{deathBeamDpsBonus:0.#}");
+            return hg.ToString();
+        }
+
         var sb = new System.Text.StringBuilder();
         sb.Append($"Arrow Dmg: {arrowMinDamage:0.#}–{arrowMaxDamage:0.#}");
         sb.Append($"\nArrows / Shot: {arrowProjectileCount}");
@@ -532,12 +554,9 @@ public class BowWeapon : Weapon
         // minor damage instead. Sword / shield pickups also map to
         // BoostKind.Damage but are NOT bow-typed, so they continue to
         // use the regular damage path.
-        if (heavenlyGaleEnabled
-            && kind == BoostKind.Damage
-            && pickupSourceTypeHint == eWeaponType.bow)
-        {
-            return TryApplyHeavenlyGaleBowPickup();
-        }
+        // (Heavenly Gale bow-pickup pierce variant was removed alongside
+        // the pierce cap going to 0 — bow pickups now fall through to
+        // the standard Damage path, same as sword pickups under HG.)
         if (heavenlyGaleEnabled
             && kind == BoostKind.Damage
             && pickupSourceTypeHint == eWeaponType.shield)
@@ -651,18 +670,32 @@ public class BowWeapon : Weapon
         switch (kind)
         {
             case BoostKind.AttackSpeed:
-                attackSpeedBoostsTaken++;
                 if (galeBarrageInterval <= galeBarrageMinInterval + 0.0001f)
                 {
                     // Already at the fastest fire rate — convert post-cap
                     // pickups to scaled damage so the player still gets
                     // progress on the same fields the regular Damage boost
                     // touches (arrow min/max + beam DPS bonus).
+                    attackSpeedBoostsTaken++;
                     ApplyBowDamageBoost(postMaxBoostScale);
                     return true;
                 }
-                galeBarrageInterval = Mathf.Max(galeBarrageMinInterval,
-                    galeBarrageInterval * Mathf.Clamp(galeBarrageIntervalPerBoost, 0.5f, 1f));
+                {
+                    // Diminishing returns matched to the base AttackSpeed
+                    // path: each successive boost has weaker effect via
+                    // AttackSpeedDiminisher (factor^count). The base
+                    // reduction is (1 - galeBarrageIntervalPerBoost); we
+                    // fold the diminisher in so later boosts move the
+                    // interval less. Bumping attackSpeedBoostsTaken AFTER
+                    // reading the diminisher gives the FIRST boost full
+                    // strength, second boost reduced, etc.
+                    float diminish = AttackSpeedDiminisher;
+                    float baseReduction = 1f - Mathf.Clamp(galeBarrageIntervalPerBoost, 0.5f, 1f);
+                    float effFactor = 1f - baseReduction * diminish;
+                    galeBarrageInterval = Mathf.Max(galeBarrageMinInterval,
+                        galeBarrageInterval * effFactor);
+                    attackSpeedBoostsTaken++;
+                }
                 return true;
 
             case BoostKind.Range:
@@ -700,21 +733,6 @@ public class BowWeapon : Weapon
     /// minor damage bump (scaled by galeBowPickupDamageScale). Sword /
     /// shield pickups still take the regular full Damage path.
     /// </summary>
-    private bool TryApplyHeavenlyGaleBowPickup()
-    {
-        // Pierce — stacks via the existing arrowPierceBonus path that
-        // FireGaleBarrageShot reads at spawn time, so each barrage arrow
-        // immediately benefits from the extra pierce.
-        arrowPierceBonus = Mathf.Min(maxArrowPierceBonus,
-            arrowPierceBonus + Mathf.Max(0, galeBowPickupPierceBonus));
-        // Minor damage gain — same fields a regular damage boost would
-        // touch (arrowMin/Max + beam DPS), but at a smaller scale. The
-        // fraction is configurable via galeBowPickupDamageScale (default
-        // 0.5 = half a normal damage pickup).
-        ApplyBowDamageBoost(Mathf.Max(0f, galeBowPickupDamageScale));
-        return true;
-    }
-
     /// <summary>
     /// Heavenly Gale's shield-pickup variant. Shield maps to BoostKind.Damage
     /// like sword/bow, but under Heavenly Gale the shield pickup specifically
@@ -741,6 +759,12 @@ public class BowWeapon : Weapon
     {
         if (heavenlyGaleEnabled) return;
         heavenlyGaleEnabled = true;
+
+        // Rebrand the weapon so the StatsMenu header (and any other UI
+        // that reads weaponName) reflects the augment rather than the
+        // base bow. The original name only appears on the Inspector and
+        // doesn't need preserving for runtime logic.
+        weaponName = "Heavenly Gale";
 
         // Capture how many of each boost the player has taken so far.
         // damageLevel and crossbowPickupCount are bumped on TryApplyBoost
@@ -805,6 +829,11 @@ public class BowWeapon : Weapon
         // next shot can begin. activeBeam compares to "fake null" once the
         // beam GameObject is destroyed, so this clears itself automatically.
         if (activeBeam != null) return false;
+        // Block new charges while a Heavenly Gale barrage is mid-fire so
+        // the player commits to the cast they already paid the charge for
+        // instead of being able to stack overlapping barrages by tapping
+        // again immediately on release.
+        if (galeBarrageActive) return false;
         StartCharge(owner);
         return false;
     }
@@ -1153,14 +1182,14 @@ public class BowWeapon : Weapon
             // tuning carries over.
             ApplyHomingIfCharged(p, true);
             p.lifetime = effLifetime;
-            if (arrowPierceBonus > 0 && p.pierceCount >= 0) p.pierceCount += arrowPierceBonus;
-            // HG-specific pierce cap — clamps base + bonus so a stacked
-            // bow-pickup loadout can't make a single arrow chain through
-            // every enemy on the screen. -1 (infinite from the fully-
-            // charged setup) is preserved by the >= 0 guard so the cap
-            // only narrows finite values.
-            if (p.pierceCount >= 0 && galeBarrageMaxPierce >= 0)
-                p.pierceCount = Mathf.Min(p.pierceCount, galeBarrageMaxPierce);
+            // Unconditionally pin pierce to galeBarrageMaxPierce. The
+            // previous "Mathf.Min if >= 0" pattern accidentally let
+            // ApplyHomingIfCharged's pierceCount = -1 (infinite) through
+            // the cap because Min only ran when current pierce was
+            // non-negative. HG arrows have a single source of truth
+            // for pierce: this field. arrowPierceBonus is also no-op
+            // here — bow pickups under HG don't grant pierce anymore.
+            p.pierceCount = Mathf.Max(0, galeBarrageMaxPierce);
             p.damageFalloffPerHit = falloffPerHit;
             p.damageFalloffFloor  = falloffFloor;
             p.Launch(dir, dmg, enemyLayers);
@@ -1169,11 +1198,24 @@ public class BowWeapon : Weapon
             // Random rainbow trail tint per arrow — full saturation +
             // value (punchy), low alpha so multiple overlapping arrow
             // trails read as a translucent streak instead of a solid blob.
-            // Routed through Tiny.Trail.RuntimeTintColor (same hook the
-            // Zenith sword uses) so the trail's mesh-vertex color picks
-            // it up at the next emit.
+            // Drives Unity's TrailRenderer.startColor / endColor so the
+            // trail batches across all arrows on the GPU (way better
+            // performance than the Tiny.Trail mesh-rebuild-per-frame
+            // setup that was here before, and avoids the frame-rate-
+            // coupled "ragged" sampling artifact). The endColor fades
+            // alpha to 0 so each trail tapers off at its tail.
             Color trailTint = Color.HSVToRGB(Random.value, 0.9f, 1f);
             trailTint.a = Mathf.Clamp01(galeArrowTrailAlpha);
+            Color trailTail = trailTint;
+            trailTail.a = 0f;
+            foreach (var tr in p.GetComponentsInChildren<TrailRenderer>(true))
+            {
+                tr.startColor = trailTint;
+                tr.endColor   = trailTail;
+            }
+            // Backward-compat: if the prefab still has a Tiny.Trail child
+            // from the old visual setup, tint that too. New prefabs
+            // should use TrailRenderer for the perf win.
             foreach (var trail in p.GetComponentsInChildren<Tiny.Trail>(true))
                 trail.RuntimeTintColor = trailTint;
 
@@ -1246,7 +1288,11 @@ public class BowWeapon : Weapon
         beam.range    = Mathf.Max(1f, galeDeathBeamSkyHeight);
         // Damage gets a one-time hero-stat scaling at fire time, same as
         // the regular FireDeathBeam path. Independent crit roll per beam.
-        beam.damagePerSecond = owner.ComputeAttackDamage(beam.damagePerSecond + deathBeamDpsBonus);
+        // Halved (or whatever galeDeathBeamDamageMultiplier sets) to
+        // budget the sky beam's DPS contribution against the rest of
+        // the augment.
+        beam.damagePerSecond = owner.ComputeAttackDamage(beam.damagePerSecond + deathBeamDpsBonus)
+                               * Mathf.Max(0f, galeDeathBeamDamageMultiplier);
         // Keep the beam's max-HP-per-second damage as the prefab's base
         // (any HG-mode Range-boost bonus was wiped by ApplyHeavenlyGale's
         // reset, so we don't add deathBeamMaxHpPercentBonus here).
