@@ -360,6 +360,8 @@ MonoBehaviour:
   hitParticleLifetime: 0.5
   hitParticleSpread: 35
   hitParticleHeight: 1
+  damagedSound: {fileID: 8300000, guid: 68dcc44cebdfb0a4488f492e8d505de6, type: 3}
+  damagedSoundVolume: 1
   dashSpeedMultiplier: 6
   dashTelegraphTime: 0.8
   dashLockOnDelay: 0.1

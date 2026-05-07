@@ -232,8 +232,11 @@ MonoBehaviour:
   hitParticleLifetime: 0.5
   hitParticleSpread: 35
   hitParticleHeight: 1
+  damagedSound: {fileID: 8300000, guid: 68dcc44cebdfb0a4488f492e8d505de6, type: 3}
+  damagedSoundVolume: 1
   dashSpeedMultiplier: 3
   dashTelegraphTime: 0.6
+  dashLockOnDelay: 0.15
   dashDuration: 0.4
   dashRecovery: 1.2
   crossbowProjectile: {fileID: 0}

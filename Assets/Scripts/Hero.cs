@@ -82,10 +82,14 @@ public class Hero : MonoBehaviour
     public bool iAmTankActive = false;
     [Tooltip("Per-MaxHP-boost exponential multiplier replacement when iAmTankActive. 0.05 = MaxHP scales ×1.05 per pickup instead of the default flat +maxHPBoostAmount. Compounds across pickups.")]
     public float iAmTankHpExponentialPerBoost = 0.05f;
-    [Tooltip("Multiplier applied to BOTH the passive regen tick AND each HealthRegen boost while iAmTankActive. 2 = regen and regen-boost gains are doubled.")]
-    public float iAmTankRegenMultiplier = 2f;
-    [Tooltip("Outgoing damage multiplier active for the duration of an I-am-Tank shield. Stacks multiplicatively on top of damageMultiplier and crit. Multiple stacked shields don't increase this — it's a flat 'shield up' buff.")]
-    public float iAmTankDamageMultiplier = 1.30f;
+    [Tooltip("Flat HP/sec added per HealthRegen boost while iAmTankActive. Stacks ADDITIVELY across pickups — two pickups = +0.2 HP/sec from this term alone (before the exponential term kicks in).")]
+    public float iAmTankRegenFlatPerBoost = 0.1f;
+    [Tooltip("Exponential multiplier on the entire current regen rate per HealthRegen boost while iAmTankActive. 0.05 = regen ×1.05 every pickup. Compounds, so the effective gain accelerates as the player stacks more pickups.")]
+    public float iAmTankRegenExponentialPerBoost = 0.05f;
+    [Tooltip("Permanent outgoing-damage multiplier the player suffers the moment they accept I-am-Tank. 0.65 = the player deals 35% less damage forever. The shield ability REVERTS this debuff while it's up — see iAmTankShieldRestoresDamage — so casting the shield brings damage back to normal instead of granting a +damage buff on top.")]
+    [Range(0f, 1f)] public float iAmTankPermanentDamagePenalty = 0.65f;
+    [Tooltip("If true, the I-am-Tank shield ability cancels the iAmTankPermanentDamagePenalty for its duration so the player deals full damage while the shield is up. False = the shield doesn't touch the damage debuff (purely a heal / one-hit-absorb).")]
+    public bool iAmTankShieldRestoresDamage = true;
     [Tooltip("Cooldown (seconds) between shield ability casts.")]
     public float iAmTankAbilityCooldown = 30f;
     [Tooltip("Shield duration (seconds). Absorbs ONE incoming hit of any size, then breaks. Recasting within the last few seconds before expiry refreshes duration to full.")]
@@ -186,6 +190,18 @@ public class Hero : MonoBehaviour
     public AudioClip dashSound;
     [Tooltip("Per-clip volume multiplier for the dash SFX. Stacks on SoundManager.volume.")]
     [Range(0f, 1f)] public float dashSoundVolume = 1f;
+
+    [Header("Damaged SFX")]
+    [Tooltip("One-shot sound played at the hero's position when the hero takes a damaging hit (i.e. damage actually got through dash i-frames, the I-am-Tank shield, etc — silent absorbs don't play this). Routed through SoundManager.")]
+    public AudioClip damagedSound;
+    [Tooltip("Per-clip volume multiplier for the damaged SFX. Stacks on SoundManager.volume.")]
+    [Range(0f, 1f)] public float damagedSoundVolume = 1f;
+
+    [Header("Death SFX")]
+    [Tooltip("One-shot sound played at the hero's position when the hero dies. Fires once at death — the regular damagedSound does NOT play on the fatal hit, so this clip stands alone.")]
+    public AudioClip deathSound;
+    [Tooltip("Per-clip volume multiplier for the death SFX. Stacks on SoundManager.volume.")]
+    [Range(0f, 1f)] public float deathSoundVolume = 1f;
 
     [Header("Dash Particles")]
     [Tooltip("Spawn dust particles flying behind the hero during the dash.")]
@@ -366,7 +382,7 @@ public class Hero : MonoBehaviour
         }
     }
 
-    /// <summary>True while the I-am-Tank shield is up. While true, ComputeAttackDamage applies iAmTankDamageMultiplier and TakeDamage absorbs the next hit.</summary>
+    /// <summary>True while the I-am-Tank shield is up. While true, ComputeAttackDamage cancels the iAmTankPermanentDamagePenalty (player deals full damage instead of the -35%), and TakeDamage absorbs the next hit.</summary>
     public bool IsTankShieldActive => tankShieldTimer > 0f;
     /// <summary>0..1 progress for HUD ring; 1 = ready.</summary>
     public float TankAbilityCooldownProgress => iAmTankAbilityCooldown <= 0f ? 1f : Mathf.Clamp01(1f - tankCooldownTimer / iAmTankAbilityCooldown);
@@ -489,13 +505,13 @@ public class Hero : MonoBehaviour
         DispatchWeaponInput(0, primaryWeapon);
         DispatchWeaponInput(1, secondaryWeapon);
 
-        // Passive health regen from hero stat boosts. While I-am-Tank is
-        // active the regen rate is doubled (per buff spec).
+        // Passive health regen from hero stat boosts. The I-am-Tank buff
+        // no longer doubles the live tick — instead it makes regen pickups
+        // gain more (flat + exponential) at pickup time, so the value
+        // already baked into healthRegenPerSecond is the correct rate.
         if (healthRegenPerSecond > 0f && currentHP < maxHP)
         {
-            float rate = healthRegenPerSecond;
-            if (iAmTankActive) rate *= Mathf.Max(0f, iAmTankRegenMultiplier);
-            currentHP = Mathf.Min(maxHP, currentHP + rate * Time.deltaTime);
+            currentHP = Mathf.Min(maxHP, currentHP + healthRegenPerSecond * Time.deltaTime);
         }
 
         // ---- I am Tank! ability tick ----
@@ -848,6 +864,14 @@ public class Hero : MonoBehaviour
         // particles / weapons / camera angle.
         if (HealthVignette.Instance != null)
             HealthVignette.Instance.Flash();
+
+        // Damaged SFX — fires only when damage actually lands (we've
+        // already passed the i-frame / shield / debug-invincibility
+        // gates above), AND only on non-fatal hits. The fatal hit lets
+        // Die() play deathSound instead so the two clips don't stack
+        // on top of each other in the same frame.
+        if (currentHP > 0f && damagedSound != null && SoundManager.Instance != null)
+            SoundManager.Instance.PlaySfxAt(damagedSound, transform.position, damagedSoundVolume);
 
         if (currentHP <= 0f)
             Die();
@@ -1220,10 +1244,20 @@ public class Hero : MonoBehaviour
             case HeroStatBoostMode.HealthRegen:
                 if (healthRegenPerSecond >= maxHealthRegenPerSecond - 0.001f) return "Regen Maxed";
                 {
-                    // Tank: regen pickups gain ×iAmTankRegenMultiplier (defaults
-                    // to 2). Show the actual delta the player will get.
-                    float perBoost = healthRegenBoostAmount;
-                    if (iAmTankActive) perBoost *= Mathf.Max(0f, iAmTankRegenMultiplier);
+                    // Show the actual delta the player will get on pickup. Tank
+                    // mode uses (oldRate + flat) × (1 + exp) − oldRate so the
+                    // displayed gain accelerates as the player stacks regen.
+                    float perBoost;
+                    if (iAmTankActive)
+                    {
+                        float boosted = (healthRegenPerSecond + Mathf.Max(0f, iAmTankRegenFlatPerBoost))
+                                      * (1f + Mathf.Max(0f, iAmTankRegenExponentialPerBoost));
+                        perBoost = boosted - healthRegenPerSecond;
+                    }
+                    else
+                    {
+                        perBoost = healthRegenBoostAmount;
+                    }
                     float regenDelta = Mathf.Min(maxHealthRegenPerSecond, healthRegenPerSecond + perBoost) - healthRegenPerSecond;
                     return $"+{regenDelta:0.##} HP/sec";
                 }
@@ -1317,14 +1351,33 @@ public class Hero : MonoBehaviour
 
             case HeroStatBoostMode.HealthRegen:
                 {
-                    float gainBase = healthRegenBoostAmount;
-                    if (iAmTankActive) gainBase *= Mathf.Max(0f, iAmTankRegenMultiplier);
-                    float gain   = gainBase * effEff;
-                    float refund = gainBase * refundEff;
-                    healthRegenPerSecond = Mathf.Min(maxHealthRegenPerSecond,
-                        healthRegenPerSecond + gain);
-                    pendingRegenRefund += refund;
-                    Debug.Log($"Hero health regen +{gain:0.##}{(cursed ? " (cursed)" : "")} → {healthRegenPerSecond} HP/sec.");
+                    if (iAmTankActive)
+                    {
+                        // Tank-mode regen pickup: flat +iAmTankRegenFlatPerBoost
+                        // hp/s plus an exponential ×(1 + iAmTankRegenExponentialPerBoost)
+                        // applied to the entire current rate. effEff scales the
+                        // FULL combined gain so the cursed/refund pipeline still
+                        // works the same way as other stat boosts.
+                        float oldRegen = healthRegenPerSecond;
+                        float boosted  = (oldRegen + Mathf.Max(0f, iAmTankRegenFlatPerBoost))
+                                       * (1f + Mathf.Max(0f, iAmTankRegenExponentialPerBoost));
+                        float fullGain = boosted - oldRegen;
+                        float gain   = fullGain * effEff;
+                        float refund = fullGain * refundEff;
+                        healthRegenPerSecond = Mathf.Min(maxHealthRegenPerSecond, oldRegen + gain);
+                        pendingRegenRefund += refund;
+                        Debug.Log($"Hero (Tank) health regen +{gain:0.###}{(cursed ? " (cursed)" : "")} → {healthRegenPerSecond:0.###} HP/sec (flat {iAmTankRegenFlatPerBoost} + ×{1f + iAmTankRegenExponentialPerBoost:0.###}).");
+                    }
+                    else
+                    {
+                        float gainBase = healthRegenBoostAmount;
+                        float gain   = gainBase * effEff;
+                        float refund = gainBase * refundEff;
+                        healthRegenPerSecond = Mathf.Min(maxHealthRegenPerSecond,
+                            healthRegenPerSecond + gain);
+                        pendingRegenRefund += refund;
+                        Debug.Log($"Hero health regen +{gain:0.##}{(cursed ? " (cursed)" : "")} → {healthRegenPerSecond} HP/sec.");
+                    }
                 }
                 break;
 
@@ -1436,8 +1489,13 @@ public class Hero : MonoBehaviour
             dmg *= Mathf.Max(1f, critDamage);
             wasCrit = true;
         }
-        if (IsTankShieldActive)
-            dmg *= Mathf.Max(0f, iAmTankDamageMultiplier);
+        // I-am-Tank permanent damage debuff. Applies forever the moment the
+        // augment is accepted — UNLESS the shield is currently up AND the
+        // shield is configured to revert the debuff, in which case the
+        // player deals full damage for the shield's duration. There's no
+        // "+damage" buff anymore, only "remove the debuff."
+        if (iAmTankActive && !(IsTankShieldActive && iAmTankShieldRestoresDamage))
+            dmg *= Mathf.Clamp01(iAmTankPermanentDamagePenalty);
         if (IsZenithCursed)
             dmg *= 0.25f;
         return dmg;
@@ -1455,8 +1513,8 @@ public class Hero : MonoBehaviour
     public float ComputeAttackDamageNoCrit(float baseDamage)
     {
         float dmg = baseDamage * Mathf.Max(0f, damageMultiplier);
-        if (IsTankShieldActive)
-            dmg *= Mathf.Max(0f, iAmTankDamageMultiplier);
+        if (iAmTankActive && !(IsTankShieldActive && iAmTankShieldRestoresDamage))
+            dmg *= Mathf.Clamp01(iAmTankPermanentDamagePenalty);
         if (IsZenithCursed)
             dmg *= 0.25f;
         return dmg;
@@ -1639,6 +1697,12 @@ public class Hero : MonoBehaviour
         IsDead = true;
         moveInput = Vector3.zero;
         speedMultiplier = 1f;
+
+        // Death SFX — fires once on the fatal hit. The damagedSound was
+        // suppressed in TakeDamage for this exact frame so the death
+        // clip plays alone instead of layering on top.
+        if (deathSound != null && SoundManager.Instance != null)
+            SoundManager.Instance.PlaySfxAt(deathSound, transform.position, deathSoundVolume);
 
         // Clean up the tank shield visual on death so it doesn't sit there
         // glowing on the corpse.

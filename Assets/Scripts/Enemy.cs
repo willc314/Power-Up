@@ -161,6 +161,12 @@ public class Enemy : MonoBehaviour
     [Tooltip("Vertical offset above the enemy pivot where particles spawn.")]
     public float hitParticleHeight = 1.0f;
 
+    [Header("Damaged SFX")]
+    [Tooltip("One-shot sound played at the enemy's position when it takes a damaging hit (i.e. damage actually got past the SlimeGod damage reduction / SlimeKing shield absorber). Routed through SoundManager so it picks up the SFX volume slider + 3D rolloff. Leave null for silent enemies.")]
+    public AudioClip damagedSound;
+    [Tooltip("Per-clip volume multiplier for the damaged SFX. Stacks on SoundManager.volume.")]
+    [Range(0f, 1f)] public float damagedSoundVolume = 1f;
+
     [Header("Charger settings")]
     [Tooltip("How much faster than moveSpeed the dash is.")]
     public float dashSpeedMultiplier = 3f;
@@ -1073,6 +1079,13 @@ public class Enemy : MonoBehaviour
         if (damageFlash != null) damageFlash.Flash();
         if (enemyAnimator != null && currentHP > 0L) enemyAnimator.OnHit();
         SpawnHitParticles();
+        // Damaged SFX — fires only when actual HP loss happens (we've
+        // already returned out for SlimeGod-absorbed and SlimeKing-shield
+        // hits above), so silent absorbs don't trigger an audio cue.
+        // 0-damage rounding cases (longDamage == 0) skip the play so a
+        // 0.3-damage tick doesn't spam the audio pool.
+        if (longDamage > 0L && damagedSound != null && SoundManager.Instance != null)
+            SoundManager.Instance.PlaySfxAt(damagedSound, transform.position, damagedSoundVolume);
         if (currentHP <= 0L) Die();
     }
 

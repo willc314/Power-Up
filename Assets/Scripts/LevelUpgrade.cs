@@ -188,9 +188,10 @@ public class IAmTankUpgrade : LevelUpgrade
         DisplayName = "I am Tank!";
         Description =
             "HP upgrades scale exponentially (+5% MaxHP per pickup).\n" +
-            "Health regen and regen upgrades have doubled effect.\n\n" +
+            "Regen pickups grant +0.1 HP/s and ×1.05 to current regen (compounding).\n\n" +
+            "PERMANENT: -35% damage dealt.\n\n" +
             "MIDDLE MOUSE BUTTON: heal 20% MaxHP and gain a shield that absorbs the next hit. " +
-            "While the shield is up, +30% damage. Shield lasts 35s. Cooldown 30s.";
+            "While the shield is up, the -35% damage debuff is REMOVED. Shield lasts 35s. Cooldown 30s.";
         UpgradeSlot = Slot.GeneralBuff;
         TargetWeapon = eWeaponType.none;
     }
