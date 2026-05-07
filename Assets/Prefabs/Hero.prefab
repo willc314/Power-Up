@@ -2711,9 +2711,9 @@ MonoBehaviour:
   bloodSenseHpPerShieldLayer: 0.3
   bloodSenseAbilityCooldown: 40
   bloodSenseSacrificeFraction: 0.6
-  bloodSenseActiveExtraLayers: 1
+  bloodSenseActiveExtraLayers: 0
   bloodSenseAttackSpeedDuration: 8
-  bloodSenseAttackSpeedMultiplier: 2
+  bloodSenseAttackSpeedMultiplier: 1.5
   bloodSenseShieldPrefab: {fileID: 6287953604210959080, guid: 5156d6689efbccb4991059f3a5755566, type: 3}
   bloodSenseShieldVisualScale: 0.9
   bloodSenseShieldVisualYOffset: 0
