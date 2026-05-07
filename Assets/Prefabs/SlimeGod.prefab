@@ -284,7 +284,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   behavior: 6
-  maxHP: 6000
+  maxHP: 10000
   attackDamage: 80
   moveSpeed: 1.2
   attackRange: 1.4
