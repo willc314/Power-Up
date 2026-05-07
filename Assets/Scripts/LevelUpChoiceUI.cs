@@ -54,6 +54,12 @@ public class LevelUpChoiceUI : MonoBehaviour
     public float   panelSpacing     = 32f;
     public Vector2 iconSize         = new Vector2(160f, 160f);
 
+    [Header("Skip Reward")]
+    [Tooltip("Additive bump to Hero.damageMultiplier when the player chooses Skip instead of an augment. 0.15 = +15% damage. Capped at maxDamageMultiplier so a stacked-skip run can't blow past the existing damage cap.")]
+    [Range(0f, 1f)] public float skipRewardDamagePct = 0.15f;
+    [Tooltip("Additive bump to Hero.maxHP when the player chooses Skip. Current HP is also healed by the same amount so the new max isn't all empty.")]
+    public float skipRewardMaxHP = 40f;
+
     // ---- Runtime state ----
     private Canvas        canvas;
     private GameObject    rootContainer;     // dim overlay + panels
@@ -233,6 +239,13 @@ public class LevelUpChoiceUI : MonoBehaviour
         savedTimeScale = Time.timeScale;
         Time.timeScale = 0f;
 
+        // Clear whatever was previously selected on the EventSystem before
+        // showing this menu — otherwise pressing Space / Enter / Submit
+        // triggers the previously-focused button (which in this menu means
+        // auto-picking an augment the moment the panel opens).
+        if (EventSystem.current != null)
+            EventSystem.current.SetSelectedGameObject(null);
+
         if (MusicManager.Instance != null) { MusicManager.Instance.BeginDuck(); duckActive = true; }
 
         // Player-facing language: "augment". Singular because each
@@ -304,6 +317,23 @@ public class LevelUpChoiceUI : MonoBehaviour
         shown = false;
     }
 
+    private void Update()
+    {
+        // Continuously clear the EventSystem's selected GameObject while
+        // the picker is shown. Without this, mouse-clicking a button
+        // auto-selects it (Unity's default behavior) and pressing Space
+        // afterward fires Submit on that button — which auto-picks an
+        // augment. Per design, Space should be inert in this menu;
+        // dropping the selection every frame guarantees Submit has no
+        // target to fire on. Mouse clicks still work because onClick
+        // fires on PointerUp, not on Submit.
+        if (shown && EventSystem.current != null
+                  && EventSystem.current.currentSelectedGameObject != null)
+        {
+            EventSystem.current.SetSelectedGameObject(null);
+        }
+    }
+
     private static string SlotLabel(LevelUpgrade.Slot slot)
     {
         switch (slot)
@@ -370,6 +400,72 @@ public class LevelUpChoiceUI : MonoBehaviour
             float cx = x0 + i * (panelSize.x + panelSpacing);
             panels[i] = BuildPanel(rootContainer.transform, new Vector2(cx, 0f));
         }
+
+        // Skip button — sits below the panels. Lets the player decline
+        // every augment offered and instead take a small consolation
+        // bonus (configured via skipRewardDamagePct + skipRewardMaxHP).
+        BuildSkipButton(rootContainer.transform);
+    }
+
+    private void BuildSkipButton(Transform parent)
+    {
+        // Center horizontally, position below the augment panels. Panels
+        // are at y=0 and panelSize.y tall, so their bottom edge is at
+        // -panelSize.y/2. Drop the skip button a bit further down.
+        float panelBottom = -panelSize.y * 0.5f;
+        var btnGo = NewUIObject(parent, "SkipButton");
+        var btnRt = btnGo.GetComponent<RectTransform>();
+        btnRt.anchorMin = new Vector2(0.5f, 0.5f);
+        btnRt.anchorMax = new Vector2(0.5f, 0.5f);
+        btnRt.pivot     = new Vector2(0.5f, 1f);
+        btnRt.anchoredPosition = new Vector2(0f, panelBottom - 32f);
+        btnRt.sizeDelta = new Vector2(560f, 56f);
+        var btnImg = btnGo.AddComponent<Image>();
+        btnImg.color = buttonColor;
+        var btn = btnGo.AddComponent<Button>();
+        var btnColors = btn.colors;
+        btnColors.normalColor      = buttonColor;
+        btnColors.highlightedColor = buttonHoverColor;
+        btnColors.pressedColor     = buttonPressedColor;
+        btnColors.selectedColor    = buttonHoverColor;
+        btn.colors = btnColors;
+
+        var lblGo = NewUIObject(btnGo.transform, "Label");
+        var lblRt = lblGo.GetComponent<RectTransform>();
+        lblRt.anchorMin = Vector2.zero; lblRt.anchorMax = Vector2.one;
+        lblRt.offsetMin = Vector2.zero; lblRt.offsetMax = Vector2.zero;
+        var lbl = lblGo.AddComponent<Text>();
+        lbl.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        lbl.alignment = TextAnchor.MiddleCenter;
+        lbl.color = textColor;
+        lbl.fontSize = 20;
+        lbl.text = $"Skip — +{skipRewardDamagePct * 100f:0}% Damage  •  +{skipRewardMaxHP:0} Max HP";
+
+        btn.onClick.AddListener(OnSkipPressed);
+    }
+
+    private void OnSkipPressed()
+    {
+        if (Hero.Instance != null && !Hero.Instance.IsDead)
+        {
+            var h = Hero.Instance;
+            // +damageMultiplier, capped at maxDamageMultiplier so a
+            // stack of skips can't blow past the existing damage cap.
+            h.damageMultiplier = Mathf.Min(h.maxDamageMultiplier,
+                h.damageMultiplier + Mathf.Max(0f, skipRewardDamagePct));
+            // +Max HP and heal by the same amount so the new max isn't
+            // all empty (matches the per-pickup pattern ApplyHeroStatBoost
+            // uses for HealthMax boosts). currentHP is private on Hero;
+            // Hero.Heal is the public path to bump it.
+            float hpGain = Mathf.Max(0f, skipRewardMaxHP);
+            h.maxHP += hpGain;
+            h.Heal(hpGain);
+            Debug.Log($"[Level-Up] Skipped augments → +{skipRewardDamagePct * 100f:0}% damage, +{hpGain:0} Max HP.");
+        }
+        Close();
+        // If another level-up was queued behind this one, drain it now —
+        // same as if the player had picked one of the augments.
+        if (pendingLevels.Count > 0) Show(pendingLevels.Dequeue());
     }
 
     private Panel BuildPanel(Transform parent, Vector2 anchoredPos)

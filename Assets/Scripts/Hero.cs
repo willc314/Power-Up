@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 /// <summary>
@@ -130,6 +131,41 @@ public class Hero : MonoBehaviour
     public AudioClip meteorImpactSound;
     [Tooltip("Per-clip volume multiplier for the meteor impact SFX. Stacks on top of SoundManager.volume. Useful if the chosen clip is louder/quieter than the rest of your SFX.")]
     [Range(0f, 1f)] public float meteorImpactSoundVolume = 1f;
+
+    [Header("Meteor Rain Active Ability (MMB)")]
+    [Tooltip("Cooldown (seconds) between Meteor Rain casts. The ability is bound to MMB while meteorEnabled is true; it's mutex with the I-am-Tank shield ability via the slot-3 lockout, so only the augment the player picked owns the input.")]
+    public float meteorRainCooldown = 30f;
+    [Tooltip("Number of individual meteors that fall during a single Meteor Rain cast. Each spawns through the same per-crit ShieldMeteor pipeline (using meteorVfxPrefab), so the visual + damage match the regular crit-trigger meteor.")]
+    public int meteorRainCount = 12;
+    [Tooltip("Total duration the rain spans, in seconds. The N meteors are spread evenly across this window so the rain reads as a sustained barrage instead of one big simultaneous boom.")]
+    public float meteorRainDuration = 4f;
+    [Tooltip("Disk radius around the cast point. Random-target meteors land at random spots inside this radius; enemy-target meteors are picked from enemies within this radius (anyone outside isn't eligible).")]
+    public float meteorRainRadius = 12f;
+    [Tooltip("Fraction of the meteors that specifically target random alive enemies inside the disk (instead of landing at random spots). 0.5 = half the meteors home onto enemies, the other half scatter randomly. If no enemies are in the disk, targeted meteors fall back to random spots automatically.")]
+    [Range(0f, 1f)] public float meteorRainEnemyTargetFraction = 0.5f;
+    [Tooltip("World-space offset added to the cast origin when computing the disk center. Useful if you want the rain to land in front of / behind the player at cast time (e.g. (0,0,3) shifts it 3 units forward).")]
+    public Vector3 meteorRainDamageOriginOffset = Vector3.zero;
+
+    [Tooltip("Per-meteor damage. Each meteor in the rain deals this much in its own AOE on impact. Multiple meteors landing on the same enemy stack damage.")]
+    public float meteorRainDamagePerMeteor = 60f;
+    [Tooltip("Per-meteor AOE radius. Each meteor's impact damages enemies inside this radius around its landing point.")]
+    public float meteorRainAOERadius = 4f;
+    [Tooltip("Per-meteor fall duration — time between visual spawn and damage landing for each individual meteor.")]
+    public float meteorRainFallDuration = 0.6f;
+    [Tooltip("Per-meteor camera shake amplitude. Lower than the regular crit-meteor shake so 12 successive shakes don't make the screen unreadable. Set to 0 to disable per-meteor shake entirely (the cast shake below still fires once).")]
+    [Range(0f, 1f)] public float meteorRainShakeAmplitude = 0.05f;
+    [Tooltip("Per-meteor camera shake duration.")]
+    [Range(0f, 1f)] public float meteorRainShakeDuration = 0.08f;
+    [Tooltip("Multiplier on meteorImpactSoundVolume for each meteor in the rain. <1 dims the rain SFX so 12 simultaneous impacts don't peak the SFX channel.")]
+    [Range(0f, 1f)] public float meteorRainSoundVolumeMultiplier = 0.4f;
+
+    [Tooltip("Layer mask for each meteor's AOE damage check. Forwarded to ShieldMeteor.Spawn as hitLayers. Set to your Enemy layer.")]
+    public LayerMask meteorRainHitLayers = ~0;
+
+    [Tooltip("One-shot SFX played at the cast origin when the rain starts (separate from the per-crit meteorImpactSound which fires once per individual meteor). Leave null to skip the cast cue.")]
+    public AudioClip meteorRainSound;
+    [Tooltip("Per-clip volume multiplier for meteorRainSound. Stacks on SoundManager.volume.")]
+    [Range(0f, 1f)] public float meteorRainSoundVolume = 1f;
 
     [Header("Damage Modifiers")]
     [Tooltip("Multiplier applied to ALL weapon damage at attack time. 1 = no change.")]
@@ -354,6 +390,10 @@ public class Hero : MonoBehaviour
     private float tankShieldTimer;            // seconds remaining on active shield (0 = no shield)
     private GameObject tankShieldInstance;    // spawned shield visual (parented to hero)
 
+    // ---- Meteor Rain runtime state ----
+    private float meteorRainCooldownTimer;    // seconds remaining before MMB can re-cast (0 = ready)
+    private bool  meteorRainActive;           // true while a rain coroutine is mid-spawn
+
     // ---- Zenith curse retroactive refunds ----
     // While the Zenith curse is active, hero stat boosts apply at half
     // efficiency and the missing half is banked here per-stat. When
@@ -388,6 +428,15 @@ public class Hero : MonoBehaviour
     public float TankAbilityCooldownProgress => iAmTankAbilityCooldown <= 0f ? 1f : Mathf.Clamp01(1f - tankCooldownTimer / iAmTankAbilityCooldown);
     /// <summary>Seconds remaining on the active shield, 0 if none.</summary>
     public float TankShieldTimeRemaining => Mathf.Max(0f, tankShieldTimer);
+
+    /// <summary>True while the meteor augment is active and Tank is NOT — the player owns MMB for Meteor Rain. Mirrors the slot-3 mutex (only one general augment per run) so callers don't have to check both flags individually.</summary>
+    public bool IsMeteorRainAvailable => meteorEnabled && !iAmTankActive;
+    /// <summary>0..1 progress for HUD ring; 1 = ready.</summary>
+    public float MeteorRainCooldownProgress => meteorRainCooldown <= 0f ? 1f : Mathf.Clamp01(1f - meteorRainCooldownTimer / meteorRainCooldown);
+    /// <summary>Seconds remaining on the meteor rain cooldown, 0 if ready.</summary>
+    public float MeteorRainCooldownRemaining => Mathf.Max(0f, meteorRainCooldownTimer);
+    /// <summary>True while a meteor rain is mid-spawn (between MMB cast and the last meteor falling).</summary>
+    public bool IsMeteorRainActive => meteorRainActive;
 
     private void Awake()
     {
@@ -526,6 +575,18 @@ public class Hero : MonoBehaviour
             // MMB to cast/refresh. Old Input Manager: button index 2.
             if (Input.GetMouseButtonDown(2) && tankCooldownTimer <= 0f && !IsDead)
                 CastTankAbility();
+        }
+
+        // ---- Meteor Rain ability tick ----
+        // Only runs when the player owns MMB for the meteor augment — Tank
+        // takes priority via the && !iAmTankActive guard, but in practice
+        // the slot-3 lockout in the registry means the two are already
+        // mutex (the player picks one general augment per run).
+        if (IsMeteorRainAvailable)
+        {
+            if (meteorRainCooldownTimer > 0f) meteorRainCooldownTimer -= Time.deltaTime;
+            if (Input.GetMouseButtonDown(2) && meteorRainCooldownTimer <= 0f && !IsDead && !meteorRainActive)
+                CastMeteorRain();
         }
 
         if (animator != null)
@@ -963,6 +1024,153 @@ public class Hero : MonoBehaviour
             Destroy(tankShieldInstance);
             tankShieldInstance = null;
         }
+    }
+
+    /// <summary>
+    /// Meteor Rain MMB ability. Calls down a barrage of meteors in a wide
+    /// disk around the hero's current position. Each meteor independently
+    /// spawns + falls + impacts via <see cref="ShieldMeteor.Spawn"/>, so the
+    /// rain feels like the regular per-crit meteor multiplied across the
+    /// area — with the same VFX, AOE damage, and audio pipeline. Cooldown
+    /// resets immediately on cast (not on rain end), so the 30s timer
+    /// includes the rain's spawn duration in its window.
+    /// </summary>
+    private void CastMeteorRain()
+    {
+        if (!IsMeteorRainAvailable || IsDead || meteorRainActive) return;
+        meteorRainCooldownTimer = Mathf.Max(0f, meteorRainCooldown);
+        StartCoroutine(MeteorRainCoroutine());
+    }
+
+    private IEnumerator MeteorRainCoroutine()
+    {
+        meteorRainActive = true;
+        // Snapshot the cast origin so the rain's footprint is committed at
+        // the press moment — the player can keep moving (dodging) while
+        // the meteors finish falling on the snapshot disk.
+        Vector3 origin = transform.position + meteorRainDamageOriginOffset;
+        int count = Mathf.Max(1, meteorRainCount);
+        float duration = Mathf.Max(0.05f, meteorRainDuration);
+        float interval = duration / count;
+        float radius = Mathf.Max(0.0001f, meteorRainRadius);
+        float perMeteorSfxVolume = meteorImpactSoundVolume * Mathf.Clamp01(meteorRainSoundVolumeMultiplier);
+        // Decide up front how many meteors target enemies vs scatter
+        // randomly. The targeted ones go first (no real reason — could
+        // also interleave; the visual ordering doesn't matter much
+        // because spawn jitter is uniform across the rain).
+        int targetedCount = Mathf.Clamp(
+            Mathf.RoundToInt(count * Mathf.Clamp01(meteorRainEnemyTargetFraction)),
+            0, count);
+
+        // One-shot cast SFX (the "sky cracks open" cue).
+        if (meteorRainSound != null && SoundManager.Instance != null)
+            SoundManager.Instance.PlaySfxAt(meteorRainSound, origin, meteorRainSoundVolume);
+
+        for (int i = 0; i < count; i++)
+        {
+            if (IsDead) break;
+
+            // Decide where this meteor lands. The first targetedCount
+            // meteors home onto a random alive enemy inside the disk;
+            // the rest land at uniform random spots. Targeted meteors
+            // fall back to a random spot if the disk has no enemies
+            // available at spawn time, so a casted rain on an empty
+            // arena still fully resolves.
+            Vector3 landPos;
+            if (i < targetedCount)
+            {
+                Enemy target = PickRandomAliveEnemyInRadius(origin, radius);
+                landPos = target != null
+                    ? target.transform.position
+                    : RandomDiskPoint(origin, radius);
+            }
+            else
+            {
+                landPos = RandomDiskPoint(origin, radius);
+            }
+
+            // Route each meteor's damage through the player's full attack
+            // pipeline so the rain scales with damageMultiplier (Damage
+            // Boosts) AND rolls for crits per-meteor (lets some meteors
+            // visibly hit harder than others — adds variety to the rain).
+            // Also automatically respects any future damage modifiers
+            // added to ComputeAttackDamage. ShieldMeteor.Spawn calls
+            // Enemy.TakeDamage directly with the result, so there's no
+            // recursive meteor spawn — the per-crit meteor augment only
+            // fires off WEAPON attacks, not from inside the rain.
+            float scaledDamage = ComputeAttackDamage(meteorRainDamagePerMeteor);
+            ShieldMeteor.Spawn(
+                targetPos:         landPos,
+                damage:            scaledDamage,
+                fallDuration:      meteorRainFallDuration,
+                aoeRadius:         meteorRainAOERadius,
+                vfxPrefab:         meteorVfxPrefab,
+                vfxRotationOffset: meteorVfxRotationOffset,
+                vfxScale:          meteorVfxScale,
+                shakeAmplitude:    meteorRainShakeAmplitude,
+                shakeDuration:     meteorRainShakeDuration,
+                impactSound:       meteorImpactSound,
+                impactSoundVolume: perMeteorSfxVolume,
+                hitLayers:         meteorRainHitLayers);
+
+            if (i < count - 1) yield return new WaitForSeconds(interval);
+        }
+
+        meteorRainActive = false;
+    }
+
+    /// <summary>
+    /// Uniform random point inside a horizontal disk centered on
+    /// <paramref name="center"/>. sqrt(t) on the radius sample keeps
+    /// points evenly distributed across the disk's AREA instead of
+    /// clustering at the center (which a plain radius * Random.value
+    /// sample would do).
+    /// </summary>
+    private static Vector3 RandomDiskPoint(Vector3 center, float radius)
+    {
+        float angle = Random.Range(0f, Mathf.PI * 2f);
+        float r = Mathf.Sqrt(Random.value) * Mathf.Max(0.0001f, radius);
+        return center + new Vector3(Mathf.Cos(angle) * r, 0f, Mathf.Sin(angle) * r);
+    }
+
+    /// <summary>
+    /// Pick a uniformly random alive Enemy whose horizontal position is
+    /// inside <paramref name="radius"/> of <paramref name="center"/>.
+    /// Returns null if the spawner registry isn't available or no enemy
+    /// qualifies. Allocation-free (two-pass count + select).
+    /// </summary>
+    private static Enemy PickRandomAliveEnemyInRadius(Vector3 center, float radius)
+    {
+        var spawner = EnemySpawner.Instance;
+        if (spawner == null || spawner.AliveEnemies == null) return null;
+        var list = spawner.AliveEnemies;
+        float r2 = radius * radius;
+
+        int validCount = 0;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var e = list[i];
+            if (e == null || e.IsDead) continue;
+            Vector3 d = e.transform.position - center;
+            d.y = 0f;
+            if (d.sqrMagnitude > r2) continue;
+            validCount++;
+        }
+        if (validCount == 0) return null;
+
+        int chosen = Random.Range(0, validCount);
+        int seen = 0;
+        for (int i = 0; i < list.Count; i++)
+        {
+            var e = list[i];
+            if (e == null || e.IsDead) continue;
+            Vector3 d = e.transform.position - center;
+            d.y = 0f;
+            if (d.sqrMagnitude > r2) continue;
+            if (seen == chosen) return e;
+            seen++;
+        }
+        return null;
     }
 
     public void ApplyPowerUp(eWeaponType type)

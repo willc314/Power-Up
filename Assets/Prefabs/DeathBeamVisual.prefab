@@ -128,7 +128,10 @@ MonoBehaviour:
   shakeAmplitude: 0.25
   vfxPrefab: {fileID: 0}
   spawnHeight: 1
-  fireSound: {fileID: 8300000, guid: 47b7461e1476a59449af3fabcc835f3a, type: 3}
+  useFixedTransform: 0
+  tintColor: {r: 1, g: 1, b: 1, a: 0}
+  emissionBloomIntensity: 1
+  fireSound: {fileID: 0}
   fireSoundVolume: 1
   beamParticlesPerSecond: 80
   beamParticleColor: {r: 1, g: 1, b: 1, a: 1}

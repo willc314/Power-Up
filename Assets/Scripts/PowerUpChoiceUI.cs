@@ -175,6 +175,14 @@ public class PowerUpChoiceUI : MonoBehaviour
         Time.timeScale = 0f;
         panelRoot.SetActive(true);
 
+        // Clear whatever was previously selected on the EventSystem before
+        // showing this menu. Update() then re-clears every frame while
+        // the panel is open — together they ensure Space / Enter / Submit
+        // never has a focused button to activate, so the player can't
+        // accidentally pick an upgrade with the keyboard.
+        if (EventSystem.current != null)
+            EventSystem.current.SetSelectedGameObject(null);
+
         // Dim the music while the player is choosing a powerup. EndDuck pairs with this in Close().
         if (MusicManager.Instance != null) MusicManager.Instance.BeginDuck();
 
@@ -385,6 +393,7 @@ public class PowerUpChoiceUI : MonoBehaviour
             slot.boostButton.onClick.RemoveAllListeners();
             Weapon weaponRef = equipped;
             BoostKind kindRef = boostKind;
+            eWeaponType pickupTypeRef = pendingType;
 
             // (Zenith is no longer triggered via a Grenade pickup option —
             // it auto-activates once the sword meets all four stat
@@ -392,10 +401,25 @@ public class PowerUpChoiceUI : MonoBehaviour
             // >30% cooldown reduction. See SwordWeapon.CheckZenithAutoActivation.)
             string boostPrefix = maxed ? "Boost " + equipped.weaponName + " (post-max):  "
                                        : "Boost " + equipped.weaponName + ":  ";
+            // Set the bow's pickup-source hint BEFORE asking it to describe
+            // the boost — Heavenly Gale's bow-pickup branch needs the hint
+            // to show the right label ("+1 Pierce  •  +X Damage" vs the
+            // regular "+5 Max Damage  •  +25 Beam DPS"). Cleared after.
+            if (equipped is BowWeapon bowForLabel)
+                bowForLabel.pickupSourceTypeHint = pendingType;
             slot.boostButtonText.text = boostPrefix + equipped.DescribeBoost(boostKind);
+            if (equipped is BowWeapon bowForLabelReset)
+                bowForLabelReset.pickupSourceTypeHint = eWeaponType.none;
             slot.boostButton.onClick.AddListener(() =>
             {
+                // Same hint dance for the actual application — bow pickups
+                // under Heavenly Gale dispatch to TryApplyHeavenlyGaleBowPickup
+                // when the hint is set, and the regular damage path otherwise.
+                if (weaponRef is BowWeapon bowForApply)
+                    bowForApply.pickupSourceTypeHint = pickupTypeRef;
                 hero.UpgradeWeaponPower(weaponRef, kindRef);
+                if (weaponRef is BowWeapon bowForApplyReset)
+                    bowForApplyReset.pickupSourceTypeHint = eWeaponType.none;
                 Close();
             });
 
@@ -444,6 +468,23 @@ public class PowerUpChoiceUI : MonoBehaviour
     private void Hide()
     {
         if (panelRoot != null) panelRoot.SetActive(false);
+    }
+
+    private void Update()
+    {
+        // Continuously clear the EventSystem's selected GameObject while
+        // the picker is open. Without this, mouse-clicking a button
+        // auto-selects it (Unity's default behavior) and pressing Space
+        // afterward fires Submit on that button — which auto-picks an
+        // upgrade. Per design, Space should be inert in this menu;
+        // dropping the selection every frame guarantees Submit has no
+        // target to fire on. Mouse clicks still work because onClick
+        // fires on PointerUp, not on Submit.
+        if (IsOpen && EventSystem.current != null
+                   && EventSystem.current.currentSelectedGameObject != null)
+        {
+            EventSystem.current.SetSelectedGameObject(null);
+        }
     }
 
     // -------------------- UI construction --------------------

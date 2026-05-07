@@ -74,6 +74,12 @@ public class Projectile : MonoBehaviour
     // that enemy. Cached lazily because the armer is attached AFTER Launch.
     private ShivArmer shivArmer;
     private bool shivArmerLookedUp;
+    // Cached reference to an optional SkyBeamArmer — added by BowWeapon
+    // when Heavenly Gale is active. Each enemy hit independently rolls
+    // chancePerHit; on success spawns a sky death beam on that enemy.
+    // Cached lazily because the armer is attached AFTER Launch.
+    private SkyBeamArmer skyBeamArmer;
+    private bool skyBeamArmerLookedUp;
 
     public void Launch(Vector3 dir, float damage, LayerMask enemyLayers)
     {
@@ -150,6 +156,11 @@ public class Projectile : MonoBehaviour
                 // it pierces, scaling the augment's value with pierce.
                 if (!shivArmerLookedUp) { shivArmer = GetComponent<ShivArmer>(); shivArmerLookedUp = true; }
                 if (shivArmer != null) shivArmer.TriggerOn(e);
+                // Heavenly Gale sky beam (bow only): EVERY enemy hit
+                // independently rolls chancePerHit. Lets a piercing
+                // arrow chain multiple beams across a packed group.
+                if (!skyBeamArmerLookedUp) { skyBeamArmer = GetComponent<SkyBeamArmer>(); skyBeamArmerLookedUp = true; }
+                if (skyBeamArmer != null) skyBeamArmer.OnEnemyHit(e);
                 if (damageFalloffPerHit < 1f - 0.0001f)
                 {
                     damageScale = Mathf.Max(damageFalloffFloor, damageScale * damageFalloffPerHit);

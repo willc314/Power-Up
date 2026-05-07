@@ -2679,7 +2679,7 @@ MonoBehaviour:
   tankShieldFreezeTime: 1.5
   meteorEnabled: 0
   meteorChanceOnCrit: 0.4
-  meteorDamageMultiplier: 2
+  meteorDamageMultiplier: 2.5
   meteorVfxPrefab: {fileID: 100008, guid: 90d6be0259fe4e24185ac6be60610b9c, type: 3}
   meteorVfxRotationOffset: {x: 90, y: 0, z: 0}
   meteorVfxScale: 0.5
@@ -2689,6 +2689,23 @@ MonoBehaviour:
   meteorShakeDuration: 0.15
   meteorImpactSound: {fileID: 0}
   meteorImpactSoundVolume: 1
+  meteorRainCooldown: 50
+  meteorRainCount: 100
+  meteorRainDuration: 4
+  meteorRainRadius: 12
+  meteorRainEnemyTargetFraction: 0.2
+  meteorRainDamageOriginOffset: {x: 0, y: 0, z: 0}
+  meteorRainDamagePerMeteor: 60
+  meteorRainAOERadius: 4
+  meteorRainFallDuration: 0.6
+  meteorRainShakeAmplitude: 0.18
+  meteorRainShakeDuration: 0.25
+  meteorRainSoundVolumeMultiplier: 0.4
+  meteorRainHitLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  meteorRainSound: {fileID: 0}
+  meteorRainSoundVolume: 1
   damageMultiplier: 1
   damageBoostAmount: 0.15
   maxDamageMultiplier: 100
@@ -2909,6 +2926,35 @@ MonoBehaviour:
   overchargedHeroAuraPrefab: {fileID: 6063518424537689786, guid: bad5794a53f5c3645bb444b3a040ba01, type: 3}
   heroAuraYOffset: 0
   heroAuraScale: 1
+  heavenlyGaleEnabled: 0
+  galeChargeTime: 3
+  galeBarrageBaseDuration: 2.5
+  galeBarrageDurationPerBoost: 0.3
+  galeBarrageMaxDuration: 12
+  galeBarrageBaseInterval: 0.18
+  galeBarrageIntervalPerBoost: 0.8512644
+  galeBarrageMinInterval: 0.001
+  galeBarrageBaseProjectilesPerShot: 1
+  galeBarrageProjectilesPerBoost: 1
+  galeBarrageMaxProjectilesPerShot: 20
+  galeOscillationDegreesPerSide: 50
+  galeOscillationStepDegrees: 10
+  galeDeathBeamChancePerArrow: 0.05
+  galeDeathBeamDuration: 2.5
+  galeDeathBeamRadiusMultiplier: 0.35
+  galeDeathBeamSkyHeight: 30
+  galeDeathBeamMinTiltDegrees: 12
+  galeDeathBeamMaxTiltDegrees: 32
+  galeDeathBeamGroundExtension: 4
+  galeDeathBeamBloomIntensity: 4
+  galeDeathBeamShakeAmplitude: 0.05
+  galeDeathBeamTargetSearchRadius: 25
+  galeBowPickupPierceBonus: 1
+  galeBowPickupDamageScale: 0.5
+  galeShieldPickupLifetimeBonus: 0.5
+  galeShieldPickupDamageScale: 1
+  galeBarrageArrowPrefab: {fileID: 4620594600889568894, guid: 79c8df3e3272f20468f9e0a96ba55df4, type: 3}
+  galeArrowTrailAlpha: 0.196
   maxDamageIncreasePerLevel: 8
   minDamageIncreasePerLevel: 4
   minFullChargeTime: 0.4
@@ -3080,14 +3126,14 @@ MonoBehaviour:
   elementalThrownDaggerPrefab: {fileID: -5115320881736233332, guid: 06b82c46265eac04fb97e730ab6e9390, type: 3}
   elementalCloneVisualPrefab: {fileID: 323333351367080586, guid: 9b3c02a198a4196458a48e67b9a4e393, type: 3}
   cloneVisualRotationOffset: {x: 90, y: 0, z: 0}
-  cloneColor: {r: 0.55, g: 0.85, b: 1, a: 0.3137255}
+  cloneColor: {r: 0.55, g: 0.85, b: 1, a: 0.27450982}
   useRainbowCloneColor: 1
   cloneCountMin: 2
   cloneCountMax: 3
   cloneSpawnDistance: 4
   cloneTravelDuration: 0.4
   cloneVerticalOffset: 1
-  cloneDamageMultiplier: 0.8
+  cloneDamageMultiplier: 0.6
   shivDebuffDuration: 3
   shivSlowFactor: 0.7
   shivDamageFactor: 0.7

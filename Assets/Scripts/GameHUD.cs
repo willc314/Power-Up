@@ -104,6 +104,12 @@ public class GameHUD : MonoBehaviour
     [Tooltip("Optional icon for the I-am-Tank shield ability HUD slot. Square sprite (e.g. shield icon). Leave null for text-only.")]
     public Sprite tankAbilityIcon;
 
+    // Meteor Rain ability slot (same screen position as tankSlot — they're
+    // mutex via the slot-3 lockout, only one is ever visible).
+    private TankWidgets meteorSlot;
+    [Tooltip("Optional icon for the Meteor Rain ability HUD slot. Square sprite (e.g. comet icon). Leave null for text-only.")]
+    public Sprite meteorAbilityIcon;
+
     // Boss HP bar (bottom-center; only shown while a SlimeGod is alive).
     private GameObject bossBarRoot;
     private RectTransform bossBarFillRect;
@@ -141,6 +147,7 @@ public class GameHUD : MonoBehaviour
         UpdateWeaponSlots();
         UpdateDashSlot();
         UpdateTankSlot();
+        UpdateMeteorSlot();
         UpdateBossBar();
         UpdateXPBar();
     }
@@ -718,6 +725,15 @@ public class GameHUD : MonoBehaviour
         // with the dash slot and offset upward by one slot height + gap.
         tankSlot = BuildTankSlot(parent, totalWidth, totalHeight);
         tankSlot.root.SetActive(false); // hidden until iAmTankActive
+
+        // Meteor Rain slot — same screen position as the Tank slot (they're
+        // mutex via slot-3 lockout). Both slots exist; only one is ever
+        // visible because the player picks one general augment per run.
+        meteorSlot = BuildTankSlot(parent, totalWidth, totalHeight);
+        meteorSlot.root.name = "MeteorRainAbilitySlot";
+        if (meteorAbilityIcon != null) meteorSlot.iconImage.sprite = meteorAbilityIcon;
+        else                            meteorSlot.iconImage.color = new Color(1f, 0.55f, 0.2f, 0.22f); // faint orange placeholder
+        meteorSlot.root.SetActive(false); // hidden until meteorEnabled
     }
 
     private TankWidgets BuildTankSlot(Transform parent, int weaponContainerWidth, int weaponContainerHeight)
@@ -852,6 +868,47 @@ public class GameHUD : MonoBehaviour
             tankSlot.labelText.text = "TANK";
             tankSlot.labelText.color = textColor;
             if (tankSlot.cooldownOverlay != null) tankSlot.cooldownOverlay.fillAmount = 0f;
+        }
+    }
+
+    private void UpdateMeteorSlot()
+    {
+        if (meteorSlot.root == null || hero == null) return;
+
+        // Show only when the meteor augment owns MMB. IsMeteorRainAvailable
+        // collapses (meteorEnabled && !iAmTankActive), which mirrors the
+        // slot-3 mutex (only one general augment per run).
+        bool active = hero.IsMeteorRainAvailable;
+        if (meteorSlot.root.activeSelf != active) meteorSlot.root.SetActive(active);
+        if (!active) return;
+
+        float total = Mathf.Max(0.001f, hero.meteorRainCooldown);
+        float remaining = hero.MeteorRainCooldownRemaining;
+
+        if (hero.IsMeteorRainActive)
+        {
+            // Mid-cast — flash a label that reads as "rain falling now"
+            // so the player can tell their cast went off even though the
+            // cooldown immediately starts ticking.
+            meteorSlot.labelText.text = "RAIN!";
+            meteorSlot.labelText.color = new Color(1f, 0.7f, 0.3f, 1f);
+            if (meteorSlot.cooldownOverlay != null)
+                meteorSlot.cooldownOverlay.fillAmount = Mathf.Clamp01(remaining / total);
+        }
+        else if (remaining > 0.05f)
+        {
+            // On cooldown.
+            meteorSlot.labelText.text = remaining >= 1f ? remaining.ToString("0") : remaining.ToString("0.0");
+            meteorSlot.labelText.color = textColor;
+            if (meteorSlot.cooldownOverlay != null)
+                meteorSlot.cooldownOverlay.fillAmount = Mathf.Clamp01(remaining / total);
+        }
+        else
+        {
+            // Ready.
+            meteorSlot.labelText.text = "RAIN";
+            meteorSlot.labelText.color = textColor;
+            if (meteorSlot.cooldownOverlay != null) meteorSlot.cooldownOverlay.fillAmount = 0f;
         }
     }
 

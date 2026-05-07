@@ -67,6 +67,18 @@ public abstract class LevelUpgrade
     /// on the hero or in <see cref="LevelUpgradeRegistry"/>).
     /// </summary>
     public abstract void Apply(Hero hero);
+
+    /// <summary>
+    /// Convenience used by every concrete subclass to populate its
+    /// <see cref="Icon"/> from <c>Assets/Resources/UpgradeIcons/&lt;name&gt;</c>.
+    /// Returns null silently if the file isn't there, in which case the
+    /// LevelUpChoiceUI just shows its placeholder square — so the augment
+    /// is still functional, just iconless until the asset is dropped in.
+    /// </summary>
+    protected static Sprite LoadIcon(string fileNameWithoutExtension)
+    {
+        return Resources.Load<Sprite>("UpgradeIcons/" + fileNameWithoutExtension);
+    }
 }
 
 /// <summary>
@@ -107,6 +119,7 @@ public class LevelUpgradeRegistry
         Instance.GeneralUpgrades.Add(new MeteorUpgrade());
         Instance.WeaponUpgrades.Add(new SwordZenithUpgrade());
         Instance.WeaponUpgrades.Add(new DaggerElementalShivUpgrade());
+        Instance.WeaponUpgrades.Add(new BowHeavenlyGaleUpgrade());
         return Instance;
     }
 
@@ -187,13 +200,15 @@ public class IAmTankUpgrade : LevelUpgrade
     {
         DisplayName = "I am Tank!";
         Description =
-            "HP upgrades scale exponentially (+5% MaxHP per pickup).\n" +
-            "Regen pickups grant +0.1 HP/s and ×1.05 to current regen (compounding).\n\n" +
+            "<b>Become a tank!</b>\n" +
+            "Health and Regen Powerups become exponential\n\n" +
             "PERMANENT: -35% damage dealt.\n\n" +
-            "MIDDLE MOUSE BUTTON: heal 20% MaxHP and gain a shield that absorbs the next hit. " +
-            "While the shield is up, the -35% damage debuff is REMOVED. Shield lasts 35s. Cooldown 30s.";
+            "MIDDLE MOUSE BUTTON: heal 20% Max HP and gain a shield" +
+            "Damage dealt recovers to normal while shield persists.\n" +
+            "(Cooldown 30s)";
         UpgradeSlot = Slot.GeneralBuff;
         TargetWeapon = eWeaponType.none;
+        Icon = LoadIcon("IAmTank");
     }
 
     public override bool IsAvailable(Hero hero)
@@ -243,9 +258,10 @@ public class SwordZenithUpgrade : LevelUpgrade
     public SwordZenithUpgrade()
     {
         DisplayName = "Zenith";
-        Description = "The culmination of a journey\nProve yourself worthy of the end\n\nYou Will Suffer";
+        Description = "<b>'The culmination of a journey'</b>\nProve yourself worthy of the end\n\nYou will suffer a curse until you achieve Zenith";
         UpgradeSlot = Slot.EquippedWeapon; // overridden by registry slot fitting based on equip
         TargetWeapon = eWeaponType.sword;
+        Icon = LoadIcon("Zenith");
     }
 
     public override bool IsAvailable(Hero hero)
@@ -307,11 +323,15 @@ public class MeteorUpgrade : LevelUpgrade
     {
         DisplayName = "Meteor";
         Description =
-            "Critical hits from ANY weapon have a 50% chance to call down a " +
-            "meteor on the first enemy struck by that attack. The meteor deals " +
-            "4× the attack's damage as AOE.";
+            "<b>Rain down divine judgement!</b>\n"+                                        
+            "Critical hits from ANY weapon have a 40% chance to call down a " +
+            "meteor, dealing massive damage.\n\n"+
+            "MIDDLE MOUSE BUTTON:\n"+
+            "call down a barrage of meteors " +
+            "Cooldown 30s.";
         UpgradeSlot = Slot.GeneralBuff;
         TargetWeapon = eWeaponType.none;
+        Icon = LoadIcon("Meteor");
     }
 
     public override bool IsAvailable(Hero hero)
@@ -344,6 +364,46 @@ public class MeteorUpgrade : LevelUpgrade
 /// model the player wired up on DaggerWeapon.
 /// </summary>
 [Preserve]
+public class BowHeavenlyGaleUpgrade : LevelUpgrade
+{
+    [Preserve]
+    public BowHeavenlyGaleUpgrade()
+    {
+        DisplayName = "Heavenly Gale";
+        Description =
+            "<b>Show them the fury of the sky!</b>\n\n" +
+            "The bow now charges for a full 3 seconds\n" +
+            "On release, fires a barrage of homing arrows" +
+            "with a chance to call down a death beam from the skies.";
+        UpgradeSlot = Slot.EquippedWeapon; // overridden by registry slot fitting
+        TargetWeapon = eWeaponType.bow;
+        Icon = LoadIcon("HeavenlyGale");
+    }
+
+    public override bool IsAvailable(Hero hero)
+    {
+        if (hero == null) return false;
+        BowWeapon bow = hero.GetWeaponComponentForType(eWeaponType.bow) as BowWeapon;
+        if (bow == null) return false;
+        if (bow.heavenlyGaleEnabled) return false;
+        return true;
+    }
+
+    public override void Apply(Hero hero)
+    {
+        if (hero == null) return;
+        BowWeapon bow = hero.GetWeaponComponentForType(eWeaponType.bow) as BowWeapon;
+        if (bow == null)
+        {
+            Debug.LogWarning("[Heavenly Gale] No BowWeapon component on hero — augment no-op.");
+            return;
+        }
+        bow.ApplyHeavenlyGale();
+        Debug.Log("[Level-Up] Heavenly Gale activated.");
+    }
+}
+
+[Preserve]
 public class DaggerElementalShivUpgrade : LevelUpgrade
 {
     [Preserve]
@@ -351,12 +411,13 @@ public class DaggerElementalShivUpgrade : LevelUpgrade
     {
         DisplayName = "Elemental Shiv";
         Description =
-            "Every dagger hit summons 2-3 ghostly elemental copies that strike " +
-            "the target from random angles. Each clone deals 80% of the dagger's " +
-            "damage and refreshes a 3s debuff: target moves 30% slower and deals " +
-            "30% less damage.";
+            "<b>Imbue your dagger with elemental might!</b>\n\n" +
+            "Every dagger hit summons 2-3 elemental copies that strike " +
+            "the target from random angles. Each clone deals 60% of the dagger's " +
+            "damage and cripples the target.";
         UpgradeSlot = Slot.EquippedWeapon; // overridden by registry slot fitting
         TargetWeapon = eWeaponType.dagger;
+        Icon = LoadIcon("ElementalShiv");
     }
 
     public override bool IsAvailable(Hero hero)
