@@ -541,11 +541,14 @@ MonoBehaviour:
   hitParticleLifetime: 0.5
   hitParticleSpread: 35
   hitParticleHeight: 1
+  damagedSound: {fileID: 8300000, guid: 68dcc44cebdfb0a4488f492e8d505de6, type: 3}
+  damagedSoundVolume: 0.05
   dashSpeedMultiplier: 6
   dashTelegraphTime: 0.8
+  dashLockOnDelay: 0.15
   dashDuration: 0.3
   dashRecovery: 1.2
-  crossbowProjectile: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
+  crossbowProjectile: {fileID: 5082396591220985723, guid: 2127089df43e8d54faa8d7bb483224dd, type: 3}
   crossbowDamage: 40
   crossbowProjectileSpeed: 100
   crossbowSpawnHeight: 1.5
@@ -569,12 +572,12 @@ MonoBehaviour:
   skSpeedBoostMultiplier: 1.8
   skSpeedBoostDuration: 4
   skShieldHits: 3
-  skAttackSpeedBoostMultiplier: 0.1
+  skAttackSpeedBoostMultiplier: 0.15
   skAttackSpeedBoostDuration: 5
   skKiteRange: 7
   splitOnDeath: 1
   splitPrefab: {fileID: 1931298151966786, guid: 928a1377c1cd4515b208fef3a396b8ea, type: 3}
-  splitCount: 10
+  splitCount: 12
   splitRadius: 1.6
   projectilePrefab: {fileID: 0}
   projectileSpawn: {fileID: 0}

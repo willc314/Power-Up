@@ -78,8 +78,68 @@ public class SwordSlash : MonoBehaviour
     [Tooltip("Z rotation on the model. Use to flip the blade if needed.")]
     public float modelRoll = 0f;
 
+    // ---- Zenith (set by SwordWeapon at spawn time when zenithApplied) ----
+    [System.NonSerialized] public bool zenithMode = false;
+    [System.NonSerialized] public float zenithSemiMinor = 1.4f;
+    /// <summary>Major (forward / cursor) semi-axis of the zenith ellipse.
+    /// SwordWeapon snapshots the cursor's actual distance from the hero at
+    /// swing-spawn time and writes it here so the swing's apex lands
+    /// exactly on the cursor instead of at a fixed orbit radius. 0 (default)
+    /// falls back to the slash's <see cref="radius"/> field.</summary>
+    [System.NonSerialized] public float zenithMajorRadius = 0f;
+    [System.NonSerialized] public Color trailTint = Color.white;
+
+    [Header("Zenith Trail Tuning")]
+    [Tooltip("Multiplier applied to TrailRenderer.startWidth / endWidth in Zenith mode. 2 = trail is 2× the prefab-authored width while Zenith is active. Non-Zenith swings keep using the Tiny.Trail prefab visuals untouched.")]
+    public float zenithTrailWidthMultiplier = 2.0f;
+    [Tooltip("Alpha along the LENGTH at the trail HEAD (newest position, near the blade tip).")]
+    [Range(0f, 1f)] public float zenithTrailHeadAlpha = 1.0f;
+    [Tooltip("Alpha along the LENGTH at the trail TAIL (oldest position, fading into the air behind the blade).")]
+    [Range(0f, 1f)] public float zenithTrailTailAlpha = 0.0f;
+    [Tooltip("Alpha along the WIDTH on the side facing the BLADE TIP. Combines multiplicatively with the head/tail length fade by sampling a runtime-baked vertical gradient on the trail material's main texture.")]
+    [Range(0f, 1f)] public float zenithTrailTipSideAlpha = 1.0f;
+    [Tooltip("Alpha along the WIDTH on the side facing the SWORD BASE. Lower values fade the trail's bottom edge so the trail visually anchors to the blade tip.")]
+    [Range(0f, 1f)] public float zenithTrailBaseSideAlpha = 0.0f;
+    [Tooltip("Shader property name on the trail material used for the runtime width-fade gradient. '_MainTex' works with the standard Sprites/Particles unlit shaders. If your trail uses a custom shader sampling a different 2D texture for vertex color modulation, override here.")]
+    public string zenithTrailWidthTextureProperty = "_MainTex";
+    [Tooltip("If the visible width fade is reversed (tip-side ends up the transparent edge), flip this. Just inverts the bake direction without you having to swap the alpha values.")]
+    public bool zenithTrailFlipWidthGradient = false;
+
+    // Cached gradient textures and property block, shared across all swings.
+    // We pre-bake TWO textures — one canonical (V=0 base, V=1 tip) for
+    // left-to-right swings and one V-reversed for right-to-left swings —
+    // and swap which one the property block points at based on swing
+    // direction. We do NOT rely on _MainTex_ST to flip V via the property
+    // block: many trail / particle / unlit shaders sample _MainTex
+    // directly without applying TRANSFORM_TEX, so an _ST override silently
+    // no-ops and the gradient stays mirrored on alternating swings. Two
+    // pre-baked textures bypass that entirely. Memory cost is ~512 bytes
+    // for both (1×64 RGBA32 each). Rebuilt only when the tip/base alpha
+    // inspector values change.
+    private static Texture2D zenithWidthGradientCanonical_;
+    private static Texture2D zenithWidthGradientFlipped_;
+    private static float cachedTipSideAlpha_  = float.NaN;
+    private static float cachedBaseSideAlpha_ = float.NaN;
+    private static MaterialPropertyBlock zenithMpb_;
+    private static int   zenithWidthTexId_    = -1;
+    private static string zenithWidthTexProp_ = null;
+
     private Transform owner;
     private float damage;
+    /// <summary>
+    /// Owner rotation snapshotted at <see cref="Init"/> time so the swing's
+    /// arc stays in its initial world-facing direction even if the player
+    /// rotates mid-swing (cursor turn / dash-induced facing change).
+    /// </summary>
+    private Quaternion frozenRotation;
+    /// <summary>
+    /// Owner position snapshotted at <see cref="Init"/>. Combined with
+    /// frozenRotation this fully decouples the swing from the player —
+    /// dashing, sprinting, or being knocked across the arena mid-swing
+    /// leaves the slash committed to its original world location and
+    /// arc, so swings always complete on the spot they started.
+    /// </summary>
+    private Vector3 frozenPosition;
     private LayerMask enemyLayers;
     private bool rightToLeft;
     private float timer;
@@ -87,14 +147,124 @@ public class SwordSlash : MonoBehaviour
     private readonly HashSet<Enemy> alreadyHit = new HashSet<Enemy>();
     private readonly Collider[] hitBuffer = new Collider[64];
 
+    // Cached lookup for the Meteor general augment (see MeteorArmer). If the
+    // swing was rolled at fire time, the first valid enemy hit consumes it
+    // and spawns a meteor at the enemy's position. Lazily fetched because
+    // the armer is attached AFTER Init runs by SwordWeapon.Fire.
+    private MeteorArmer meteorArmer;
+
     public void Init(Transform owner, float damage, LayerMask enemyLayers, bool rightToLeft)
     {
         this.owner = owner;
         this.damage = damage;
         this.enemyLayers = enemyLayers;
         this.rightToLeft = rightToLeft;
+        // Snapshot rotation AND position now — the swing is fully
+        // committed to the player's transform at the click frame and is
+        // unaffected by any subsequent movement or rotation. Mid-swing
+        // dashes, knockbacks, or cursor turns leave the slash on its
+        // original arc at its original world location.
+        this.frozenRotation = owner != null ? owner.rotation : Quaternion.identity;
+        this.frozenPosition = owner != null ? owner.position : transform.position;
 
         timer = 0f;
+
+        // Trail mode dispatch:
+        //
+        // Non-Zenith swings keep the original Tiny.Trail (mesh-baked) look —
+        // it's authored on the prefab and feels right for the regular sword.
+        // We force-disable any Unity TrailRenderer children so the augment
+        // trail doesn't bleed into the base swings.
+        //
+        // Zenith swings use the Unity TrailRenderer instead: it's cheap,
+        // tolerates fast arcs, and supports a clean head→tail alpha fade
+        // (head near the blade tip stays opaque, tail dissolves away).
+        // Tiny.Trail children are turned off for Zenith so the two trail
+        // systems don't double up. Width is multiplied by
+        // zenithTrailWidthMultiplier so the prefab-authored proportions
+        // stay intact while the augment reads as visibly bigger.
+        if (zenithMode)
+        {
+            Color head = trailTint; head.a = Mathf.Clamp01(zenithTrailHeadAlpha);
+            Color tail = trailTint; tail.a = Mathf.Clamp01(zenithTrailTailAlpha);
+
+            // Bake / fetch the width-axis alpha gradient textures and prepare
+            // the MaterialPropertyBlock once per swing. We don't mutate
+            // tr.material (which would instance and leak materials per
+            // swing) — instead we override _MainTex via a property block,
+            // which composes multiplicatively with the trail's vertex color
+            // (head/tail length fade) inside any standard texture-sampling
+            // shader. If the trail material doesn't sample _MainTex, set
+            // zenithTrailWidthTextureProperty to whatever sampler does.
+            //
+            // We bake TWO textures (canonical + V-reversed) and swap based
+            // on swing direction: when the sword model is yaw-flipped on
+            // rightToLeft swings the trail's V axis flips with it, so the
+            // gradient would visibly reverse on alternating swings without
+            // a per-swing correction. Pre-baked textures (instead of an
+            // _ST UV-flip) guarantee the correction takes effect regardless
+            // of how the trail's shader handles UV transforms — many
+            // particle/unlit shaders ignore _MainTex_ST overrides from a
+            // property block, which is why the previous _ST-based flip
+            // didn't visibly do anything on this material.
+            EnsureZenithWidthGradients(
+                Mathf.Clamp01(zenithTrailTipSideAlpha),
+                Mathf.Clamp01(zenithTrailBaseSideAlpha));
+            int widthTexId = GetZenithWidthTexId(zenithTrailWidthTextureProperty);
+            if (zenithMpb_ == null) zenithMpb_ = new MaterialPropertyBlock();
+
+            // Compose the V-axis flip:
+            //   - rightToLeft: yaw-mirrored swing flips the visible V edge.
+            //   - inspector toggle: lets the user correct an inverted setup
+            //     without having to swap the alpha values.
+            // XOR so two flips cancel, matching natural inversion semantics.
+            bool useFlipped = rightToLeft ^ zenithTrailFlipWidthGradient;
+            Texture2D widthTex = useFlipped ? zenithWidthGradientFlipped_ : zenithWidthGradientCanonical_;
+
+            foreach (var tr in GetComponentsInChildren<TrailRenderer>(true))
+            {
+                tr.enabled    = true;
+                tr.startColor = head;
+                tr.endColor   = tail;
+                // Read whatever the prefab authored as the "1× width" baseline
+                // and scale it. We touch widthMultiplier (rather than
+                // startWidth/endWidth) so designers who set a non-trivial
+                // widthCurve keep their authored profile and just get it
+                // scaled by the multiplier.
+                float mul = Mathf.Max(0.01f, zenithTrailWidthMultiplier);
+                tr.widthMultiplier = mul;
+
+                // Apply the width-axis gradient via property block. Read
+                // existing block first so we don't clobber other property
+                // overrides on the renderer.
+                tr.GetPropertyBlock(zenithMpb_);
+                zenithMpb_.SetTexture(widthTexId, widthTex);
+                tr.SetPropertyBlock(zenithMpb_);
+            }
+            foreach (var t in GetComponentsInChildren<Tiny.Trail>(true))
+            {
+                t.RuntimeTintColor = trailTint;
+                t.enabled = false;
+            }
+        }
+        else
+        {
+            // Suppress any TrailRenderer left on the prefab so the regular
+            // sword swing keeps using the mini Tiny.Trail look.
+            foreach (var tr in GetComponentsInChildren<TrailRenderer>(true))
+                tr.enabled = false;
+            foreach (var t in GetComponentsInChildren<Tiny.Trail>(true))
+                t.enabled = true;
+        }
+
+        // Snap the visual to the arc-start pose BEFORE the first render.
+        // SwordWeapon.Fire() instantiates the prefab at the hero's spawn
+        // position with the hero's rotation — without this the sword would
+        // render for one frame at "in front of hero, hero-facing-direction"
+        // (no modelPitch/modelYaw applied) before Update()'s first call to
+        // UpdateVisual() snaps it onto the arc the following frame. That
+        // produced a visible 1-frame pop at the start of every swing.
+        UpdateVisual(0f);
 
         // First hit check on the click frame so the sword feels snappy.
         // Without this there's a ~1-frame gap before the first damage tick runs in Update().
@@ -130,27 +300,107 @@ public class SwordSlash : MonoBehaviour
 
     private void UpdateVisual(float t)
     {
+        // Ease-out: fast start, slow finish. Same curve for Zenith and
+        // non-Zenith swings.
         float eased = 1f - Mathf.Pow(1f - t, 2f);
 
-        float startAngle = -arcDegrees * 0.5f;
-        float endAngle = arcDegrees * 0.5f;
+        // Zenith path: full 360° elliptical sweep. The sword starts BEHIND
+        // the player (-180° from forward), passes through the cursor
+        // direction (0°), and ends behind again (+180°). The path is an
+        // ellipse with its major axis aligned along owner.forward (semi-axis
+        // = radius, the longer cursor-reach) and minor axis along owner.right
+        // (semi-axis = zenithSemiMinor, the narrower side reach). This makes
+        // the sword feel like it stretches forward toward the cursor and is
+        // closer to the body when sweeping past the sides.
+        // Frozen-rotation derived basis vectors — the arc's facing is
+        // committed to the click-frame direction.
+        Vector3 frozenForward = frozenRotation * Vector3.forward;
+        Vector3 frozenRight   = frozenRotation * Vector3.right;
+
+        // Anchor interpolates from the FROZEN spawn position at swing
+        // start to the LIVE player position at swing end. This way the
+        // start of the arc reads as locked to where the player clicked
+        // (apex still lands on the original cursor target), but the
+        // sword always finishes its sweep behind the player's CURRENT
+        // position even if they walked / dashed during the swing.
+        Vector3 livePos = owner != null ? owner.position : frozenPosition;
+        Vector3 anchor  = Vector3.Lerp(frozenPosition, livePos, eased);
+
+        if (zenithMode)
+        {
+            // Always sweep the full ±180° regardless of arcDegrees. Direction
+            // alternation (rightToLeft) flips the sign so consecutive swings
+            // come from opposite sides like the regular swing.
+            float startAngle = rightToLeft ?  180f : -180f;
+            float endAngle   = rightToLeft ? -180f :  180f;
+            float angle = Mathf.Lerp(startAngle, endAngle, eased);
+            float angleRad = angle * Mathf.Deg2Rad;
+
+            // Asymmetric ellipse — front apex on the cursor, back apex at
+            // the sword's normal orbit radius BEHIND the player. We achieve
+            // this by offsetting the ellipse's center forward of the player
+            // by half the difference, so:
+            //   front end  = +centerForward + semiMajor = cursorDistance
+            //   back end   = +centerForward - semiMajor = -radius
+            // (radius here is the normal sword orbit, i.e. the start/end
+            // distance the player is used to from non-Zenith swings.)
+            float frontReach = zenithMajorRadius > 0.001f ? zenithMajorRadius : radius;
+            float backReach  = radius;
+            float semiMajor    = (frontReach + backReach) * 0.5f;
+            float centerForward = (frontReach - backReach) * 0.5f;
+
+            // Parametric ellipse: forward = centerForward + semiMajor * cos(θ),
+            //                     side    = zenithSemiMinor * sin(θ).
+            // θ=0    → sword apex at cursor (forward = +frontReach).
+            // θ=±90  → sword at ±zenithSemiMinor on the side, slightly
+            //           forward of the player (centerForward offset).
+            // θ=±180 → sword at the normal start/return point behind the
+            //           player (forward = -backReach = -radius).
+            float forward = centerForward + semiMajor * Mathf.Cos(angleRad);
+            float side    = zenithSemiMinor * Mathf.Sin(angleRad);
+
+            Vector3 dir = frozenForward * forward + frozenRight * side;
+            transform.position = anchor + dir + Vector3.up * verticalOffset;
+
+            // Outward-yaw is derived from the ELLIPSE CENTER, not the player.
+            // The asymmetric ellipse's center sits forward of the player by
+            // centerForward, so a rotation based on (sword - player) would
+            // skew the sword's facing — particularly at the sides and back.
+            // Vector from center to sword position equals the parametric
+            // tangent-perpendicular, which is the natural outward direction:
+            //   outward = forward.center * (semiMajor cosθ) + right * (semiMinor sinθ)
+            Vector3 outwardFromCenter = frozenForward * (semiMajor * Mathf.Cos(angleRad))
+                                       + frozenRight   * (zenithSemiMinor * Mathf.Sin(angleRad));
+            Quaternion radial = Quaternion.LookRotation(
+                outwardFromCenter.sqrMagnitude > 0.0001f ? outwardFromCenter.normalized : frozenForward,
+                Vector3.up);
+            float effectiveYaw = rightToLeft ? -modelYaw : modelYaw;
+            transform.rotation = radial * Quaternion.Euler(modelPitch, effectiveYaw, modelRoll);
+            return;
+        }
+
+        // Default circular path (pre-Zenith / non-Zenith swords). Uses the
+        // frozen rotation so the swing's arc stays in its initial world
+        // direction even if the player rotates mid-swing.
+        float startAngleC = -arcDegrees * 0.5f;
+        float endAngleC = arcDegrees * 0.5f;
 
         if (rightToLeft)
         {
-            float tmp = startAngle;
-            startAngle = endAngle;
-            endAngle = tmp;
+            float tmp = startAngleC;
+            startAngleC = endAngleC;
+            endAngleC = tmp;
         }
 
-        float angle = Mathf.Lerp(startAngle, endAngle, eased);
+        float angleC = Mathf.Lerp(startAngleC, endAngleC, eased);
 
-        Quaternion radial = owner.rotation * Quaternion.Euler(0f, angle, 0f);
-        Vector3 dir = radial * Vector3.forward;
+        Quaternion radialC = frozenRotation * Quaternion.Euler(0f, angleC, 0f);
+        Vector3 dirC = radialC * Vector3.forward;
 
-        transform.position = owner.position + dir * radius + Vector3.up * verticalOffset;
+        transform.position = anchor + dirC * radius + Vector3.up * verticalOffset;
 
-        float effectiveYaw = rightToLeft ? -modelYaw : modelYaw;
-        transform.rotation = radial * Quaternion.Euler(modelPitch, effectiveYaw, modelRoll);
+        float effectiveYawC = rightToLeft ? -modelYaw : modelYaw;
+        transform.rotation = radialC * Quaternion.Euler(modelPitch, effectiveYawC, modelRoll);
     }
 
     private void DamageUsingFanArea()
@@ -198,6 +448,8 @@ public class SwordSlash : MonoBehaviour
 
             alreadyHit.Add(enemy);
             enemy.TakeDamage(damage);
+            if (meteorArmer == null) meteorArmer = GetComponent<MeteorArmer>();
+            if (meteorArmer != null) meteorArmer.TryConsume(enemy.transform.position);
         }
 
         if (debugDrawHitbox)
@@ -222,7 +474,11 @@ public class SwordSlash : MonoBehaviour
             Enemy enemy = hitBuffer[i].GetComponentInParent<Enemy>();
 
             if (enemy != null && alreadyHit.Add(enemy))
+            {
                 enemy.TakeDamage(damage);
+                if (meteorArmer == null) meteorArmer = GetComponent<MeteorArmer>();
+                if (meteorArmer != null) meteorArmer.TryConsume(enemy.transform.position);
+            }
         }
 
         if (debugDrawHitbox)
@@ -319,5 +575,82 @@ public class SwordSlash : MonoBehaviour
 
         Gizmos.color = new Color(1f, 1f, 0.2f, 0.5f);
         Gizmos.DrawWireSphere(owner.position + Vector3.up * hitHeight, hitInnerRadius);
+    }
+
+    /// <summary>
+    /// Build (or refresh from cache) two 1×N alpha gradient textures used to
+    /// fade the Zenith trail across its WIDTH axis. Both have white RGB; the
+    /// alpha channel ramps either canonically (V=0 base → V=1 tip) or
+    /// V-reversed (V=0 tip → V=1 base). The reversed bake is what
+    /// right-to-left swings sample so the fade lands on the same blade
+    /// edge regardless of swing direction.
+    ///
+    /// Sampled multiplicatively against the trail's vertex color (which
+    /// already carries the head/tail length fade) so the two fades compose
+    /// on screen. Cached statically — only rebuilt when the inspector
+    /// alphas change. Textures are HideFlags.HideAndDontSave so they
+    /// survive scene loads.
+    /// </summary>
+    private static void EnsureZenithWidthGradients(float tipSideAlpha, float baseSideAlpha)
+    {
+        if (zenithWidthGradientCanonical_ != null
+            && zenithWidthGradientFlipped_   != null
+            && Mathf.Approximately(cachedTipSideAlpha_,  tipSideAlpha)
+            && Mathf.Approximately(cachedBaseSideAlpha_, baseSideAlpha))
+        {
+            return;
+        }
+
+        // Discard any prior bakes if the alphas changed so we don't leak.
+        if (zenithWidthGradientCanonical_ != null) DestroyImmediate(zenithWidthGradientCanonical_);
+        if (zenithWidthGradientFlipped_   != null) DestroyImmediate(zenithWidthGradientFlipped_);
+
+        zenithWidthGradientCanonical_ = BakeAlphaGradient(baseSideAlpha, tipSideAlpha);  // V=0 base, V=1 tip
+        zenithWidthGradientFlipped_   = BakeAlphaGradient(tipSideAlpha,  baseSideAlpha); // V=0 tip,  V=1 base
+        cachedTipSideAlpha_  = tipSideAlpha;
+        cachedBaseSideAlpha_ = baseSideAlpha;
+    }
+
+    /// <summary>
+    /// Bake a 1×N RGBA32 texture with white RGB and an alpha gradient from
+    /// <paramref name="alphaAtV0"/> at V=0 to <paramref name="alphaAtV1"/>
+    /// at V=1. Used by the Zenith trail to apply a width-axis fade on top
+    /// of the trail's existing length-axis vertex-color fade.
+    /// </summary>
+    private static Texture2D BakeAlphaGradient(float alphaAtV0, float alphaAtV1)
+    {
+        const int H = 64;
+        var tex = new Texture2D(1, H, TextureFormat.RGBA32, false, true);
+        tex.wrapMode   = TextureWrapMode.Clamp;
+        tex.filterMode = FilterMode.Bilinear;
+        tex.hideFlags  = HideFlags.HideAndDontSave;
+
+        var pixels = new Color[H];
+        for (int i = 0; i < H; i++)
+        {
+            float v = (H == 1) ? 1f : i / (float)(H - 1);
+            float a = Mathf.Lerp(alphaAtV0, alphaAtV1, v);
+            pixels[i] = new Color(1f, 1f, 1f, a);
+        }
+        tex.SetPixels(pixels);
+        tex.Apply(false, false);
+        return tex;
+    }
+
+    /// <summary>
+    /// Resolve and cache the shader property ID for the trail's width-fade
+    /// texture sampler. Most shaders use "_MainTex"; the inspector field
+    /// lets prefabs that use a different sampler retarget without a code
+    /// change.
+    /// </summary>
+    private static int GetZenithWidthTexId(string propName)
+    {
+        if (string.IsNullOrEmpty(propName)) propName = "_MainTex";
+        if (zenithWidthTexProp_ != propName)
+        {
+            zenithWidthTexId_   = Shader.PropertyToID(propName);
+            zenithWidthTexProp_ = propName;
+        }
+        return zenithWidthTexId_;
     }
 }

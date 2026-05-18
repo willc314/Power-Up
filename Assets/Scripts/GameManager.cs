@@ -24,6 +24,55 @@ public class GameManager : MonoBehaviour
     [Tooltip("Lump-sum points awarded when the player kills the SlimeGod final boss.")]
     public int pointsForFinalBossKill = 1000;
 
+    [Header("Character Level / XP")]
+    [Tooltip("XP granted per regular enemy kill.")]
+    public int xpPerKill = 1;
+    [Tooltip("XP granted per boss kill (SlimeKing & SlimeGod).")]
+    public int xpPerBossKill = 50;
+    [Tooltip("Cumulative XP thresholds for each level above 1. Length defines max level: a single threshold means max level is 2 (one level-up event), two thresholds means max level 3, etc. Currently: max level 3 — two level-up events (at 50 XP and 5000 XP), giving the player exactly two augment picks per run.")]
+    public int[] levelThresholds = new int[] { 50, 5000 };
+
+    /// <summary>Cumulative XP earned this run.</summary>
+    public int CurrentXP { get; private set; }
+    /// <summary>1-indexed character level this run. Starts at 1; advances when CurrentXP crosses each threshold.</summary>
+    public int CurrentLevel { get; private set; } = 1;
+    /// <summary>True if at the highest possible level (no further thresholds).</summary>
+    public bool IsMaxLevel => CurrentLevel > levelThresholds.Length;
+    /// <summary>XP threshold (cumulative) the player needs to reach the NEXT level. Returns CurrentXP at max level.</summary>
+    public int NextLevelXP => IsMaxLevel ? CurrentXP : levelThresholds[CurrentLevel - 1];
+    /// <summary>XP threshold (cumulative) the previous level required (0 for level 1).</summary>
+    public int PreviousLevelXP => CurrentLevel <= 1 ? 0 : levelThresholds[CurrentLevel - 2];
+    /// <summary>0..1 progress through the current level, useful for the HUD bar. Returns 1 at max.</summary>
+    public float LevelProgress
+    {
+        get
+        {
+            if (IsMaxLevel) return 1f;
+            int span = NextLevelXP - PreviousLevelXP;
+            if (span <= 0) return 1f;
+            return Mathf.Clamp01((CurrentXP - PreviousLevelXP) / (float)span);
+        }
+    }
+
+    /// <summary>
+    /// Fires once per level-up, AFTER CurrentLevel has advanced. Argument is
+    /// the new level. LevelUpChoiceUI subscribes to this to pop the upgrade
+    /// picker. If multiple thresholds are crossed in a single XP grant (e.g.
+    /// the final-boss kill), this fires once per level — the UI is expected
+    /// to queue them (the same pattern PowerUpChoiceUI uses for back-to-back
+    /// powerup pickups).
+    /// </summary>
+    public static event System.Action<int> OnLeveledUp;
+
+    /// <summary>
+    /// Fires whenever any boss-tier enemy dies (SlimeKing or the SlimeGod
+    /// final boss). Used by the Zenith curse to detect "defeat a boss
+    /// after taking the upgrade" — subscribe in Awake, unsubscribe in
+    /// OnDestroy. Both routes converge here so subscribers don't need to
+    /// know whether the kill was a regular boss or the final boss.
+    /// </summary>
+    public static event System.Action OnAnyBossKilled;
+
     [Header("Behavior")]
     [Tooltip("If true, the timer pauses once the hero dies.")]
     public bool stopTimerOnDeath = true;
@@ -117,6 +166,25 @@ public class GameManager : MonoBehaviour
 
         HighScore = PlayerPrefs.GetInt(PrefsHighScore, 0);
         startOfRunHighScore = HighScore;
+        // Refresh the level-up registry for THIS run. The registry's
+        // GeneralBuffChosen flag (and any other per-run state baked into
+        // upgrade subclasses) lives on a static singleton that survives
+        // scene loads now that LevelUpChoiceUI is DontDestroyOnLoad — so
+        // without this re-init the second run would see general augments
+        // permanently hidden because run #1 chose one. GameManager.Awake
+        // runs on every gameplay scene load, so this is the natural
+        // per-run reset point.
+        LevelUpgradeRegistry.Initialize();
+        // Diagnostic: confirm the inspector-bound XP / level-threshold values
+        // actually made it into the build. If you change xpPerKill or the
+        // levelThresholds array in the inspector but forget to save the
+        // scene before building, the build ships with the previous values
+        // and the augment UI silently never fires — this log line catches
+        // that scenario at startup so it's easy to spot in Player.log.
+        string thresholds = "[]";
+        if (levelThresholds != null && levelThresholds.Length > 0)
+            thresholds = "[" + string.Join(",", levelThresholds) + "]";
+        Debug.Log($"[GameManager] Awake — xpPerKill={xpPerKill}, xpPerBossKill={xpPerBossKill}, levelThresholds={thresholds}");
     }
 
     private void OnDestroy()
@@ -149,11 +217,40 @@ public class GameManager : MonoBehaviour
     public void OnEnemyKilled(Enemy enemy)
     {
         if (!IsRunning) return;
-        if (enemy == null) { kills++; return; }
+        if (enemy == null) { kills++; GrantXP(xpPerKill); return; }
         // SlimeGod is credited via OnFinalBossKilled, not the regular kill counter.
         if (enemy.behavior == Enemy.Behavior.SlimeGod) return;
-        if (enemy.behavior == Enemy.Behavior.SlimeKing) bossKills++;
-        else                                            kills++;
+        if (enemy.behavior == Enemy.Behavior.SlimeKing)
+        {
+            bossKills++;
+            GrantXP(xpPerBossKill);
+            try { OnAnyBossKilled?.Invoke(); }
+            catch (System.Exception e) { Debug.LogException(e); }
+        }
+        else { kills++; GrantXP(xpPerKill); }
+    }
+
+    /// <summary>
+    /// Add XP and advance level if any thresholds are crossed. Fires
+    /// <see cref="OnLeveledUp"/> once per level gained (so a single big XP
+    /// drop that crosses two thresholds fires the event twice in order).
+    /// </summary>
+    private void GrantXP(int amount)
+    {
+        if (amount <= 0) return;
+        CurrentXP += amount;
+        Debug.Log($"[GameManager] GrantXP +{amount} → CurrentXP={CurrentXP}, CurrentLevel={CurrentLevel}, NextThreshold={(IsMaxLevel ? "MAX" : levelThresholds[CurrentLevel - 1].ToString())}");
+
+        // Cross-the-threshold loop: keep advancing while we have enough XP
+        // for the next level. This handles big single XP grants (e.g. final
+        // boss kill at lower play levels) cleanly.
+        while (!IsMaxLevel && CurrentXP >= levelThresholds[CurrentLevel - 1])
+        {
+            CurrentLevel++;
+            Debug.Log($"[GameManager] Level up! CurrentLevel={CurrentLevel}, OnLeveledUp subscribers={(OnLeveledUp?.GetInvocationList()?.Length ?? 0)}");
+            try { OnLeveledUp?.Invoke(CurrentLevel); }
+            catch (System.Exception e) { Debug.LogException(e); } // never let a subscriber blow up the kill chain
+        }
     }
 
     /// <summary>
@@ -170,10 +267,23 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    /// <summary>Cleanup hook if the boss is destroyed without OnFinalBossKilled (e.g. scene unload).</summary>
+    /// <summary>
+    /// Cleanup hook if the boss is destroyed without OnFinalBossKilled
+    /// (e.g. scene unload, EnemySpawner's pre-warm instantiate-then-destroy
+    /// pass). Also releases the survival-time freeze so a later REAL boss
+    /// spawn can capture the actual elapsed time at that moment instead of
+    /// being stuck on whatever value the warmup recorded.
+    /// </summary>
     public void NotifyFinalBossDespawned()
     {
         activeFinalBoss = null;
+        // Only release the freeze if no real kill has happened — otherwise
+        // we'd disrupt the post-Continue scoring snapshot.
+        if (!finalBossKilled)
+        {
+            survivalTimeFrozenSet = false;
+            survivalTimeFrozen = 0f;
+        }
     }
 
     /// <summary>
@@ -187,6 +297,24 @@ public class GameManager : MonoBehaviour
         finalBossKilled = true;
         bonusPoints += pointsForFinalBossKill;
         activeFinalBoss = null;
+        // Rewind elapsedTime back to where it was when the boss spawned, so
+        // the post-kill timer resumes from the frozen value instead of
+        // jumping forward by the entire boss-fight duration. The score
+        // contract ("survival points stop accumulating while the boss is
+        // alive") is satisfied either way, but the HUD reads EffectiveSurvivalTime
+        // which == elapsedTime once IsFinalBossAlive flips false — without
+        // this rewind the player would see e.g. 5:00 → 15:00 the moment
+        // they kill the boss, instead of 5:00 continuing to climb naturally.
+        if (survivalTimeFrozenSet)
+            elapsedTime = survivalTimeFrozen;
+        // Final-boss kill counts toward XP just like a SlimeKing — it's not
+        // routed through OnEnemyKilled (intentionally, so the regular kill
+        // counter stays untouched), so grant XP explicitly here.
+        GrantXP(xpPerBossKill);
+        // Fire OnAnyBossKilled too so Zenith curse subscribers see this
+        // as a valid "defeat a boss" condition.
+        try { OnAnyBossKilled?.Invoke(); }
+        catch (System.Exception e) { Debug.LogException(e); }
 
         // Wave the win flag through PlayerPrefs so a fallback EndScreen
         // load (no WinMenu in the scene) reads correctly.
@@ -228,6 +356,16 @@ public class GameManager : MonoBehaviour
         savedScores = false;
         HighScore = PlayerPrefs.GetInt(PrefsHighScore, 0);
         startOfRunHighScore = HighScore;
+        // Reset XP / level so the second run starts fresh — these are
+        // run-scoped stats that don't auto-reset because GameManager
+        // properties default-initialize only when the C# instance is
+        // first allocated.
+        CurrentXP = 0;
+        CurrentLevel = 1;
+        // Refresh the level-up registry too, for in-place restarts that
+        // don't go through a scene reload (the GameManager.Awake init
+        // covers the scene-reload path).
+        LevelUpgradeRegistry.Initialize();
     }
 
     /// <summary>

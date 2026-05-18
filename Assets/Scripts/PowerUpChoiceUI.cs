@@ -60,6 +60,24 @@ public class PowerUpChoiceUI : MonoBehaviour
 
     private Hero hero;
     private eWeaponType pendingType;
+    // Backlog of pickup types collected while the choice panel was already
+    // open. Drained one-by-one in Close(): each queued entry transitions the
+    // panel to the next pickup instead of fully closing, so the player gets
+    // to make a choice for every powerup they grabbed (no silent overwrite).
+    private readonly Queue<eWeaponType> pendingQueue = new Queue<eWeaponType>();
+
+    /// <summary>
+    /// Fires every time this UI fully closes (drained queue, time unpaused).
+    /// LevelUpChoiceUI subscribes so it can drain its own pending level-ups
+    /// once the powerup chain finishes — and vice-versa via its mirror event.
+    /// </summary>
+    public static event System.Action OnClosed;
+
+    /// <summary>True while this UI is currently shown OR has queued pickups still to drain.</summary>
+    public bool IsActive => IsOpen || pendingQueue.Count > 0;
+
+    /// <summary>True while the choice panel is currently visible to the player.</summary>
+    public bool IsOpen => panelRoot != null && panelRoot.activeSelf;
 
     // Built UI references (rebuilt each Show so the layout matches state).
     private Canvas canvas;
@@ -126,12 +144,65 @@ public class PowerUpChoiceUI : MonoBehaviour
 
     public void Show(Hero hero, eWeaponType type)
     {
+        // Edge case: the hero walks into two (or more) powerups in the same
+        // frame. Without this guard, the second Show() would overwrite
+        // pendingType, voiding the first powerup's choice. Instead, queue the
+        // extra pickups and drain them one-by-one in Close().
+        if (IsOpen)
+        {
+            pendingQueue.Enqueue(type);
+            return;
+        }
+
+        // Cross-UI deferral: if a level-up picker is currently open, sit on
+        // this powerup until the level-up closes. We enqueue it (so existing
+        // queue-drain logic picks it up) and subscribe to the level-up's
+        // close event ONCE — when it fires, we drain into Show via Close()'s
+        // dequeue path. The hero pointer is already cached so we don't need
+        // it across the boundary.
+        if (LevelUpChoiceUI.Instance != null && LevelUpChoiceUI.Instance.IsActive)
+        {
+            this.hero = hero;
+            pendingQueue.Enqueue(type);
+            LevelUpChoiceUI.OnClosed -= OnExternalUIClosed;
+            LevelUpChoiceUI.OnClosed += OnExternalUIClosed;
+            return;
+        }
+
         this.hero = hero;
         this.pendingType = type;
 
         Time.timeScale = 0f;
         panelRoot.SetActive(true);
 
+        // Clear whatever was previously selected on the EventSystem before
+        // showing this menu. Update() then re-clears every frame while
+        // the panel is open — together they ensure Space / Enter / Submit
+        // never has a focused button to activate, so the player can't
+        // accidentally pick an upgrade with the keyboard.
+        if (EventSystem.current != null)
+            EventSystem.current.SetSelectedGameObject(null);
+
+        // Dim the music while the player is choosing a powerup. EndDuck pairs with this in Close().
+        if (MusicManager.Instance != null) MusicManager.Instance.BeginDuck();
+
+        Refresh();
+    }
+
+    /// <summary>
+    /// Subscribed to LevelUpChoiceUI.OnClosed when we deferred a pickup. On
+    /// the close event we unsubscribe and try to drain our own queue (which
+    /// runs through Close → Refresh).
+    /// </summary>
+    private void OnExternalUIClosed()
+    {
+        LevelUpChoiceUI.OnClosed -= OnExternalUIClosed;
+        if (IsOpen || pendingQueue.Count == 0) return;
+        // Mirror the body of Show()'s "open" path with the front of the queue.
+        pendingType = pendingQueue.Dequeue();
+        Time.timeScale = 0f;
+        panelRoot.SetActive(true);
+        if (MusicManager.Instance != null) MusicManager.Instance.BeginDuck();
         Refresh();
     }
 
@@ -146,7 +217,9 @@ public class PowerUpChoiceUI : MonoBehaviour
         string pickedUpName = pickedUpWeapon != null ? pickedUpWeapon.weaponName : GetWeaponName(pendingType);
         Sprite pickedUpIcon = pickedUpWeapon != null ? pickedUpWeapon.hudIcon : null;
 
-        if (titleText != null) titleText.text = "Picked Up:  " + pickedUpName;
+        // Stack on two lines so longer weapon names don't push past the
+        // panel edges. Header on top, name centered underneath.
+        if (titleText != null) titleText.text = "Picked Up:\n" + pickedUpName;
 
         if (centerIconImg != null)
         {
@@ -177,6 +250,19 @@ public class PowerUpChoiceUI : MonoBehaviour
         Weapon otherSlotWeapon = (slotIndex == 0) ? hero.secondaryWeapon : hero.primaryWeapon;
         bool otherHasSameType  = otherSlotWeapon != null && otherSlotWeapon.weaponType == pendingType;
 
+        // Zenith dual-wield exception: as soon as the player has UNLOCKED
+        // Zenith via the level-up choice (zenithUnlocked = true), dual-wield
+        // is allowed. The actual Zenith activation (damage doubling, ellipse
+        // path, rainbow trail) happens automatically once stat thresholds
+        // are met — see SwordWeapon.CheckZenithAutoActivation. Until then
+        // the player can equip two swords and they share upgrades but
+        // attack independently per slot.
+        bool zenithDualWieldOk =
+            pendingType == eWeaponType.sword
+            && otherSlotWeapon is SwordWeapon otherSword
+            && otherSword.zenithUnlocked;
+        if (zenithDualWieldOk) otherHasSameType = false;
+
         if (equipped == null)
         {
             // Empty slot: show placeholder + single Equip button.
@@ -201,6 +287,12 @@ public class PowerUpChoiceUI : MonoBehaviour
             if (otherHasSameType)
             {
                 slot.equipButtonText.text = "Already Equipped";
+                slot.equipButton.interactable = false;
+                slot.equipButton.onClick.RemoveAllListeners();
+            }
+            else if (hero.IsZenithCursed && pendingType != eWeaponType.sword)
+            {
+                slot.equipButtonText.text = "Cursed — Sword Only";
                 slot.equipButton.interactable = false;
                 slot.equipButton.onClick.RemoveAllListeners();
             }
@@ -273,6 +365,12 @@ public class PowerUpChoiceUI : MonoBehaviour
                 slot.replaceButton.interactable = false;
                 slot.replaceButton.onClick.RemoveAllListeners();
             }
+            else if (hero.IsZenithCursed && pendingType != eWeaponType.sword)
+            {
+                slot.replaceButtonText.text = "Cursed — Sword Only";
+                slot.replaceButton.interactable = false;
+                slot.replaceButton.onClick.RemoveAllListeners();
+            }
             else
             {
                 slot.replaceButtonText.text = "Replace with " + GetWeaponName(pendingType);
@@ -295,13 +393,33 @@ public class PowerUpChoiceUI : MonoBehaviour
             slot.boostButton.onClick.RemoveAllListeners();
             Weapon weaponRef = equipped;
             BoostKind kindRef = boostKind;
+            eWeaponType pickupTypeRef = pendingType;
 
+            // (Zenith is no longer triggered via a Grenade pickup option —
+            // it auto-activates once the sword meets all four stat
+            // requirements: dual-wielded, 360° arc, >3 extra projectiles,
+            // >30% cooldown reduction. See SwordWeapon.CheckZenithAutoActivation.)
             string boostPrefix = maxed ? "Boost " + equipped.weaponName + " (post-max):  "
                                        : "Boost " + equipped.weaponName + ":  ";
+            // Set the bow's pickup-source hint BEFORE asking it to describe
+            // the boost — Heavenly Gale's bow-pickup branch needs the hint
+            // to show the right label ("+1 Pierce  •  +X Damage" vs the
+            // regular "+5 Max Damage  •  +25 Beam DPS"). Cleared after.
+            if (equipped is BowWeapon bowForLabel)
+                bowForLabel.pickupSourceTypeHint = pendingType;
             slot.boostButtonText.text = boostPrefix + equipped.DescribeBoost(boostKind);
+            if (equipped is BowWeapon bowForLabelReset)
+                bowForLabelReset.pickupSourceTypeHint = eWeaponType.none;
             slot.boostButton.onClick.AddListener(() =>
             {
+                // Same hint dance for the actual application — bow pickups
+                // under Heavenly Gale dispatch to TryApplyHeavenlyGaleBowPickup
+                // when the hint is set, and the regular damage path otherwise.
+                if (weaponRef is BowWeapon bowForApply)
+                    bowForApply.pickupSourceTypeHint = pickupTypeRef;
                 hero.UpgradeWeaponPower(weaponRef, kindRef);
+                if (weaponRef is BowWeapon bowForApplyReset)
+                    bowForApplyReset.pickupSourceTypeHint = eWeaponType.none;
                 Close();
             });
 
@@ -326,13 +444,47 @@ public class PowerUpChoiceUI : MonoBehaviour
 
     private void Close()
     {
+        // Drain queued pickups before fully closing. Time stays paused and
+        // the music stays ducked across the chain — only the panel content
+        // refreshes so the player gets to choose for every queued powerup.
+        if (pendingQueue.Count > 0)
+        {
+            pendingType = pendingQueue.Dequeue();
+            Refresh();
+            return;
+        }
+
         Hide();
         Time.timeScale = 1f;
+
+        // Restore the music level (paired with BeginDuck in Show).
+        if (MusicManager.Instance != null) MusicManager.Instance.EndDuck();
+
+        // Notify any UI waiting on us (level-up picker that came in mid-pickup).
+        try { OnClosed?.Invoke(); }
+        catch (System.Exception e) { Debug.LogException(e); }
     }
 
     private void Hide()
     {
         if (panelRoot != null) panelRoot.SetActive(false);
+    }
+
+    private void Update()
+    {
+        // Continuously clear the EventSystem's selected GameObject while
+        // the picker is open. Without this, mouse-clicking a button
+        // auto-selects it (Unity's default behavior) and pressing Space
+        // afterward fires Submit on that button — which auto-picks an
+        // upgrade. Per design, Space should be inert in this menu;
+        // dropping the selection every frame guarantees Submit has no
+        // target to fire on. Mouse clicks still work because onClick
+        // fires on PointerUp, not on Submit.
+        if (IsOpen && EventSystem.current != null
+                   && EventSystem.current.currentSelectedGameObject != null)
+        {
+            EventSystem.current.SetSelectedGameObject(null);
+        }
     }
 
     // -------------------- UI construction --------------------
@@ -372,8 +524,8 @@ public class PowerUpChoiceUI : MonoBehaviour
         titleRt.anchorMin = new Vector2(0.5f, 1f);
         titleRt.anchorMax = new Vector2(0.5f, 1f);
         titleRt.pivot = new Vector2(0.5f, 1f);
-        titleRt.anchoredPosition = new Vector2(0f, -40f);
-        titleRt.sizeDelta = new Vector2(900f, 60f);
+        titleRt.anchoredPosition = new Vector2(0f, -30f);
+        titleRt.sizeDelta = new Vector2(900f, 120f); // tall enough for two lines
         titleText = titleGO.AddComponent<Text>();
         titleText.font = defaultFont;
         titleText.fontSize = 36;
@@ -381,8 +533,9 @@ public class PowerUpChoiceUI : MonoBehaviour
         // regardless of how the serialized textColor has been tweaked.
         titleText.color = Color.white;
         titleText.alignment = TextAnchor.UpperCenter;
+        titleText.verticalOverflow = VerticalWrapMode.Overflow;
         titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        titleText.text = "Picked Up:";
+        titleText.text = "Picked Up:\n";
 
         // -- Center: big picked-up icon + name (no buttons; informational) --
         // slotH grew from 460 → 540 to leave room for the 3rd button (Hero
@@ -419,6 +572,12 @@ public class PowerUpChoiceUI : MonoBehaviour
         // inside BuildFullSlot vanish into a copy.
         BuildFullSlot(ref primarySlot,   primarySlot.root.transform);
         BuildFullSlot(ref secondarySlot, secondarySlot.root.transform);
+
+        // Force the title bar to render last among the overlay's children so
+        // it always sits in front of every slot panel regardless of which
+        // siblings get added or rearranged later.
+        if (titleText != null)
+            titleText.transform.SetAsLastSibling();
     }
 
     private GameObject BuildSlotPanel(string name, Transform parent, Vector2 anchoredPos, Vector2 size)

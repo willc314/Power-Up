@@ -39,6 +39,37 @@ public class Enemy : MonoBehaviour
     public float attackDamage = 8f;
     public float moveSpeed = 3.5f;
 
+    /// <summary>
+    /// Runtime debuff applied by the Dagger's Elemental Shiv augment.
+    /// While shivDebuffEndTime is in the future, EffectiveMoveSpeed and
+    /// EffectiveAttackDamage scale moveSpeed / attackDamage by these
+    /// factors. Refresh-on-rehit semantics: every shiv hit resets
+    /// shivDebuffEndTime to now+duration but never stacks the factors.
+    /// </summary>
+    [System.NonSerialized] public float shivSlowFactor = 1f;
+    [System.NonSerialized] public float shivDamageFactor = 1f;
+    [System.NonSerialized] public float shivDebuffEndTime = -1f;
+    /// <summary>True while a shiv debuff is active on this enemy.</summary>
+    public bool IsShivDebuffActive => shivDebuffEndTime > 0f && Time.time < shivDebuffEndTime;
+    /// <summary>moveSpeed scaled by any active runtime debuffs.</summary>
+    public float EffectiveMoveSpeed => moveSpeed * (IsShivDebuffActive ? shivSlowFactor : 1f);
+    /// <summary>attackDamage scaled by any active runtime debuffs.</summary>
+    public float EffectiveAttackDamage => attackDamage * (IsShivDebuffActive ? shivDamageFactor : 1f);
+
+    /// <summary>
+    /// Apply (or refresh) the Elemental Shiv debuff on this enemy. Called
+    /// by ElementalShivClone when its strike lands. Refresh semantics
+    /// always reset duration; the slow / damage factors come from the
+    /// dagger config and aren't multiplied across re-hits.
+    /// </summary>
+    public void ApplyShivDebuff(float duration, float slowFactor, float damageFactor)
+    {
+        if (IsDead || duration <= 0f) return;
+        shivSlowFactor   = Mathf.Clamp01(slowFactor);
+        shivDamageFactor = Mathf.Clamp01(damageFactor);
+        shivDebuffEndTime = Time.time + duration;
+    }
+
     [Header("Melee")]
     [Tooltip("Distance from the player at which a melee attack lands. Ignored by Ranged.")]
     public float attackRange = 1.4f;
@@ -130,11 +161,19 @@ public class Enemy : MonoBehaviour
     [Tooltip("Vertical offset above the enemy pivot where particles spawn.")]
     public float hitParticleHeight = 1.0f;
 
+    [Header("Damaged SFX")]
+    [Tooltip("One-shot sound played at the enemy's position when it takes a damaging hit (i.e. damage actually got past the SlimeGod damage reduction / SlimeKing shield absorber). Routed through SoundManager so it picks up the SFX volume slider + 3D rolloff. Leave null for silent enemies.")]
+    public AudioClip damagedSound;
+    [Tooltip("Per-clip volume multiplier for the damaged SFX. Stacks on SoundManager.volume.")]
+    [Range(0f, 1f)] public float damagedSoundVolume = 1f;
+
     [Header("Charger settings")]
     [Tooltip("How much faster than moveSpeed the dash is.")]
     public float dashSpeedMultiplier = 3f;
     [Tooltip("Seconds the enemy telegraphs (stands still) before dashing.")]
     public float dashTelegraphTime = 0.6f;
+    [Tooltip("Seconds INTO the telegraph that the dash direction is locked in. Before this point the charger continues tracking the player's current position; after this point the direction is committed and the charger will dash at that locked spot even if the player moves. The remaining (dashTelegraphTime - dashLockOnDelay) is the player's window to dodge. Set 0 = lock instantly at telegraph start (most dodgeable). Set >= dashTelegraphTime = lock at the very end (no dodge window — old behavior).")]
+    public float dashLockOnDelay = 0.15f;
     [Tooltip("Seconds the dash itself lasts.")]
     public float dashDuration = 0.4f;
     [Tooltip("Seconds of recovery after a dash before starting another telegraph.")]
@@ -267,6 +306,13 @@ public class Enemy : MonoBehaviour
     private ChargerPhase chargerPhase = ChargerPhase.Approach;
     private float chargerPhaseTimer;
     private Vector3 dashDirection;
+    /// <summary>
+    /// Tracks how much of the lock-on window remains within the current
+    /// telegraph. While > 0 the charger keeps re-aiming dashDirection at
+    /// the player's live position; once it ticks to 0 the direction is
+    /// frozen and the rest of the telegraph is the player's dodge window.
+    /// </summary>
+    private float dashLockOnTimer;
 
     public long CurrentHP => currentHP;
     public long MaxHP => maxHP;
@@ -310,6 +356,28 @@ public class Enemy : MonoBehaviour
         if (behavior == Behavior.SlimeGod)
         {
             showHealthBar = false;
+        }
+
+        // Apply the difficulty preset to enemies whose stats it tunes.
+        //   * Crossbow-behavior enemies (and the SlimeKing's ranged phase,
+        //     which uses the same crossbowDamage field) scale by
+        //     crossbowDamageMultiplier.
+        //   * SlimeKings additionally take slimeKingAttackSpeedBoostMultiplier
+        //     for the ranged-mode attack-speed boost.
+        //   * SlimeGod (final boss) scales ALL of its damage moves through
+        //     its own attackDamageMultiplier — set here from the preset.
+        if (GameSettings.Instance != null)
+        {
+            var p = GameSettings.Instance.GetActivePreset();
+            if (behavior == Behavior.Crossbow || behavior == Behavior.SlimeKing)
+                crossbowDamage *= p.crossbowDamageMultiplier;
+            if (behavior == Behavior.SlimeKing)
+                skAttackSpeedBoostMultiplier = p.slimeKingAttackSpeedBoostMultiplier;
+            if (behavior == Behavior.SlimeGod)
+            {
+                SlimeGod sg = GetSlimeGod();
+                if (sg != null) sg.attackDamageMultiplier *= p.finalBossDamageMultiplier;
+            }
         }
 
         if (behavior == Behavior.Crossbow || behavior == Behavior.SlimeKing)
@@ -549,15 +617,31 @@ public class Enemy : MonoBehaviour
                 {
                     chargerPhase = ChargerPhase.Telegraph;
                     chargerPhaseTimer = dashTelegraphTime;
+                    // Track player for the first dashLockOnDelay seconds of
+                    // the telegraph, then commit. Pre-seed dashDirection
+                    // with the current aim so a zero-delay setup still has
+                    // a sensible direction even if the lock-on tick fails
+                    // to run on the same frame.
+                    dashLockOnTimer = Mathf.Max(0f, dashLockOnDelay);
+                    dashDirection = GetAvoidedDirection(dir);
                     StopMoving();
                 }
                 break;
 
             case ChargerPhase.Telegraph:
                 StopMoving();
+                // While the lock-on window is open, keep re-aiming at the
+                // player's current position. Once it closes, the direction
+                // is frozen and the rest of the telegraph (= dashTelegraphTime
+                // - dashLockOnDelay) is the player's window to step out of
+                // the line — which is what makes the dash actually dodgeable.
+                if (dashLockOnTimer > 0f)
+                {
+                    dashLockOnTimer -= Time.fixedDeltaTime;
+                    dashDirection = GetAvoidedDirection(dir);
+                }
                 if (chargerPhaseTimer <= 0f)
                 {
-                    dashDirection = GetAvoidedDirection(dir);
                     chargerPhase = ChargerPhase.Dash;
                     chargerPhaseTimer = dashDuration;
                 }
@@ -780,6 +864,10 @@ public class Enemy : MonoBehaviour
         skPhaseTimer = 0f;
         skJumpStart = transform.position;
         skJumpEnd = new Vector3(player.transform.position.x, transform.position.y, player.transform.position.z);
+        // Keep the landing inside the arena. Without this clamp the slime can
+        // land on top of (or past) the wall when the player kites the corner.
+        if (ArenaGenerator.Instance != null)
+            skJumpEnd = ArenaGenerator.Instance.ClampToArena(skJumpEnd);
         skJumpProgress = 0f;
         rb.velocity = Vector3.zero;
     }
@@ -798,6 +886,22 @@ public class Enemy : MonoBehaviour
 
         skJumpEnd = transform.position + awayFromPlayer * skRetreatJumpDistance;
         skJumpEnd.y = transform.position.y;
+        // Same clamp as JumpToMelee — retreat jumps near the wall would otherwise
+        // launch the slime past it. Try the natural retreat first, then fall back
+        // to the player's direction if the chosen target is already at the edge.
+        if (ArenaGenerator.Instance != null)
+        {
+            Vector3 clamped = ArenaGenerator.Instance.ClampToArena(skJumpEnd);
+            // If the clamp shortened the retreat to nothing (slime was already
+            // jammed in the corner), instead jump along the wall toward the
+            // player's perpendicular so it still moves.
+            if ((clamped - transform.position).sqrMagnitude < 0.5f)
+            {
+                Vector3 perp = new Vector3(-awayFromPlayer.z, 0f, awayFromPlayer.x);
+                clamped = ArenaGenerator.Instance.ClampToArena(transform.position + perp * skRetreatJumpDistance);
+            }
+            skJumpEnd = clamped;
+        }
         skJumpProgress = 0f;
         rb.velocity = Vector3.zero;
     }
@@ -908,7 +1012,13 @@ public class Enemy : MonoBehaviour
         dir.y = 0f;
         if (dir.sqrMagnitude > 0.001f) dir.Normalize();
 
-        Vector3 v = dir * speed;
+        // Apply runtime slow debuffs (Elemental Shiv) at the lowest movement
+        // chokepoint so EVERY caller gets slowed without each AI path
+        // having to remember the multiplier — chase, kite, charger dash,
+        // SlimeKing melee speed, ranged retreat, etc.
+        float effSpeed = speed * (IsShivDebuffActive ? shivSlowFactor : 1f);
+
+        Vector3 v = dir * effSpeed;
         v.y = rb.velocity.y;
         rb.velocity = v;
     }
@@ -922,7 +1032,7 @@ public class Enemy : MonoBehaviour
     private void TryMelee()
     {
         if (meleeTimer > 0f || player == null) return;
-        player.TakeDamage(attackDamage);
+        player.TakeDamage(EffectiveAttackDamage);
         meleeTimer = attackCooldown;
         if (enemyAnimator != null) enemyAnimator.OnAttack();
     }
@@ -934,7 +1044,7 @@ public class Enemy : MonoBehaviour
             : transform.position + transform.forward * 0.8f + Vector3.up * 1.0f;
         Quaternion rot = Quaternion.LookRotation(dir, Vector3.up);
         EnemyProjectile p = Instantiate(projectilePrefab, spawnPos, rot);
-        p.Launch(dir, attackDamage);
+        p.Launch(dir, EffectiveAttackDamage);
         if (enemyAnimator != null) enemyAnimator.OnAttack();
     }
 
@@ -969,6 +1079,13 @@ public class Enemy : MonoBehaviour
         if (damageFlash != null) damageFlash.Flash();
         if (enemyAnimator != null && currentHP > 0L) enemyAnimator.OnHit();
         SpawnHitParticles();
+        // Damaged SFX — fires only when actual HP loss happens (we've
+        // already returned out for SlimeGod-absorbed and SlimeKing-shield
+        // hits above), so silent absorbs don't trigger an audio cue.
+        // 0-damage rounding cases (longDamage == 0) skip the play so a
+        // 0.3-damage tick doesn't spam the audio pool.
+        if (longDamage > 0L && damagedSound != null && SoundManager.Instance != null)
+            SoundManager.Instance.PlaySfxAt(damagedSound, transform.position, damagedSoundVolume);
         if (currentHP <= 0L) Die();
     }
 
@@ -977,7 +1094,7 @@ public class Enemy : MonoBehaviour
     /// credit. Used by the EnemySpawner's final-boss shockwave to wipe every
     /// regular enemy off the arena when SlimeGod spawns.
     /// </summary>
-    public void KillSilently()
+    public void KillSilently(bool emitParticles = true)
     {
         if (IsDead) return;
         IsDead = true;
@@ -985,10 +1102,15 @@ public class Enemy : MonoBehaviour
         StopMoving();
         if (telegraphLine != null) telegraphLine.enabled = false;
         if (enemyAnimator != null) enemyAnimator.OnDie();
-        // Spawn a small visual burst so the wipe reads on screen.
-        HitParticles.EmitBurst(transform.position + Vector3.up * 0.6f, Vector3.up,
-            count: 12, speed: 4f, lifetime: 0.4f, size: 0.14f,
-            color: hitParticleColor, spreadAngle: 90f, useGravity: true);
+        if (emitParticles)
+        {
+            // Tiny burst so the wipe still reads on screen — but small enough
+            // that 100 simultaneous KillSilently calls don't spawn 1200+
+            // rigidbody-particle GameObjects in a single frame.
+            HitParticles.EmitBurst(transform.position + Vector3.up * 0.6f, Vector3.up,
+                count: 3, speed: 4f, lifetime: 0.35f, size: 0.14f,
+                color: hitParticleColor, spreadAngle: 90f, useGravity: true);
+        }
         Destroy(gameObject, 0.2f);
     }
 

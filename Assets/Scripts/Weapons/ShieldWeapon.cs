@@ -29,7 +29,29 @@ public class ShieldWeapon : Weapon
 
         ShieldThrow shield = Instantiate(shieldPrefab, spawnPos, owner.transform.rotation);
         // Apply hero damage multipliers + crit roll (one roll per throw).
-        shield.Init(owner.transform, owner.ComputeAttackDamage(damage), enemyLayers, owner.transform.forward);
+        // WithCrit overload feeds the Meteor general augment.
+        float dmg = owner.ComputeAttackDamageWithCrit(damage, out bool wasCrit);
+        shield.Init(owner.transform, dmg, enemyLayers, owner.transform.forward);
+        owner.TryArmMeteorOnProjectile(shield.gameObject, dmg, wasCrit, enemyLayers);
+    }
+
+    public override string GetExtraStatsBlock()
+    {
+        // Surface the upgrade-tracked extra-shield count plus a few static
+        // throw stats lifted from the prefab. Keeps the in-game stats panel
+        // populated so the shield isn't a blank entry like it used to be.
+        var sb = new System.Text.StringBuilder();
+        if (shieldPrefab != null)
+        {
+            float throwRange = Mathf.Max(0f, shieldPrefab.throwSpeed) * Mathf.Max(0f, shieldPrefab.outboundDuration);
+            sb.Append($"Throw Range: {throwRange:0.#}");
+            sb.Append($"\nThrow Speed: {shieldPrefab.throwSpeed:0.#}");
+            sb.Append($"\nReturn Speed: {shieldPrefab.returnSpeed:0.#}");
+            sb.Append($"\nHit Radius: {shieldPrefab.hitRadius:0.##}");
+        }
+        sb.Append($"\nExtra Shields: {extraAttackCount}");
+        // Trim a leading newline if the prefab block was empty.
+        return sb.ToString().TrimStart('\n');
     }
 
     // Crossbow pickup → Projectiles boost. On the Shield, this chains an

@@ -47,6 +47,12 @@ public class ShieldThrow : MonoBehaviour
     private readonly HashSet<Enemy> hitReturn = new HashSet<Enemy>();
     private readonly Collider[] hitBuffer = new Collider[16];
 
+    // Cached lookup for the Meteor general augment (see MeteorArmer). If the
+    // throw was rolled at fire time, the first valid enemy hit consumes the
+    // armer and spawns a meteor at the enemy's position. Lazily fetched
+    // because the armer is added AFTER Init runs.
+    private MeteorArmer meteorArmer;
+
     public void Init(Transform owner, float damage, LayerMask enemyLayers, Vector3 direction)
     {
         this.owner = owner;
@@ -102,7 +108,15 @@ public class ShieldThrow : MonoBehaviour
         for (int i = 0; i < n; i++)
         {
             Enemy e = hitBuffer[i].GetComponentInParent<Enemy>();
-            if (e != null && hitSet.Add(e)) e.TakeDamage(damage);
+            if (e != null && hitSet.Add(e))
+            {
+                e.TakeDamage(damage);
+                // Meteor general augment: first valid hit (across both
+                // outbound + return passes) consumes the armer and spawns
+                // a meteor at this enemy.
+                if (meteorArmer == null) meteorArmer = GetComponent<MeteorArmer>();
+                if (meteorArmer != null) meteorArmer.TryConsume(e.transform.position);
+            }
         }
     }
 

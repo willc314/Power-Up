@@ -36,6 +36,14 @@ public class Grenade : MonoBehaviour
     /// </summary>
     [System.NonSerialized] public float damageOverride = 0f;
 
+    /// <summary>
+    /// Pre-crit damage value forwarded to <see cref="Explosion.friendlyFireDamage"/>
+    /// so a player crit doesn't amplify the hero's own self-damage when they
+    /// stand in their grenade's AOE. Set to 0 or below to fall back to the
+    /// legacy "damage * 0.5f" behavior.
+    /// </summary>
+    [System.NonSerialized] public float friendlyFireDamage = 0f;
+
     public void Launch(Vector3 startPos, Vector3 endPos, float arcHeight, float flightTime)
     {
         this.startPos = startPos;
@@ -71,6 +79,18 @@ public class Grenade : MonoBehaviour
             if (radiusBonus > 0f) ex.radius += radiusBonus;
             // Hero damage modifiers are baked into damageOverride by GrenadeWeapon.
             if (damageOverride > 0f) ex.damage = damageOverride;
+            // Pre-crit friendly-fire damage so the player's own crit doesn't
+            // amplify self-damage when they stand in the AOE. Forwarded as-is
+            // to Explosion which uses it instead of damage * 0.5f.
+            if (friendlyFireDamage > 0f) ex.friendlyFireDamage = friendlyFireDamage;
+            // Meteor general augment: transfer our armer (if any) onto the
+            // Explosion's GameObject so it fires on the first enemy actually
+            // caught by the AOE — gated on enemy hit, matching the pattern
+            // every other weapon uses. If the AOE catches nothing the
+            // armer just dies with the Explosion, no wasted meteor.
+            var armer = GetComponent<MeteorArmer>();
+            if (armer != null && armer.IsArmed)
+                MeteorArmer.Transfer(armer, ex.gameObject);
             ex.Detonate();
         }
         Destroy(gameObject);

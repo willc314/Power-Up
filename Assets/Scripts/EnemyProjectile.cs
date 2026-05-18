@@ -31,10 +31,53 @@ public class EnemyProjectile : MonoBehaviour
     [Tooltip("Brief grace period after spawn during which environment collisions don't destroy the projectile. Keeps weirdly-sized colliders from killing the projectile on frame 0.")]
     public float spawnSafetyTime = 0.05f;
 
+    [Header("Visual Override")]
+    [Tooltip("Optional visual prefab to spawn as a child on Awake. Use this to swap in a particle-effect VFX prefab (e.g. Gabriel Aguiar's vfx_Projectile_01, FireIce's FX_BulletTrail_Red) without rebuilding the projectile prefab from scratch. The original prefab still owns the Rigidbody/Collider/EnemyProjectile gameplay components — this just plays cosmetics on top.")]
+    public GameObject visualPrefab;
+
+    [Tooltip("Local Euler rotation applied to the spawned visual. Some VFX prefabs face +Z, some +Y; use this if the trail/sprite ends up sideways relative to the flight direction.")]
+    public Vector3 visualLocalRotation = Vector3.zero;
+
+    [Tooltip("Uniform local scale applied to the spawned visual. Useful when the source VFX was authored at a different size than this projectile.")]
+    public float visualLocalScale = 1f;
+
+    [Tooltip("If true, disables MeshRenderer / SkinnedMeshRenderer / SpriteRenderer components on the projectile root and existing children when a Visual Prefab is assigned. Lets a duplicated prefab replace its built-in arrow mesh with the new VFX without manually deleting the old visual nodes.")]
+    public bool hideExistingVisualsWhenOverridden = true;
+
     private float damage;
     private Rigidbody rb;
     private float homingTimer;
     private float spawnTime;
+
+    /// <summary>
+    /// Static one-shot suppression. When true, the next EnemyProjectile to run
+    /// Awake will SKIP its visualPrefab spawn (and consume the flag back to
+    /// false). Use the <see cref="InstantiateNoVisual"/> helper to set + spawn
+    /// + auto-reset atomically — that's the safe API. Manual writes are only
+    /// supported for callers that genuinely need to gate a single Instantiate.
+    ///
+    /// Why static-and-consumed: visualPrefab is spawned in Awake, which runs
+    /// during Instantiate (before the caller can flip a per-instance flag). A
+    /// single static toggle, set immediately before Instantiate, lets the
+    /// caller suppress without needing the projectile to know who spawned it.
+    /// </summary>
+    public static bool SuppressNextVisualOverride;
+
+    /// <summary>
+    /// Helper for "spawn this projectile WITHOUT its configured visualPrefab".
+    /// SlimeGod uses this on respawns where the FX trails would otherwise
+    /// cause heavy lag at high projectile counts.
+    /// </summary>
+    public static T InstantiateNoVisual<T>(T prefab, Vector3 position, Quaternion rotation) where T : EnemyProjectile
+    {
+        SuppressNextVisualOverride = true;
+        T inst = Instantiate(prefab, position, rotation);
+        // Defensive: in case Awake didn't run (shouldn't happen but bail-out
+        // for some Unity-internal reason), don't leave the flag dangling for
+        // an unrelated downstream Instantiate to consume.
+        SuppressNextVisualOverride = false;
+        return inst;
+    }
 
     private void Awake()
     {
@@ -46,6 +89,49 @@ public class EnemyProjectile : MonoBehaviour
         // Make sure the projectile's collider is a trigger so OnTriggerEnter fires.
         Collider c = GetComponent<Collider>();
         if (c != null) c.isTrigger = true;
+
+        if (SuppressNextVisualOverride)
+        {
+            SuppressNextVisualOverride = false; // consume — single-shot flag
+            // Skip the visualPrefab instantiate. The original prefab's built-in
+            // renderers stay active because hideExistingVisualsWhenOverridden
+            // wasn't applied (we never entered SpawnVisualOverride).
+        }
+        else
+        {
+            SpawnVisualOverride();
+        }
+    }
+
+    /// <summary>
+    /// If a visual prefab is configured, instantiate it as a child of this
+    /// projectile and (optionally) hide the prefab's built-in visuals so the
+    /// override reads cleanly. Cosmetic-only — doesn't touch the gameplay
+    /// rigidbody/collider/damage path.
+    /// </summary>
+    private void SpawnVisualOverride()
+    {
+        if (visualPrefab == null) return;
+
+        if (hideExistingVisualsWhenOverridden)
+        {
+            // Disable any pre-existing renderers on the prefab so they don't
+            // visually fight with the new VFX. Use enabled=false instead of
+            // destroying so the user can flip hideExistingVisualsWhenOverridden
+            // off and recover the old look without rebuilding the prefab.
+            foreach (var r in GetComponentsInChildren<Renderer>(true))
+            {
+                // Skip renderers that were spawned by this method — they're
+                // inside the visualPrefab subtree we instantiate below, and
+                // we instantiate AFTER this loop so they don't exist yet.
+                r.enabled = false;
+            }
+        }
+
+        GameObject vfx = Instantiate(visualPrefab, transform);
+        vfx.transform.localPosition = Vector3.zero;
+        vfx.transform.localRotation = Quaternion.Euler(visualLocalRotation);
+        vfx.transform.localScale    = Vector3.one * Mathf.Max(0.0001f, visualLocalScale);
     }
 
     public void Launch(Vector3 direction, float damageAmount)

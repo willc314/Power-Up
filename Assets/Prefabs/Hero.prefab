@@ -2660,19 +2660,78 @@ MonoBehaviour:
   moveSpeedBoostAmount: 0.25
   maxMoveSpeed: 100
   dashCooldownReductionPercent: 0.05
-  minDashCooldown: 0.15
+  minDashCooldown: 0.5
   healthRegenPerSecond: 1
   healthRegenBoostAmount: 0.5
   maxHealthRegenPerSecond: 100
+  iAmTankActive: 0
+  iAmTankHpExponentialPerBoost: 0.05
+  iAmTankRegenFlatPerBoost: 0.1
+  iAmTankRegenExponentialPerBoost: 0.05
+  iAmTankPermanentDamagePenalty: 0.65
+  iAmTankShieldRestoresDamage: 1
+  iAmTankAbilityCooldown: 30
+  iAmTankShieldDuration: 35
+  iAmTankHealFraction: 0.15
+  tankShieldPrefab: {fileID: 1289543790355709915, guid: b99922c2f59b1a542bdd06ae8bee47ae, type: 3}
+  tankShieldVisualScale: 1.2
+  tankShieldVisualYOffset: 0
+  tankShieldFreezeTime: 1.5
+  meteorEnabled: 0
+  meteorChanceOnCrit: 0.4
+  meteorDamageMultiplier: 2.5
+  meteorVfxPrefab: {fileID: 100008, guid: 90d6be0259fe4e24185ac6be60610b9c, type: 3}
+  meteorVfxRotationOffset: {x: 90, y: 0, z: 0}
+  meteorVfxScale: 0.5
+  meteorFallDuration: 0.42
+  meteorAOERadius: 3
+  meteorShakeAmplitude: 0.1
+  meteorShakeDuration: 0.15
+  meteorImpactSound: {fileID: 0}
+  meteorImpactSoundVolume: 1
+  meteorRainCooldown: 50
+  meteorRainCount: 100
+  meteorRainDuration: 4
+  meteorRainRadius: 12
+  meteorRainEnemyTargetFraction: 0.2
+  meteorRainDamageOriginOffset: {x: 0, y: 0, z: 0}
+  meteorRainDamagePerMeteor: 60
+  meteorRainAOERadius: 4
+  meteorRainFallDuration: 0.6
+  meteorRainShakeAmplitude: 0.18
+  meteorRainShakeDuration: 0.25
+  meteorRainSoundVolumeMultiplier: 0.4
+  meteorRainHitLayers:
+    serializedVersion: 2
+    m_Bits: 4294967295
+  meteorRainSound: {fileID: 0}
+  meteorRainSoundVolume: 1
+  bloodSenseActive: 0
+  bloodSenseMissingHpDamageRatio: 1
+  bloodSenseHpPerShieldLayer: 0.3
+  bloodSenseAbilityCooldown: 40
+  bloodSenseSacrificeFraction: 0.6
+  bloodSenseActiveExtraLayers: 0
+  bloodSenseAttackSpeedDuration: 8
+  bloodSenseAttackSpeedMultiplier: 1.5
+  bloodSenseShieldPrefab: {fileID: 6287953604210959080, guid: 5156d6689efbccb4991059f3a5755566, type: 3}
+  bloodSenseShieldVisualScale: 0.9
+  bloodSenseShieldVisualYOffset: 0
+  bloodSenseShieldFreezeTime: 1.5
+  bloodSenseShieldAlpha: 0.1
+  bloodSenseAuraPrefab: {fileID: 3377181292992421420, guid: 48c5715f9603c3842a353516a8baefbb, type: 3}
+  bloodSenseAuraVisualScale: 1.2
+  bloodSenseAuraVisualYOffset: 0
+  bloodSenseAuraAlpha: 0.1
   damageMultiplier: 1
   damageBoostAmount: 0.15
-  maxDamageMultiplier: 5
+  maxDamageMultiplier: 100
   critRate: 0
   critRateBoostAmount: 0.05
-  maxCritRate: 0.6
+  maxCritRate: 1
   critDamage: 2
   critDamageBoostAmount: 0.25
-  maxCritDamage: 6
+  maxCritDamage: 100
   primaryWeapon: {fileID: 0}
   secondaryWeapon: {fileID: 0}
   randomizeWeaponsOnSpawn: 1
@@ -2687,6 +2746,12 @@ MonoBehaviour:
   dashPhasesThroughEnemies: 1
   enemyLayerName: Enemy
   dashArenaEdgeMargin: 0.5
+  dashSound: {fileID: 8300000, guid: d46323e22e74e46baa241cbf48c85671, type: 3}
+  dashSoundVolume: 0.5
+  damagedSound: {fileID: 8300000, guid: 9df8aad6883b87643992a8816f40ee6c, type: 3}
+  damagedSoundVolume: 1
+  deathSound: {fileID: 8300000, guid: 2a0399e1ab7cc5a4f801a49bb7cb4f2b, type: 3}
+  deathSoundVolume: 1
   dashParticles: 1
   dashParticlesPerSecond: 80
   dashParticleColor: {r: 0.65, g: 0.55, b: 0.42, a: 1}
@@ -2757,19 +2822,33 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.01
   attackSpeedIncreasePercent: 0.15
+  attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 100
-  extraAttackMinSpacing: 0.01
+  extraAttackMinSpacing: 0.005
   slashPrefab: {fileID: 2526017728917958653, guid: cbc65052b92d3a245a0e616c4b3de3a3, type: 3}
   spawnDistance: 1
   spawnHeight: 1
   arcDegreesBonus: 0
-  arcDegreesPerBoost: 50
+  arcDegreesPerBoost: 60
   maxSlashArcDegrees: 360
   bladeSizeMultiplier: 1
   bladeSizeIncreasePerBoost: 0.1
-  maxBladeSizeMultiplier: 2.5
+  maxBladeSizeMultiplier: 5
+  zenithUnlocked: 0
+  zenithApplied: 0
+  zenithDamageMultiplier: 2
+  zenithExtraAttacksRequired: 3
+  zenithAttackSpeedReductionRequired: 0.3
+  zenithSemiMinor: 3
+  zenithSemiMinorJitter: 0.5
+  zenithSemiMinorWidenStrength: 0
+  zenithBladeMidOffset: 2.1
+  zenithTrailAlpha: 0.4
+  zenithTrailDuration: 0.1
+  zenithTrailCorner: 16
 --- !u!114 &8888070785139311172
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2797,10 +2876,12 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.01
   attackSpeedIncreasePercent: 0.15
+  attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.5
   extraAttackCount: 0
-  maxExtraAttackCount: 100
-  extraAttackMinSpacing: 0.01
+  maxExtraAttackCount: 200
+  extraAttackMinSpacing: 0.001
   shieldPrefab: {fileID: 6711622995299847906, guid: 28d318905bb3e5d46b0b92d326b2fc28, type: 3}
   spawnDistance: 0.8
   spawnHeight: 1
@@ -2831,52 +2912,103 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.001
   attackSpeedIncreasePercent: 0.15
-  postMaxBoostScale: 0.5
+  attackSpeedDiminishingFactor: 0.75
+  minAttackSpeedIncreasePercent: 0.01
+  postMaxBoostScale: 0.75
   extraAttackCount: 0
-  maxExtraAttackCount: 4
+  maxExtraAttackCount: 100
   extraAttackMinSpacing: 0.05
   bowVisualPrefab: {fileID: 131850, guid: 8093457b576f04fbfa270bca1b2553a1, type: 3}
   bowSpawnDistance: 1.2
   bowSpawnHeight: 1
   bowVisualRotationOffset: {x: 0, y: -90, z: 0}
-  glowColor: {r: 1, g: 1, b: 1, a: 1}
-  emissionIntensity: 2
-  useGlowLight: 1
-  maxLightIntensity: 6
-  maxLightRange: 4
   fullChargeTime: 1.5
-  slowdownWhileCharging: 0.4
+  slowdownWhileCharging: 0.75
   minReleaseTime: 0.1
+  chargingDamageReduction: 0.3
   arrowPrefab: {fileID: 4620594600889568894, guid: 14c125fb9e5d3c04db5be83d0ab292d9, type: 3}
-  arrowSpeed: 45
+  arrowSpeed: 40
+  arrowBaseLifetime: 2
   arrowSpawnForward: 0.2
   arrowMinDamage: 10
-  arrowMaxDamage: 70
-  arrowMinScale: 1
-  arrowMaxScale: 2.5
+  arrowMaxDamage: 40
+  arrowMinScale: 0.75
+  arrowMaxScale: 1.25
+  arrowDamageFalloffPerHit: 0.6
+  arrowDamageFalloffFloor: 0.2
   overchargeTime: 5
   deathBeamPrefab: {fileID: 4926047971536815124, guid: 5b65ab245209fd5468ad11d4e38a7460, type: 3}
-  overchargeColor: {r: 1, g: 0.95, b: 0.7, a: 1}
   overchargeVfxPrefab: {fileID: 0}
-  maxDamageIncreasePerLevel: 30
+  fullyChargedHeroAuraPrefab: {fileID: 7131401307255788800, guid: 4d9a3b35b3bc07649b697df7fb497b6d, type: 3}
+  overchargedHeroAuraPrefab: {fileID: 6063518424537689786, guid: bad5794a53f5c3645bb444b3a040ba01, type: 3}
+  heroAuraYOffset: 0
+  heroAuraScale: 1
+  heavenlyGaleEnabled: 0
+  galeChargeTime: 3
+  galeBarrageBaseDuration: 2.5
+  galeBarrageDurationPerBoost: 0.3
+  galeBarrageMaxDuration: 12
+  galeBarrageBaseInterval: 0.18
+  galeBarrageIntervalPerBoost: 0.8512644
+  galeBarrageMinInterval: 0.001
+  galeBarrageBaseProjectilesPerShot: 1
+  galeBarrageProjectilesPerBoost: 1
+  galeBarrageMaxProjectilesPerShot: 20
+  galeOscillationDegreesPerSide: 50
+  galeOscillationStepDegrees: 10
+  galeDeathBeamChancePerArrow: 0.05
+  galeDeathBeamDuration: 1
+  galeDeathBeamRadiusMultiplier: 0.35
+  galeDeathBeamSkyHeight: 30
+  galeDeathBeamMinTiltDegrees: 12
+  galeDeathBeamMaxTiltDegrees: 32
+  galeDeathBeamGroundExtension: 4
+  galeDeathBeamBloomIntensity: 3
+  galeDeathBeamDamageMultiplier: 0.5
+  galeDeathBeamShakeAmplitude: 0.05
+  galeDeathBeamTargetSearchRadius: 25
+  galeBarrageMaxPierce: 0
+  galeBowPickupDamageScale: 0.5
+  galeShieldPickupLifetimeBonus: 0.5
+  galeShieldPickupDamageScale: 1
+  galeBarrageArrowPrefab: {fileID: 4620594600889568894, guid: 79c8df3e3272f20468f9e0a96ba55df4, type: 3}
+  galeArrowTrailAlpha: 0.196
+  maxDamageIncreasePerLevel: 8
   minDamageIncreasePerLevel: 4
   minFullChargeTime: 0.4
   chargeSpeedIncreasePercent: 0.15
   minOverchargeTime: 1.5
   overchargeSpeedIncreasePercent: 0.15
+  homingChargeThreshold: 0.95
+  fullyChargedHomingDuration: 6
+  fullyChargedHomingTurnSpeed: 360
+  fullyChargedHomingTurnSpeedRamp: 360
+  fullyChargedHomingTurnSpeedMax: 2160
+  fullyChargedHomingMaxRange: 30
+  fullyChargedPierceCount: 1
   arrowProjectileCount: 1
   maxArrowProjectileCount: 100
   arrowSpreadAngle: 10
-  postOverchargeDamageRate: 0.2
+  crossbowPickupCount: 0
+  postOverchargeDamageRate: 0.6
   maxPostOverchargeMultiplier: 0
   deathBeamDpsBonus: 0
-  deathBeamDpsPerBoost: 50
+  deathBeamDpsPerBoost: 100
   deathBeamRadiusBonus: 0
   deathBeamRadiusPerBoost: 0.4
   maxDeathBeamRadiusBonus: 4
+  deathBeamMaxHpPercentBonus: 0
+  deathBeamMaxHpPercentBonusPerBoost: 0.1
+  maxDeathBeamMaxHpPercentBonus: 2
+  arrowLifetimeBonus: 0
+  arrowLifetimeBonusPerBoost: 0.5
+  maxArrowLifetimeBonus: 4
+  arrowPierceBonus: 0
+  arrowPierceBonusPerBoost: 1
+  maxArrowPierceBonus: 8
   deathBeamDurationBonus: 0
   deathBeamDurationPerBoost: 0.5
-  maxDeathBeamDurationBonus: 4
+  maxDeathBeamDurationBonus: 6
 --- !u!114 &3670884374136682343
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2904,16 +3036,18 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.001
   attackSpeedIncreasePercent: 0.15
+  attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 100
-  extraAttackMinSpacing: 0.05
+  extraAttackMinSpacing: 0.01
   arrowPrefab: {fileID: 4093347662047577129, guid: 328739536d0ead6479ec0b1d111290f5, type: 3}
   spawnDistance: 0.8
   spawnHeight: 1
   projectileCount: 1
   maxProjectileCount: 100
-  spreadAngle: 15
+  spreadAngle: 25
   crossbowVisualPrefab: {fileID: 6721586060920507822, guid: 8e5012eaa9daab14aa5a36ff5fb52bad, type: 3}
   visualSpawnDistance: 0.8
   visualSpawnHeight: 1
@@ -2943,17 +3077,21 @@ MonoBehaviour:
   damageLevel: 1
   maxDamageLevel: 5
   damageIncreasePerLevel: 5
-  minCooldown: 0.01
+  minCooldown: 0.001
   attackSpeedIncreasePercent: 0.15
+  attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.5
   extraAttackCount: 0
   maxExtraAttackCount: 120
-  extraAttackMinSpacing: 0.01
+  extraAttackMinSpacing: 0.001
   grenadePrefab: {fileID: 5172283616525916960, guid: dea83f823520fd74198a6bfcc72b73aa, type: 3}
-  throwDistance: 6
+  throwDistance: 5
   arcHeight: 3
   flightTime: 0.8
   spawnHeight: 1
+  throwSound: {fileID: 0}
+  throwSoundVolume: 0.5
   explosionRadiusBonus: 0
   radiusIncreasePerLevel: 1
   maxExplosionRadiusBonus: 5
@@ -2984,6 +3122,8 @@ MonoBehaviour:
   damageIncreasePerLevel: 5
   minCooldown: 0.001
   attackSpeedIncreasePercent: 0.15
+  attackSpeedDiminishingFactor: 0.85
+  minAttackSpeedIncreasePercent: 0.01
   postMaxBoostScale: 0.4
   extraAttackCount: 0
   maxExtraAttackCount: 100
@@ -2999,6 +3139,22 @@ MonoBehaviour:
   thrownDamage: 30
   throwEveryNStabs: 4
   throwSpawnHeight: 1
+  elementalShivEnabled: 0
+  elementalStabPrefab: {fileID: 4135451800918885864, guid: bb77a80ca62b01d4082209f47217da37, type: 3}
+  elementalThrownDaggerPrefab: {fileID: -5115320881736233332, guid: 06b82c46265eac04fb97e730ab6e9390, type: 3}
+  elementalCloneVisualPrefab: {fileID: 323333351367080586, guid: 9b3c02a198a4196458a48e67b9a4e393, type: 3}
+  cloneVisualRotationOffset: {x: 90, y: 0, z: 0}
+  cloneColor: {r: 0.55, g: 0.85, b: 1, a: 0.27450982}
+  useRainbowCloneColor: 1
+  cloneCountMin: 2
+  cloneCountMax: 3
+  cloneSpawnDistance: 4
+  cloneTravelDuration: 0.4
+  cloneVerticalOffset: 1
+  cloneDamageMultiplier: 0.6
+  shivDebuffDuration: 3
+  shivSlowFactor: 0.7
+  shivDamageFactor: 0.7
 --- !u!1 &8206070634150816031
 GameObject:
   m_ObjectHideFlags: 0

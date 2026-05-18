@@ -42,7 +42,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5514918855898946780}
-  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
+  m_Mesh: {fileID: 10207, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!23 &182365225315884755
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -123,10 +123,16 @@ MonoBehaviour:
   radius: 1
   hitRadiusMultiplier: 3
   damagePerSecond: 500
+  maxHpFractionPerSecond: 0.01
   heroSpeedDuringBeam: 0
   shakeAmplitude: 0.25
   vfxPrefab: {fileID: 0}
   spawnHeight: 1
+  useFixedTransform: 0
+  tintColor: {r: 1, g: 1, b: 1, a: 0}
+  emissionBloomIntensity: 1
+  fireSound: {fileID: 0}
+  fireSoundVolume: 1
   beamParticlesPerSecond: 80
   beamParticleColor: {r: 1, g: 1, b: 1, a: 1}
   beamParticleSpeed: 12

@@ -27,6 +27,10 @@ public class MusicManager : MonoBehaviour
     public AudioClip bossClip;
     [Tooltip("Music played when the victory screen opens. Looping is fine but optional — set Loop Victory to false if it's a one-shot fanfare.")]
     public AudioClip victoryClip;
+    [Tooltip("Looping music for the title screen. Played by MainMenu.Start (or call PlayTitle() yourself).")]
+    public AudioClip titleClip;
+    [Tooltip("Music for the end / game over screen. Looping is optional — set Loop End to false for a one-shot sting.")]
+    public AudioClip endClip;
 
     [Header("Mixing")]
     [Tooltip("Master music volume.")]
@@ -41,6 +45,8 @@ public class MusicManager : MonoBehaviour
     public float duckFadeTime = 0.25f;
     [Tooltip("If true, the victory clip loops while the victory screen is open. If false, it plays once then leaves silence (until PlayBackground is called).")]
     public bool loopVictory = true;
+    [Tooltip("If true, the end clip loops on the game-over screen. Set false for a one-shot sting that fades to silence.")]
+    public bool loopEnd = true;
     [Tooltip("If true, automatically plays the background clip on Start. Turn off if your scene loader needs to start music manually.")]
     public bool playOnStart = true;
     [Tooltip("If true, the manager survives scene changes. Useful if the victory screen is a separate scene; leave off if every scene has its own MusicManager.")]
@@ -73,6 +79,12 @@ public class MusicManager : MonoBehaviour
         Instance = this;
         if (persistAcrossScenes) DontDestroyOnLoad(gameObject);
 
+        // Pull persisted music volume from GameSettings so the player's
+        // saved slider value takes effect even though GameSettings.Apply()
+        // runs before any per-scene MusicManager exists.
+        if (GameSettings.Instance != null)
+            volume = Mathf.Clamp01(GameSettings.Instance.MusicVolume);
+
         sourceA = gameObject.AddComponent<AudioSource>();
         sourceB = gameObject.AddComponent<AudioSource>();
         ConfigureSource(sourceA);
@@ -82,7 +94,16 @@ public class MusicManager : MonoBehaviour
 
     private void Start()
     {
-        if (playOnStart && backgroundClip != null) PlayBackground();
+        if (!playOnStart) return;
+        // Auto-pick the most appropriate clip for the scene the manager is in.
+        // Title scene: titleClip set, others empty → plays title.
+        // Gameplay scene: backgroundClip set → plays background.
+        // End scene: endClip set, background empty → plays end.
+        if      (titleClip      != null && backgroundClip == null) PlayTitle();
+        else if (endClip        != null && backgroundClip == null) PlayEnd();
+        else if (backgroundClip != null) PlayBackground();
+        else if (titleClip      != null) PlayTitle();
+        else if (endClip        != null) PlayEnd();
     }
 
     private void OnDestroy()
@@ -106,6 +127,8 @@ public class MusicManager : MonoBehaviour
     public void PlayBackground() => RequestPlay(backgroundClip, loop: true);
     public void PlayBoss()       => RequestPlay(bossClip,       loop: true);
     public void PlayVictory()    => RequestPlay(victoryClip,    loop: loopVictory);
+    public void PlayTitle()      => RequestPlay(titleClip,      loop: true);
+    public void PlayEnd()        => RequestPlay(endClip,        loop: loopEnd);
 
     /// <summary>Fade out everything, leaving silence.</summary>
     public void Stop()

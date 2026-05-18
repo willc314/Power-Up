@@ -18,6 +18,12 @@ public class GrenadeWeapon : Weapon
     [Tooltip("Vertical offset for the throw release point.")]
     public float spawnHeight = 1.0f;
 
+    [Header("Throw SFX")]
+    [Tooltip("One-shot sound played at the hero's position when the grenade leaves the hand. Routed through SoundManager.")]
+    public AudioClip throwSound;
+    [Tooltip("Per-clip volume multiplier for the throw SFX. Stacks on SoundManager.volume.")]
+    [Range(0f, 1f)] public float throwSoundVolume = 1f;
+
     [Header("Power Boost (Range)")]
     [Tooltip("Total bonus added to the explosion radius from Range boosts. Set by TryApplyBoost(Range).")]
     public float explosionRadiusBonus = 0f;
@@ -25,6 +31,19 @@ public class GrenadeWeapon : Weapon
     public float radiusIncreasePerLevel = 1.0f;
     [Tooltip("Cap on explosionRadiusBonus.")]
     public float maxExplosionRadiusBonus = 5f;
+
+    private void Awake()
+    {
+        weaponName = "Grenade";
+        weaponType = eWeaponType.grenade;
+        // The actual AOE damage lives on the Explosion prefab — pull it onto
+        // the weapon's own `damage` field at startup so per-weapon upgrades
+        // (which all add to `damage`) actually feed back into Fire(). Without
+        // this Fire() would read directly from the prefab and any post-max
+        // damage boosts on the weapon would be silent no-ops.
+        if (grenadePrefab != null && grenadePrefab.explosionPrefab != null)
+            damage = grenadePrefab.explosionPrefab.damage;
+    }
 
     protected override void Fire(Hero owner)
     {
@@ -38,12 +57,29 @@ public class GrenadeWeapon : Weapon
 
         Grenade g = Instantiate(grenadePrefab, startPos, Quaternion.identity);
         g.radiusBonus = explosionRadiusBonus;
+        // Throw SFX at the hero's release point (slightly forward + up,
+        // matches the visual spawn position so the audio's spatialization
+        // tracks the throw rather than the hero's pivot).
+        if (throwSound != null && SoundManager.Instance != null)
+            SoundManager.Instance.PlaySfxAt(throwSound, startPos, throwSoundVolume);
         // Bake hero damage modifiers (general damage + crit) into the
-        // explosion's damage. The base value comes from the explosion prefab
-        // since that's where Grenade's actual AOE damage lives.
-        if (grenadePrefab.explosionPrefab != null)
-            g.damageOverride = owner.ComputeAttackDamage(grenadePrefab.explosionPrefab.damage);
+        // explosion's damage. Source is the weapon's own `damage` field,
+        // which Awake() seeded from the explosion prefab and which weapon
+        // upgrades (Range cap, Projectiles cap, Damage fallback) keep
+        // adding to via the base TryApplyBoost path. WithCrit overload
+        // feeds the Meteor general augment.
+        float dmg = owner.ComputeAttackDamageWithCrit(damage, out bool wasCrit);
+        g.damageOverride = dmg;
+        // Pre-crit friendly-fire damage so the player's crit roll doesn't
+        // amplify their own self-damage if they stand in the AOE. The
+        // multiplier-of-0.5x is preserved (matches the original Explosion
+        // behavior) but applied to the no-crit base instead.
+        g.friendlyFireDamage = owner.ComputeAttackDamageNoCrit(damage) * 0.5f;
         g.Launch(startPos, endPos, arcHeight, flightTime);
+        // Meteor arms the GRENADE itself — Grenade.Detonate() forwards the
+        // armer onto the spawned Explosion so the meteor fires when the
+        // explosion lands its first enemy hit.
+        owner.TryArmMeteorOnProjectile(g.gameObject, dmg, wasCrit, enemyLayers);
     }
 
     // ---- Boost overrides ----
@@ -72,6 +108,14 @@ public class GrenadeWeapon : Weapon
             return "+1 Extra Grenade";
         }
         return base.DescribeBoost(kind);
+    }
+
+    public override string GetExtraStatsBlock()
+    {
+        var sb = new System.Text.StringBuilder();
+        if (explosionRadiusBonus > 0f) sb.Append($"Explosion Radius +{explosionRadiusBonus:0.##}");
+        if (extraAttackCount > 0)      { if (sb.Length > 0) sb.Append('\n'); sb.Append($"Extra Grenades: {extraAttackCount}"); }
+        return sb.ToString();
     }
 
     public override bool TryApplyBoost(BoostKind kind)

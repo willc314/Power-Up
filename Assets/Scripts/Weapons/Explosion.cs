@@ -19,11 +19,21 @@ public class Explosion : MonoBehaviour
     [Tooltip("If true, the hero also takes damage if inside the radius.")]
     public bool hitsHero = true;
 
+    /// <summary>
+    /// Optional override for friendly-fire damage applied to the hero. Set by
+    /// GrenadeWeapon to the player's pre-crit attack damage so the player's
+    /// crit roll doesn't amplify their own self-damage. If &lt;= 0 the
+    /// original behavior (damage * 0.5f) applies.
+    /// </summary>
+    [System.NonSerialized] public float friendlyFireDamage = 0f;
+
     [Header("VFX")]
     [Tooltip("Optional particle prefab spawned at the blast center. For something fancier than the built-in cube burst.")]
     public GameObject vfxPrefab;
     [Tooltip("Seconds to wait before destroying this object (leave time for the VFX to play).")]
     public float vfxLifetime = 2f;
+    [Tooltip("Reference radius the vfxPrefab was authored at. The spawned VFX is uniformly scaled by (current radius / this value), so a grenade Range upgrade that doubles the AOE radius also doubles the visual size. Default 6 matches the Explosion's default radius — set this to whatever radius your VFX prefab visually 'fills' at and the scaling will line up. Set to 0 to disable size scaling.")]
+    public float vfxRefRadius = 6f;
 
     [Header("Built-in Debris Burst")]
     [Tooltip("If true, spawns a quick burst of cube/sphere debris flying upward and outward — looks like an explosion without needing a particle prefab.")]
@@ -61,14 +71,34 @@ public class Explosion : MonoBehaviour
         HashSet<Enemy> hitEnemies = new HashSet<Enemy>();
         int n = Physics.OverlapSphereNonAlloc(transform.position, radius, hitBuffer, hitLayers, QueryTriggerInteraction.Collide);
         bool heroHit = false;
+        // Meteor general augment: if our spawner (Grenade) transferred a
+        // MeteorArmer onto us, fire it on the FIRST enemy hit. Mirrors the
+        // "one meteor per fire-event, gated on enemy hit" semantics every
+        // other weapon already follows.
+        var meteorArmer = GetComponent<MeteorArmer>();
         for (int i = 0; i < n; i++)
         {
             Enemy e = hitBuffer[i].GetComponentInParent<Enemy>();
-            if (e != null && hitEnemies.Add(e)) { e.TakeDamage(damage); continue; }
+            if (e != null && hitEnemies.Add(e))
+            {
+                e.TakeDamage(damage);
+                if (meteorArmer != null) meteorArmer.TryConsume(e.transform.position);
+                continue;
+            }
             if (hitsHero && !heroHit)
             {
                 Hero h = hitBuffer[i].GetComponentInParent<Hero>();
-                if (h != null) { h.TakeDamage(damage * 0.5f); heroHit = true; }
+                if (h != null)
+                {
+                    // Friendly-fire damage uses the pre-crit value when the
+                    // weapon supplied one — keeps the player's crit roll
+                    // from amplifying their own self-damage. Falls back to
+                    // the legacy `damage * 0.5f` if the source didn't set
+                    // an override (so non-grenade callers still work).
+                    float heroDamage = friendlyFireDamage > 0f ? friendlyFireDamage : damage * 0.5f;
+                    h.TakeDamage(heroDamage);
+                    heroHit = true;
+                }
             }
         }
 
@@ -79,6 +109,26 @@ public class Explosion : MonoBehaviour
         if (vfxPrefab != null)
         {
             GameObject vfx = Instantiate(vfxPrefab, transform.position, Quaternion.identity);
+            // Tame the prefab: kill physics interference so it can't push
+            // mobs around, AND force ParticleSystems to non-looping so
+            // a third-party prefab with main.loop = true doesn't keep
+            // replaying its blast animation indefinitely. The Destroy()
+            // schedule below handles cleanup once the burst finishes.
+            VfxHelpers.DisablePhysicsInterference(vfx);
+            VfxHelpers.ConfigureAsOneShotVfx(vfx);
+            // Scale the GROUND-CRACK / mesh parts of the VFX to match the
+            // AOE radius, but keep particles (sparks, smoke, fire) at
+            // their authored size. A 2× radius boost grows the ground
+            // crack to 2× but the sparks shouldn't read as chunky-twice-
+            // as-big. ScaleStaticRenderersOnly walks non-particle
+            // renderers and scales their transforms while pinning every
+            // ParticleSystem to Local scaling so it ignores any parent
+            // transform changes.
+            if (vfxRefRadius > 0.0001f)
+            {
+                float scale = Mathf.Max(0.0001f, radius / vfxRefRadius);
+                VfxHelpers.ScaleStaticRenderersOnly(vfx, scale);
+            }
             Destroy(vfx, vfxLifetime);
         }
 

@@ -94,6 +94,36 @@ public abstract class Weapon : MonoBehaviour
 
     public bool IsDamageMaxed => damageLevel >= maxDamageLevel;
 
+    /// <summary>Damage value at scene start, captured by Start(). Used by the StatsMenu for original-vs-current display.</summary>
+    public float OriginalDamage   { get; private set; }
+    /// <summary>Cooldown value at scene start, captured by Start(). Used by the StatsMenu.</summary>
+    public float OriginalCooldown { get; private set; }
+
+    private bool originalsCaptured;
+    /// <summary>
+    /// Snapshot the inspector-provided damage and cooldown so the StatsMenu
+    /// can show what the player started with versus where they are now.
+    /// Uses Start() instead of Awake() so any subclass tweaks during Awake
+    /// (e.g. DaggerWeapon's setting weaponName/type) are already in effect.
+    /// </summary>
+    private void Start()
+    {
+        if (originalsCaptured) return;
+        originalsCaptured = true;
+        OriginalDamage   = damage;
+        OriginalCooldown = cooldown;
+    }
+
+    /// <summary>
+    /// Override per weapon to expose upgrade-tracked stats (multi-arrow,
+    /// blade size, beam bonuses, etc.) as a multi-line string the StatsMenu
+    /// renders verbatim. Default: empty (no extras).
+    /// </summary>
+    public virtual string GetExtraStatsBlock()
+    {
+        return "";
+    }
+
     [Header("Attack-Speed Boost")]
     [Tooltip("Floor for cooldown when applying AttackSpeed boosts.")]
     public float minCooldown = 0.08f;
@@ -101,13 +131,31 @@ public abstract class Weapon : MonoBehaviour
     [Range(0f, 1f)] public float attackSpeedIncreasePercent = 0.15f;
     [Tooltip("Each AttackSpeed boost is this fraction as effective as the previous. 0.85 = boost #2 gives 85% of #1's gain, #3 gives 72%, #4 gives 61%, etc.")]
     [Range(0f, 1f)] public float attackSpeedDiminishingFactor = 0.85f;
+    [Tooltip("Floor on the diminishing curve. The per-boost attack-speed gain never shrinks below this — so a fully-stacked player still gets a small but non-zero gain per pickup. 0.01 = +1% attack speed minimum.")]
+    [Range(0f, 1f)] public float minAttackSpeedIncreasePercent = 0.01f;
 
     /// <summary>How many AttackSpeed boosts have been applied. Drives the per-boost diminishing curve.</summary>
     protected int attackSpeedBoostsTaken = 0;
 
-    /// <summary>The diminishing multiplier the next AttackSpeed boost should be scaled by, given the count so far.</summary>
+    /// <summary>
+    /// Diminishing multiplier the next AttackSpeed boost is scaled by. Floored
+    /// so the effective per-boost percent doesn't drop below
+    /// minAttackSpeedIncreasePercent — i.e. the player always gets at least
+    /// that much per pickup, no matter how stacked they are.
+    /// </summary>
     protected float AttackSpeedDiminisher
-        => Mathf.Pow(attackSpeedDiminishingFactor, attackSpeedBoostsTaken);
+    {
+        get
+        {
+            float raw = Mathf.Pow(attackSpeedDiminishingFactor, attackSpeedBoostsTaken);
+            if (attackSpeedIncreasePercent > 0.0001f)
+            {
+                float minRatio = minAttackSpeedIncreasePercent / attackSpeedIncreasePercent;
+                return Mathf.Max(minRatio, raw);
+            }
+            return raw;
+        }
+    }
 
     [Header("Post-Max Scaling")]
     [Tooltip("After the weapon hits its main cap, further boosts still apply but at this fraction of normal strength. 0.5 = half-strength, forever.")]
@@ -118,7 +166,7 @@ public abstract class Weapon : MonoBehaviour
     public int extraAttackCount = 0;
     [Tooltip("Cap on extraAttackCount. Past this, Projectiles boosts fall back to scaled damage.")]
     public int maxExtraAttackCount = 4;
-    [Tooltip("Lower bound on the time between extra attacks. Used when cooldown / (extraAttackCount + 1) would otherwise be too small to be visible.")]
+    [Tooltip("Lower bound on the time between extra attacks. Used when cooldown / (extraAttackCount + 1) would otherwise be too small to be visible. Subclasses can raise this floor for visual coherence (e.g. SwordWeapon enforces it ≥ slash duration so the per-swing animation always finishes before the next swing starts).")]
     public float extraAttackMinSpacing = 0.05f;
 
     // ---- Boost API ----
@@ -229,7 +277,15 @@ public abstract class Weapon : MonoBehaviour
     protected virtual void Update()
     {
         if (cooldownTimer > 0f)
-            cooldownTimer -= Time.deltaTime;
+        {
+            // Scale by Hero.attackSpeedMultiplier so global attack-speed
+            // buffs (Blood Sense MMB) accelerate every weapon's cooldown
+            // tick uniformly. Default 1.0 — no effect outside of an
+            // active buff. Defensive null-check in case the singleton
+            // hasn't initialized yet during scene load.
+            float scale = Hero.Instance != null ? Hero.Instance.attackSpeedMultiplier : 1f;
+            cooldownTimer -= Time.deltaTime * Mathf.Max(0.01f, scale);
+        }
     }
 
     /// <summary>
@@ -292,7 +348,7 @@ public abstract class Weapon : MonoBehaviour
     /// complete before the next normal attack is allowed. Spacing is derived
     /// from the current cooldown — faster weapons fire their extras faster.
     /// </summary>
-    private IEnumerator FireExtras(Hero owner)
+    protected IEnumerator FireExtras(Hero owner)
     {
         // Snapshot count + cooldown so live mutations during the sequence
         // (a boost picked up mid-run, etc.) don't change the schedule.

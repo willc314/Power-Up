@@ -195,13 +195,33 @@ public class CameraFollow : MonoBehaviour
     }
 
     /// <summary>
-    /// Trigger a screen shake. Shakes are additive — re-calling extends or strengthens.
+    /// Trigger a screen shake. Shakes overlap correctly: the camera always
+    /// runs whichever shake feels stronger AT THIS MOMENT, accounting for
+    /// linear falloff of the existing one.
+    ///
+    /// The old behavior just stored the peak amplitude until the timer ran
+    /// out, which meant a fresh strong shake (e.g. boss death-beam fire)
+    /// would 'lock in' that amplitude — and a weaker shake fired during the
+    /// boss shake's tail (e.g. a grenade explosion) would extend the timer
+    /// while inheriting the boss amplitude. Now we compute the boss shake's
+    /// faded-down 'effective' amplitude and keep only the larger of that and
+    /// the new shake.
     /// </summary>
     public void Shake(float amplitude, float duration)
     {
-        // Take the strongest shake currently active.
-        if (amplitude > shakeAmplitude) shakeAmplitude = amplitude;
-        if (duration > shakeTimer) { shakeTimer = duration; shakeDuration = duration; }
+        // Effective amplitude of the existing shake right now (after falloff).
+        float currentEffective = (shakeDuration > 0f && shakeTimer > 0f)
+            ? shakeAmplitude * Mathf.Clamp01(shakeTimer / shakeDuration)
+            : 0f;
+
+        // The strongest source wins for amplitude, but we re-anchor it to the
+        // new (or extended) timer so falloff resumes cleanly from here.
+        float winningAmp   = Mathf.Max(amplitude, currentEffective);
+        float winningTimer = Mathf.Max(shakeTimer, duration);
+
+        shakeAmplitude = winningAmp;
+        shakeTimer     = winningTimer;
+        shakeDuration  = winningTimer;
     }
 
     private Vector3 GetShakeOffset()

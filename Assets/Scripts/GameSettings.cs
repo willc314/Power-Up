@@ -18,6 +18,69 @@ public class GameSettings : MonoBehaviour
 {
     public static GameSettings Instance { get; private set; }
 
+    public enum Difficulty { Easy, Normal, Hard }
+
+    /// <summary>
+    /// Knobs the difficulty preset feeds into the various gameplay systems.
+    /// Tunable from the GameSettings inspector — the defaults below are
+    /// applied if no preset has been edited.
+    /// </summary>
+    [System.Serializable]
+    public struct DifficultyPreset
+    {
+        [Tooltip("Multiplier added to the per-minute regular-enemy HP scaling. Higher = enemies tougher faster.")]
+        public float regularHpBonusPerMinute;
+        [Tooltip("Seconds between boss spawns. Lower = bosses arrive more often.")]
+        public float bossSpawnInterval;
+        [Tooltip("Boss HP exponent: each boss is this multiple of the previous one's HP.")]
+        public float bossHpMultiplierPerSpawn;
+        [Tooltip("SlimeKing's attack-speed boost multiplier in ranged mode. Lower = faster ranged attacks (so EASY = closer to 1, HARD = lower).")]
+        public float slimeKingAttackSpeedBoostMultiplier;
+        [Tooltip("Multiplier on every Crossbow-behavior enemy's projectile damage (incl. SlimeKing's ranged shots).")]
+        public float crossbowDamageMultiplier;
+        [Tooltip("Multiplier applied to the final boss (SlimeGod) — feeds into its attackDamageMultiplier so every damaging move it does (dash, beam, arrows, etc.) scales together.")]
+        public float finalBossDamageMultiplier;
+    }
+
+    [Header("Difficulty Presets")]
+    public DifficultyPreset easyPreset = new DifficultyPreset
+    {
+        regularHpBonusPerMinute = 0.50f,
+        bossSpawnInterval = 60f,
+        bossHpMultiplierPerSpawn = 1.5f,
+        slimeKingAttackSpeedBoostMultiplier = 0.75f,
+        crossbowDamageMultiplier = 0.6f,
+        finalBossDamageMultiplier = 0.6f,
+    };
+    public DifficultyPreset normalPreset = new DifficultyPreset
+    {
+        regularHpBonusPerMinute = 1f,
+        bossSpawnInterval = 60f,
+        bossHpMultiplierPerSpawn = 2.5f,
+        slimeKingAttackSpeedBoostMultiplier = 0.25f,
+        crossbowDamageMultiplier = 1.0f,
+        finalBossDamageMultiplier = 1.2f,
+    };
+    public DifficultyPreset hardPreset = new DifficultyPreset
+    {
+        regularHpBonusPerMinute = 3f,
+        bossSpawnInterval = 60f,
+        bossHpMultiplierPerSpawn = 5f,
+        slimeKingAttackSpeedBoostMultiplier = 0.1f,
+        crossbowDamageMultiplier = 1.5f,
+        finalBossDamageMultiplier = 1.8f,
+    };
+
+    public DifficultyPreset GetActivePreset()
+    {
+        switch (CurrentDifficulty)
+        {
+            case Difficulty.Easy: return easyPreset;
+            case Difficulty.Hard: return hardPreset;
+            default:              return normalPreset;
+        }
+    }
+
     /// <summary>Common FPS caps shown in the options menu. 0 means uncapped.</summary>
     public static readonly int[] FpsOptions = { 30, 60, 90, 120, 144, 180, 240, 0 };
 
@@ -36,6 +99,9 @@ public class GameSettings : MonoBehaviour
     private const string PrefsResWidth    = "Settings.ResolutionWidth";
     private const string PrefsResHeight   = "Settings.ResolutionHeight";
     private const string PrefsFullscreen  = "Settings.Fullscreen";
+    private const string PrefsMusicVol    = "Settings.MusicVolume";
+    private const string PrefsSfxVol      = "Settings.SfxVolume";
+    private const string PrefsDifficulty  = "Settings.Difficulty";
 
     /// <summary>Target framerate. 0 = uncapped.</summary>
     public int TargetFps { get; private set; } = 60;
@@ -43,6 +109,14 @@ public class GameSettings : MonoBehaviour
     public Vector2Int Resolution { get; private set; } = new Vector2Int(1920, 1080);
     /// <summary>True for fullscreen, false for windowed.</summary>
     public bool Fullscreen { get; private set; } = true;
+
+    /// <summary>Music volume from 0 (mute) to 1 (full). Applied to MusicManager.volume; also drives AudioListener.volume as a fallback when MusicManager isn't loaded.</summary>
+    public float MusicVolume { get; private set; } = 0.7f;
+    /// <summary>SFX volume from 0 (mute) to 1 (full). Applied to SoundManager.volume.</summary>
+    public float SfxVolume { get; private set; } = 1.0f;
+
+    /// <summary>Active difficulty. Changes only take effect on the next new game.</summary>
+    public Difficulty CurrentDifficulty { get; private set; } = Difficulty.Normal;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap()
@@ -69,6 +143,10 @@ public class GameSettings : MonoBehaviour
         int h      = PlayerPrefs.GetInt(PrefsResHeight, Screen.currentResolution.height);
         Resolution = new Vector2Int(Mathf.Max(640, w), Mathf.Max(360, h));
         Fullscreen = PlayerPrefs.GetInt(PrefsFullscreen, Screen.fullScreen ? 1 : 0) != 0;
+        MusicVolume = Mathf.Clamp01(PlayerPrefs.GetFloat(PrefsMusicVol, 0.7f));
+        SfxVolume   = Mathf.Clamp01(PlayerPrefs.GetFloat(PrefsSfxVol,   1.0f));
+        int diff = PlayerPrefs.GetInt(PrefsDifficulty, (int)Difficulty.Normal);
+        CurrentDifficulty = (Difficulty)Mathf.Clamp(diff, (int)Difficulty.Easy, (int)Difficulty.Hard);
     }
 
     public void Save()
@@ -77,6 +155,9 @@ public class GameSettings : MonoBehaviour
         PlayerPrefs.SetInt(PrefsResWidth,   Resolution.x);
         PlayerPrefs.SetInt(PrefsResHeight,  Resolution.y);
         PlayerPrefs.SetInt(PrefsFullscreen, Fullscreen ? 1 : 0);
+        PlayerPrefs.SetFloat(PrefsMusicVol, MusicVolume);
+        PlayerPrefs.SetFloat(PrefsSfxVol,   SfxVolume);
+        PlayerPrefs.SetInt(PrefsDifficulty, (int)CurrentDifficulty);
         PlayerPrefs.Save();
     }
 
@@ -84,6 +165,24 @@ public class GameSettings : MonoBehaviour
     {
         ApplyFps();
         ApplyDisplay();
+        ApplyAudio();
+    }
+
+    /// <summary>
+    /// Push music + SFX volumes onto their respective managers. Each
+    /// manager owns its own AudioSource(s) and reads its `volume` field
+    /// when scheduling audio, so setting these values takes effect on
+    /// the next play (and crossfades for music). AudioListener.volume
+    /// stays at 1.0 — we DON'T globally scale it, otherwise the SFX
+    /// slider would also affect music and vice versa.
+    /// </summary>
+    public void ApplyAudio()
+    {
+        AudioListener.volume = 1f;
+        if (MusicManager.Instance != null)
+            MusicManager.Instance.volume = Mathf.Clamp01(MusicVolume);
+        if (SoundManager.Instance != null)
+            SoundManager.Instance.volume = Mathf.Clamp01(SfxVolume);
     }
 
     /// <summary>Apply the FPS cap only — cheap, safe to call every frame.</summary>
@@ -106,6 +205,10 @@ public class GameSettings : MonoBehaviour
     public void SetTargetFps(int fps)        { TargetFps = Mathf.Max(0, fps); ApplyFps();     Save(); }
     public void SetResolution(Vector2Int r)  { Resolution = r;                ApplyDisplay(); Save(); }
     public void SetFullscreen(bool fs)       { Fullscreen = fs;               ApplyDisplay(); Save(); }
+    public void SetMusicVolume(float v)      { MusicVolume = Mathf.Clamp01(v); ApplyAudio();  Save(); }
+    public void SetSfxVolume(float v)        { SfxVolume   = Mathf.Clamp01(v); ApplyAudio();  Save(); }
+    /// <summary>Pick a difficulty preset. Doesn't apply to gameplay until the player starts a new run.</summary>
+    public void SetDifficulty(Difficulty d)  { CurrentDifficulty = d; Save(); }
 
     /// <summary>Pretty label for the FPS option (e.g. "60 FPS" or "Unlimited").</summary>
     public static string FormatFps(int fps) => fps <= 0 ? "Unlimited" : fps + " FPS";

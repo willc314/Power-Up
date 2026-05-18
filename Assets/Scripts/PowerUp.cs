@@ -46,6 +46,12 @@ public class PowerUp : MonoBehaviour
     public float bobHeight = 0.25f;
     public float bobSpeed = 3f;
 
+    [Header("Drop SFX")]
+    [Tooltip("One-shot sound played at the powerup's position the moment it drops (Awake). Routed through SoundManager so it picks up the SFX volume slider + 3D rolloff. Leave null for silent drops.")]
+    public AudioClip dropSound;
+    [Tooltip("Per-clip volume multiplier for the drop SFX. Stacks on SoundManager.volume.")]
+    [Range(0f, 1f)] public float dropSoundVolume = 1f;
+
     [Header("Colors")]
     public Color swordColor = new Color(1f, 0.35f, 0.25f, 1f);
     public Color shieldColor = new Color(0.25f, 0.65f, 1f, 1f);
@@ -74,6 +80,13 @@ public class PowerUp : MonoBehaviour
 
         startPosition = transform.position;
         birthTime = Time.time;
+
+        // Drop SFX — fires the moment the powerup spawns into the world.
+        // Awake is the natural hook because powerups are instantiated at
+        // their final position by the enemy that drops them; nothing
+        // post-spawn relocates them.
+        if (dropSound != null && SoundManager.Instance != null)
+            SoundManager.Instance.PlaySfxAt(dropSound, transform.position, dropSoundVolume);
     }
 
     private void Start()

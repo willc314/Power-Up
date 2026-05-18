@@ -284,7 +284,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   behavior: 6
-  maxHP: 80000
+  maxHP: 10000
   attackDamage: 80
   moveSpeed: 1.2
   attackRange: 1.4
@@ -319,8 +319,11 @@ MonoBehaviour:
   hitParticleLifetime: 0.5
   hitParticleSpread: 35
   hitParticleHeight: 1
+  damagedSound: {fileID: 8300000, guid: 68dcc44cebdfb0a4488f492e8d505de6, type: 3}
+  damagedSoundVolume: 0.05
   dashSpeedMultiplier: 6
   dashTelegraphTime: 0.8
+  dashLockOnDelay: 0.15
   dashDuration: 0.3
   dashRecovery: 1.2
   crossbowProjectile: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
@@ -350,7 +353,7 @@ MonoBehaviour:
   skAttackSpeedBoostMultiplier: 0.1
   skAttackSpeedBoostDuration: 7
   skKiteRange: 7
-  splitOnDeath: 1
+  splitOnDeath: 0
   splitPrefab: {fileID: 1931298151966786, guid: 928a1377c1cd4515b208fef3a396b8ea, type: 3}
   splitCount: 10
   splitRadius: 1.6
@@ -407,27 +410,59 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: dd3156eec293fe849a0dd5438f3e783f, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  startDamageReduction: 0.99
+  startDamageReduction: 0.5
   endDamageReduction: 0
-  damageReductionGracePeriod: 40
-  damageReductionDecayTime: 120
+  damageReductionGracePeriod: 15
+  damageReductionDecayTime: 45
   spawnTelegraphTime: 2.5
   spawnTelegraphRadius: 6
   spawnShakeAmplitude: 0.7
   spawnShakeDuration: 0.9
+  spawnGridVolleysEnabled: 1
+  spawnGridVolleyCount: 3
+  spawnGridArrowsPerVolley: 12
+  spawnGridTelegraphTime: 0.9
+  spawnGridIntervalBetween: 0.4
+  spawnGridArrowSpeed: 32
+  spawnGridArrowDamage: 15
+  spawnGridArrowScale: 0.55
+  spawnGridEdgeSpawnRadius: 18
+  spawnGridLeadStep: 0.4
+  bonusVolleysContinuousEnabled: 1
+  bonusVolleyInterval: 10
   interPatternPause: 1.4
+  enragePhaseTime: 480
+  enragedRangedSpamInterval: 0.18
   baseMoveSpeed: 3
+  arenaEdgeMargin: 1.5
+  playerSpeedPredictionCap: 1
+  playerSpeedSpikeMultiplier: 2
   dashCount: 10
   dashOvershoot: 4
   dashGap: 0.2
-  dashLockOnDelay: 0.75
+  dashLockOnDelay: 0.55
   dashDuration: 0.18
   dashHitRadius: 2.2
-  dashDamage: 90
+  dashDamage: 100
   dashShakeAmplitude: 0.35
   dashShakeDuration: 0.18
   dashFootstepShakeAmplitude: 0.08
   dashFootstepShakeDuration: 0.05
+  dashSideArrowsEnabled: 1
+  dashSideArrowCount: 3
+  dashEndBeamEnabled: 1
+  dashEndBeamDuration: 0.3
+  dashEndBeamSweepDegrees: 90
+  dashEndBeamDamagePerSecond: 160
+  dashEndBeamHitRadius: 1
+  dashEndBeamWidth: 0.6
+  dashEndBeamColor: {r: 1, g: 0.55073583, b: 0.035848916, a: 1}
+  dashBurnEnabled: 0
+  dashBurnDuration: 3
+  dashBurnRadius: 1.5
+  dashBurnDamagePerSecond: 25
+  dashBurnSpawnInterval: 0.04
+  dashBurnColor: {r: 1, g: 0.18, b: 0.12, a: 0.85}
   bounceCount: 10
   bounceTelegraphTime: 0.4
   bounceArcTime: 0.7
@@ -437,62 +472,85 @@ MonoBehaviour:
   bounceLeadDistance: 0.6
   bounceShakeAmplitude: 0.45
   bounceShakeDuration: 0.32
-  meleeHomingProjectilePrefab: {fileID: 2241873115812845983, guid: e42e74e2f360725468bab61f4e054cc0, type: 3}
+  bounceShockwaveEnabled: 1
+  bounceShockwaveMaxRadius: 11
+  bounceShockwaveDuration: 0.7
+  bounceShockwaveDamage: 60
+  bounceShockwaveBandWidth: 1.6
+  bounceShockwaveColor: {r: 1, g: 0.55, b: 0.1, a: 0.95}
+  meleeHomingProjectilePrefab: {fileID: 2241873115812845983, guid: bff14477f6776074bbcb8233d8b3f75f, type: 3}
   meleeHomingBarrageStartDelay: 0.5
-  meleeHomingBarrageInterval: 1.4
-  meleeHomingArrowsPerBarrage: 8
-  meleeHomingArrowDamage: 20
-  meleeHomingArrowSpeed: 16
+  meleeHomingBarrageInterval: 1.5
+  meleeHomingArrowsPerBarrage: 10
+  meleeHomingArrowDamage: 40
+  meleeHomingArrowSpeed: 18
   meleeHomingTurnSpeed: 120
-  meleeHomingDuration: 1.5
-  meleeHomingMaxRange: 15
+  meleeHomingDuration: 2.1
+  meleeHomingMaxRange: 25
   meleeHomingArrowScale: 1
   meleeHomingSpawnHeight: 1.2
-  meleeHomingAngleJitter: 20
+  meleeHomingAngleJitter: 30
   spamDuration: 8
-  spamArrowsPerWave: 9
+  spamArrowsPerWave: 8
   spamWaveInterval: 0.1
   spamRotationSpeed: 40
   spamChaseSpeed: 2.4
-  spamArrowDamage: 40
+  spamArrowDamage: 60
   spamArrowSpeed: 15
   spamArrowScale: 0.5
   spamArrowSpawnHeight: 0.3
-  aerialWaveCount: 7
+  aerialWaveCount: 18
   aerialFlyUpHeight: 18
   aerialFlyUpTime: 0.9
-  aerialWaveInterval: 1
-  aerialTelegraphTime: 0.8
-  aerialArrowsPerWave: 15
-  aerialArrowDamage: 25
-  aerialArrowSpeed: 22
+  aerialWaveInterval: 0.2
+  aerialTelegraphTime: 0.6
+  aerialArrowsPerWave: 16
+  aerialArrowDamage: 60
+  aerialArrowSpeed: 30
   aerialArrowScale: 0.55
   aerialRingRadius: 10
-  aerialEdgeWaveStartIndex: 2
+  aerialEdgeWaveStartIndex: 0
   aerialEdgeSpawnRadius: 22
-  aerialArrowSpawnHeight: 0.5
+  aerialArrowSpawnHeight: 0.3
   aerialLeadStep: 0.45
-  spamArrowPrefab: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
-  aerialArrowPrefab: {fileID: 5082396591220985723, guid: cacd1f7910a07c84683c6e6e9f3b540c, type: 3}
+  aerialRandomTargetRadius: 5
+  aerialTelegraphExtensionDistance: 40
+  aerialTelegraphLineWidth: 0.07
+  aerialTelegraphYOffset: -0.3
+  aerialEscapePunishEnabled: 1
+  aerialEscapeRadius: 8
+  aerialPunishArrowCount: 8
+  aerialPunishMinLead: 0.5
+  aerialPunishMaxLead: 5
+  aerialPunishTelegraphTime: 0.4
+  aerialPunishArrowDamage: 18
+  aerialPunishArrowSpeed: 38
+  aerialPunishArrowScale: 0.55
+  aerialPunishEdgeSpawnRadius: 16
+  aerialPunishFrontArcDegrees: 120
+  aerialPunishTrackSmoothing: 0.25
+  aerialPunishTelegraphSortingOrder: 5
+  spamArrowPrefab: {fileID: 5082396591220985723, guid: 80b39577fa4900b43a92f1d4f76750da, type: 3}
+  aerialArrowPrefab: {fileID: 5082396591220985723, guid: 813c17e3d45918940ada1f63e8d0075a, type: 3}
   telegraphLineWidth: 0.18
   dashTelegraphColor: {r: 1, g: 0.15, b: 0.15, a: 1}
   bounceTelegraphColor: {r: 1, g: 0.55, b: 0.1, a: 1}
   spawnTelegraphColor: {r: 1, g: 0.05, b: 0.05, a: 1}
   shieldColor: {r: 0.4, g: 0.7, b: 1, a: 1}
-  aerialTelegraphColor: {r: 0.9, g: 0.2, b: 0.6, a: 1}
+  aerialTelegraphColor: {r: 0, g: 1, b: 0.6177983, a: 0.19607843}
   beamCooldown: 3
   beamFadeInTime: 1.6
-  beamLockTime: 2
+  beamLockTime: 1
   beamFireDuration: 1
-  beamDamagePerSecond: 90
+  beamDamagePerSecond: 400
   beamHitRadius: 1.2
   beamRange: 30
   beamTelegraphWidth: 0.15
-  beamFireWidth: 0.55
-  beamFireTrackDegPerSec: 30
+  beamFireWidth: 0.45
+  beamFireTrackDegPerSec: 40
   beamFastTrackThresholdDegrees: 30
   beamFastTrackMultiplier: 5
-  beamDamageTickInterval: 0.1
+  beamDamageTickInterval: 0.02
   beamTelegraphColor: {r: 1, g: 0.15, b: 0.15, a: 1}
   beamFireColor: {r: 1, g: 0.85, b: 0.4, a: 1}
   beamOriginHeight: 1.6
@@ -501,6 +559,10 @@ MonoBehaviour:
   beamShakeDuration: 0.35
   deathBeamVisualPrefab: {fileID: 5514918855898946780, guid: 5b65ab245209fd5468ad11d4e38a7460, type: 3}
   beamFireVisualRadius: 0.55
+  bossDeathBeamMaterial: {fileID: 2100000, guid: ebf4d1b981e1494988e7fc303399b5da, type: 2}
+  beamLightningAuraPrefab: {fileID: 7131401307255788800, guid: 4d9a3b35b3bc07649b697df7fb497b6d, type: 3}
+  beamLightningAuraCount: 5
+  beamLightningAuraScale: 0.7
   sweepingBeamTelegraphTime: 1.5
   sweepingBeamLockTime: 1.5
   sweepingBeamFireDuration: 2.6
@@ -512,13 +574,35 @@ MonoBehaviour:
   sweepingBeamFarDistance: 25
   sweepingBeamCloseTrackMultiplier: 0.15
   sweepingBeamFarTrackMultiplier: 4
-  sweepingBeamDamagePerSecond: 100
+  sweepingBeamDamagePerSecond: 450
   sweepingBeamHitRadius: 1.6
   sweepingBeamTelegraphColor: {r: 1, g: 0.2, b: 0.2, a: 1}
   sweepingBeamFireColor: {r: 1, g: 0.85, b: 0.4, a: 1}
   sweepingBeamShakeAmplitude: 0.7
   sweepingBeamShakeDuration: 0.45
   sweepingBeamDamageTickInterval: 0.1
+  ragePhaseEnabled: 1
+  ragePhaseFirstAt: 120
+  ragePhaseInterval: 60
+  ragePhaseChannelDuration: 1.6
+  ragePhaseDamageTakenMultiplier: 3
+  ragePhaseDamageDealtMultiplier: 2
+  ragePhaseExtraProjectilesPerTrigger: 2
+  ragePhaseColor: {r: 1, g: 0.55, b: 0.1, a: 1}
+  ragePhaseTelegraphRadius: 6
+  ragePhaseGatherRadius: 7
+  ragePhaseGatherParticlesPerBurst: 4
+  ragePhaseGatherSpawnInterval: 0.05
+  ragePhaseGatherParticleSpeed: 12
+  ragePhaseGatherParticleLifetime: 0.55
+  ragePhaseGatherParticleSize: 0.18
+  ragePhaseShakeAmplitude: 0.4
+  ragePhaseShakeDuration: 0.3
+  ragePhaseChannelShakeAmplitude: 0.18
+  ragePhaseChannelShakeInterval: 0.1
+  ragePhaseBurstRadius: 16
+  ragePhaseBurstDuration: 0.55
+  suddenDeathAt: 480
 --- !u!1 &2582265603895067027
 GameObject:
   m_ObjectHideFlags: 0

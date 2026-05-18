@@ -50,9 +50,9 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 4294967295
   hitsHero: 0
-  vfxPrefab: {fileID: 0}
+  vfxPrefab: {fileID: 4994997792314849709, guid: 3dd50886582244645be87adb42aa8528, type: 3}
   vfxLifetime: 2
-  useDebrisBurst: 1
+  useDebrisBurst: 0
   debrisCount: 24
   debrisColor: {r: 1, g: 0.30065316, b: 0.10196078, a: 1}
   debrisSpeed: 5

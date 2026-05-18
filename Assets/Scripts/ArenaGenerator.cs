@@ -26,6 +26,9 @@ using UnityEngine;
 /// </summary>
 public class ArenaGenerator : MonoBehaviour
 {
+    /// <summary>Most-recently-awoken ArenaGenerator. Used by enemies (SlimeKing) to clamp jump destinations to the arena bounds.</summary>
+    public static ArenaGenerator Instance { get; private set; }
+
     [Header("Arena")]
     [Tooltip("Edge length of the square arena, in Unity units (meters). Default 200 = 200x200.")]
     public float arenaSize = 200f;
@@ -93,9 +96,33 @@ public class ArenaGenerator : MonoBehaviour
     // Container that holds everything we spawn so we can wipe it cleanly.
     private Transform generatedRoot;
 
+    private void Awake()
+    {
+        Instance = this;
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
     private void Start()
     {
         Generate();
+    }
+
+    /// <summary>
+    /// Clamp a world-space XZ position to inside the arena, leaving a margin
+    /// from the wall. Y is preserved unchanged. Used by enemies that move via
+    /// transform writes (e.g. SlimeKing's jump arc) since those bypass the
+    /// arena's wall colliders.
+    /// </summary>
+    public Vector3 ClampToArena(Vector3 worldPos, float margin = 1.5f)
+    {
+        float half = Mathf.Max(0f, arenaSize * 0.5f - margin);
+        worldPos.x = Mathf.Clamp(worldPos.x, -half, half);
+        worldPos.z = Mathf.Clamp(worldPos.z, -half, half);
+        return worldPos;
     }
 
     [ContextMenu("Regenerate")]

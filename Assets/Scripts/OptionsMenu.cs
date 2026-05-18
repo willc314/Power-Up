@@ -53,11 +53,16 @@ public class OptionsMenu : MonoBehaviour
     // Per-row state
     private struct OptionButton { public Button button; public Image image; public int valueKey; }
     private readonly List<OptionButton> fullscreenButtons = new List<OptionButton>();
+    private readonly List<OptionButton> difficultyButtons = new List<OptionButton>();
     // The FPS slider owns its own selection state; we just keep references so
     // Refresh() can pull values back in if settings change externally.
     private Slider fpsSlider;
     private Text   fpsValueLabel;
     private Dropdown resolutionDropdown;
+    private Slider musicSlider;
+    private Text   musicValueLabel;
+    private Slider sfxSlider;
+    private Text   sfxValueLabel;
 
     /// <summary>
     /// Auto-spawn fallback: if no OptionsMenu exists in the first scene's
@@ -137,6 +142,13 @@ public class OptionsMenu : MonoBehaviour
         }
 
         panelRoot.SetActive(true);
+        // Dim the music. EndDuck pairs with this in Hide(), only fires if we were actually open.
+        if (MusicManager.Instance != null) MusicManager.Instance.BeginDuck();
+
+        // Show the stats side-panel alongside us so the player can see their
+        // accumulated boosts at a glance.
+        if (StatsMenu.Instance != null) StatsMenu.Instance.Show();
+
         Refresh();
     }
 
@@ -145,13 +157,22 @@ public class OptionsMenu : MonoBehaviour
         if (panelRoot == null) return;
         bool wasOpen = panelRoot.activeSelf;
         panelRoot.SetActive(false);
+
+        // Hide the stats side-panel together — it's only meaningful while
+        // the options panel is open.
+        if (StatsMenu.Instance != null) StatsMenu.Instance.Hide();
+
         if (wasOpen && pauseGameWhileOpen)
         {
-            // Resume gameplay (or whatever timeScale the player was at before
-            // we opened — handles the case where the panel was opened on top
-            // of another modal that had also paused).
-            Time.timeScale = prePauseTimeScale > 0f ? prePauseTimeScale : 1f;
+            // Restore whatever timeScale was active when we opened. If the
+            // OptionsMenu was opened on top of another modal that already
+            // paused (e.g. the PowerUpChoiceUI), prePauseTimeScale is 0 and
+            // we want to STAY paused so the underlying modal still works.
+            Time.timeScale = prePauseTimeScale;
         }
+        // Restore music volume only if we were actually showing the panel,
+        // so accidental Hide() calls on an already-hidden panel don't underflow.
+        if (wasOpen && MusicManager.Instance != null) MusicManager.Instance.EndDuck();
     }
 
     /// <summary>Loads the title scene. Wired to the "Quit to Main Menu" button.</summary>
@@ -190,7 +211,20 @@ public class OptionsMenu : MonoBehaviour
             resolutionDropdown.RefreshShownValue();
         }
 
+        if (musicSlider != null)
+        {
+            musicSlider.SetValueWithoutNotify(s.MusicVolume);
+            if (musicValueLabel != null) musicValueLabel.text = Mathf.RoundToInt(s.MusicVolume * 100f) + "%";
+        }
+
+        if (sfxSlider != null)
+        {
+            sfxSlider.SetValueWithoutNotify(s.SfxVolume);
+            if (sfxValueLabel != null) sfxValueLabel.text = Mathf.RoundToInt(s.SfxVolume * 100f) + "%";
+        }
+
         HighlightSelection(fullscreenButtons, s.Fullscreen ? 1 : 0);
+        HighlightSelection(difficultyButtons, (int)s.CurrentDifficulty);
     }
 
     private void HighlightSelection(List<OptionButton> row, int selectedKey)
@@ -244,7 +278,7 @@ public class OptionsMenu : MonoBehaviour
         panelRt.anchorMax = new Vector2(0.5f, 0.5f);
         panelRt.pivot = new Vector2(0.5f, 0.5f);
         panelRt.anchoredPosition = Vector2.zero;
-        panelRt.sizeDelta = new Vector2(960f, 600f);
+        panelRt.sizeDelta = new Vector2(960f, 900f); // taller — fits 5 option rows + SFX row, the warning, and bottom buttons
         var panelImg = panel.AddComponent<Image>();
         panelImg.color = panelColor;
         panelImg.raycastTarget = true;
@@ -276,6 +310,34 @@ public class OptionsMenu : MonoBehaviour
             anchor: TextAnchor.MiddleLeft, fontSize: 26, color: subtleTextColor,
             anchorTop: true);
         BuildOptionRowFullscreen(panel.transform, /*yFromTop*/ -360f);
+
+        // --- Row: Music Volume ---
+        BuildLabel(panel.transform, "Music Volume",
+            new Vector2(40f, -480f), new Vector2(280f, 40f),
+            anchor: TextAnchor.MiddleLeft, fontSize: 26, color: subtleTextColor,
+            anchorTop: true);
+        BuildOptionRowMusicVolume(panel.transform, /*yFromTop*/ -480f);
+
+        // --- Row: SFX Volume ---
+        BuildLabel(panel.transform, "SFX Volume",
+            new Vector2(40f, -560f), new Vector2(280f, 40f),
+            anchor: TextAnchor.MiddleLeft, fontSize: 26, color: subtleTextColor,
+            anchorTop: true);
+        BuildOptionRowSfxVolume(panel.transform, /*yFromTop*/ -560f);
+
+        // --- Row: Difficulty ---
+        BuildLabel(panel.transform, "Difficulty",
+            new Vector2(40f, -660f), new Vector2(280f, 40f),
+            anchor: TextAnchor.MiddleLeft, fontSize: 26, color: subtleTextColor,
+            anchorTop: true);
+        BuildOptionRowDifficulty(panel.transform, /*yFromTop*/ -660f);
+
+        // Small warning text below the row — players need to know the
+        // change won't kick in until they start a fresh run.
+        BuildLabel(panel.transform, "Difficulty changes apply on the next new game.",
+            new Vector2(40f, -720f), new Vector2(880f, 26f),
+            anchor: TextAnchor.MiddleLeft, fontSize: 16, color: subtleTextColor,
+            anchorTop: true);
 
         // Bottom buttons: Quit to Main Menu (left) + Close (right). Both
         // anchored to the bottom-center of the panel and offset horizontally.
@@ -342,6 +404,94 @@ public class OptionsMenu : MonoBehaviour
         });
     }
 
+    private void BuildOptionRowMusicVolume(Transform parent, float yFromTop)
+    {
+        // Music volume row: continuous slider 0..1 with a "75%" live label.
+        const float startX     = 320f;
+        const float sliderW    = 440f;
+        const float sliderH    = 30f;
+        const float labelW     = 160f;
+        const float labelGap   = 18f;
+
+        float currentVolume = GameSettings.Instance != null ? GameSettings.Instance.MusicVolume : 0.7f;
+
+        musicSlider = BuildSlider(parent,
+            new Vector2(startX, yFromTop - 10f),
+            new Vector2(sliderW, sliderH),
+            min: 0f, max: 1f, wholeNumbers: false,
+            initialValue: currentVolume);
+
+        // Live percentage label
+        GameObject labelGo = MakeUI("Music_Value", parent);
+        var lblRt = (RectTransform)labelGo.transform;
+        lblRt.anchorMin = new Vector2(0f, 1f);
+        lblRt.anchorMax = new Vector2(0f, 1f);
+        lblRt.pivot = new Vector2(0f, 1f);
+        lblRt.anchoredPosition = new Vector2(startX + sliderW + labelGap, yFromTop);
+        lblRt.sizeDelta = new Vector2(labelW, 40f);
+        musicValueLabel = labelGo.AddComponent<Text>();
+        musicValueLabel.font = defaultFont;
+        musicValueLabel.fontSize = 22;
+        musicValueLabel.color = textColor;
+        musicValueLabel.alignment = TextAnchor.MiddleLeft;
+        musicValueLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+        musicValueLabel.text = Mathf.RoundToInt(currentVolume * 100f) + "%";
+        musicValueLabel.raycastTarget = false;
+
+        musicSlider.onValueChanged.AddListener(v =>
+        {
+            float clamped = Mathf.Clamp01(v);
+            GameSettings.Instance.SetMusicVolume(clamped);
+            if (musicValueLabel != null) musicValueLabel.text = Mathf.RoundToInt(clamped * 100f) + "%";
+        });
+    }
+
+    private void BuildOptionRowSfxVolume(Transform parent, float yFromTop)
+    {
+        // SFX volume row: continuous slider 0..1 with a "100%" live label.
+        // Mirrors the music row exactly — sliding writes through to
+        // GameSettings.SetSfxVolume which persists the value AND pushes
+        // it onto SoundManager.volume so the change is audible immediately
+        // (e.g. play a sword swing right after sliding).
+        const float startX     = 320f;
+        const float sliderW    = 440f;
+        const float sliderH    = 30f;
+        const float labelW     = 160f;
+        const float labelGap   = 18f;
+
+        float currentVolume = GameSettings.Instance != null ? GameSettings.Instance.SfxVolume : 1f;
+
+        sfxSlider = BuildSlider(parent,
+            new Vector2(startX, yFromTop - 10f),
+            new Vector2(sliderW, sliderH),
+            min: 0f, max: 1f, wholeNumbers: false,
+            initialValue: currentVolume);
+
+        // Live percentage label
+        GameObject labelGo = MakeUI("Sfx_Value", parent);
+        var lblRt = (RectTransform)labelGo.transform;
+        lblRt.anchorMin = new Vector2(0f, 1f);
+        lblRt.anchorMax = new Vector2(0f, 1f);
+        lblRt.pivot = new Vector2(0f, 1f);
+        lblRt.anchoredPosition = new Vector2(startX + sliderW + labelGap, yFromTop);
+        lblRt.sizeDelta = new Vector2(labelW, 40f);
+        sfxValueLabel = labelGo.AddComponent<Text>();
+        sfxValueLabel.font = defaultFont;
+        sfxValueLabel.fontSize = 22;
+        sfxValueLabel.color = textColor;
+        sfxValueLabel.alignment = TextAnchor.MiddleLeft;
+        sfxValueLabel.horizontalOverflow = HorizontalWrapMode.Overflow;
+        sfxValueLabel.text = Mathf.RoundToInt(currentVolume * 100f) + "%";
+        sfxValueLabel.raycastTarget = false;
+
+        sfxSlider.onValueChanged.AddListener(v =>
+        {
+            float clamped = Mathf.Clamp01(v);
+            GameSettings.Instance.SetSfxVolume(clamped);
+            if (sfxValueLabel != null) sfxValueLabel.text = Mathf.RoundToInt(clamped * 100f) + "%";
+        });
+    }
+
     private void BuildOptionRowResolution(Transform parent, float yFromTop)
     {
         // Resolution row: a Unity Dropdown built from scratch. The dropdown's
@@ -399,6 +549,44 @@ public class OptionsMenu : MonoBehaviour
                 Refresh();
             });
             fullscreenButtons.Add(new OptionButton { button = b, image = btnGo.GetComponent<Image>(), valueKey = isYes ? 1 : 0 });
+        }
+    }
+
+    private void BuildOptionRowDifficulty(Transform parent, float yFromTop)
+    {
+        difficultyButtons.Clear();
+        const float startX = 320f;
+        const float btnW   = 130f;
+        const float btnH   = 50f;
+        const float gap    = 10f;
+
+        var values = new[]
+        {
+            (label: "Easy",   diff: GameSettings.Difficulty.Easy),
+            (label: "Normal", diff: GameSettings.Difficulty.Normal),
+            (label: "Hard",   diff: GameSettings.Difficulty.Hard),
+        };
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            float x = startX + (btnW + gap) * i;
+            var btnGo = BuildButton(parent, "Diff_" + values[i].label,
+                new Vector2(x, yFromTop), new Vector2(btnW, btnH),
+                out Button b, out Text t, anchorTop: true, anchorLeft: true);
+            t.text = values[i].label;
+            t.fontSize = 22;
+
+            var captured = values[i].diff;
+            b.onClick.AddListener(() =>
+            {
+                GameSettings.Instance.SetDifficulty(captured);
+                Refresh();
+            });
+            difficultyButtons.Add(new OptionButton {
+                button = b,
+                image = btnGo.GetComponent<Image>(),
+                valueKey = (int)values[i].diff
+            });
         }
     }
 
